@@ -6,3 +6,7 @@ Currently, MPI implementation is only performed for the matrix-vector products S
 Dependencies: 
 Eigen3
 https://github.com/joeydumont/wignerSymbols
+
+Compilation:
+make mpitest
+There are other options in the makefile, but currently none of them have been updated to use the MPI parallelized code
