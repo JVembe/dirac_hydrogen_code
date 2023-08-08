@@ -96,8 +96,6 @@ int main() {
 	
 	//return 0;
 	
-	//Fuck it, we check orthogonality
-	
 	
 	
 	//return 0;

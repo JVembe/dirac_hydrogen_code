@@ -1772,7 +1772,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				// cout << "outerIndexPtr: " << tempmat.outerIndexPtr() << endl;
 				
 				for(int j = 0; j < tempmat.outerSize(); j++) {
-					cout << j << ": (" << tempmat.outerIndexPtr()[j] << ", " << tempmat.outerIndexPtr()[j+1] - tempmat.outerIndexPtr()[j] << ")" << endl;
+					// cout << j << ": (" << tempmat.outerIndexPtr()[j] << ", " << tempmat.outerIndexPtr()[j+1] - tempmat.outerIndexPtr()[j] << ")" << endl;
 					wtmat(i,j) = tempmat.outerIndexPtr()[j+1] - tempmat.outerIndexPtr()[j];
 				}
 				

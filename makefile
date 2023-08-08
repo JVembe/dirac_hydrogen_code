@@ -47,39 +47,18 @@ bdpDirac: $(coreObjs) $(BUILDDIR)/dirBdp.o
 
 dplDirac: $(coreObjs) $(BUILDDIR)/dplRun.o
 	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/dplRun.o $(LDLIBS) -o d.out
-
-dpltst: $(coreObjs) $(BUILDDIR)/dplTest.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/dplTest.o $(LDLIBS) -o dpltst.out
-
-cbdp: $(BUILDDIR)/carrierBDP.o $(coreObjs) 
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/carrierBDP.o $(LDLIBS) -o cbdp.out
-
-lcsztst: $(coreObjs) $(BUILDDIR)/lanczsosTest.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/lanczsosTest.o $(LDLIBS) -o lcsztst.out
-	
-a2: $(coreObjs) $(BUILDDIR)/testwfunc.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/testwfunc.o $(LDLIBS) -o a2.out
-
-usemat: $(coreObjs) $(BUILDDIR)/matwfunc.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/matwfunc.o $(LDLIBS) -o c.out
 	
 unittest: $(coreObjs) $(BUILDDIR)/unittest.o
 	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/unittest.o $(LDLIBS) -o b.out
-
-TAP: $(coreObjs) $(BUILDDIR)/testAngParts.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/testAngParts.o $(LDLIBS) -o b.out
-
-E5: $(coreObjs) $(BUILDDIR)/testwfuncE5.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/testwfuncE5.o $(LDLIBS) -o E5.out
 	
 reproject: $(coreObjs) $(BUILDDIR)/reproject.o
 	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/reproject.o $(LDLIBS) -o rprj.out
 	
-blocktest: $(coreObjs) $(BUILDDIR)/schrBlockTest.o
-	$(CXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/schrBlockTest.o $(LDLIBS) -o sblt.out
-	
 mpitest: $(mpiObjs) $(BUILDDIR)/eigenMPI.o
 	$(MPIXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/eigenMPI.o $(LDLIBS) -o EMPI.out
+	
+dipolempitest: $(mpiObjs) $(BUILDDIR)/dipoleMPItest.o
+	$(MPIXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/dipoleMPItest.o $(LDLIBS) -o dipoleMPItest.out
 
 
 clean:
