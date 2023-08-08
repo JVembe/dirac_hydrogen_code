@@ -644,16 +644,20 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			w.transposeInPlace();
 		}
 		
+		int locall0,localNl,localth0,localNth;
+		
+		void slp(int a1,int a2, int b1, int b2) {
+			localth0 = a1;
+			localNth = a2;
+			locall0 = b1;
+			localNl = b2;
+		}
+		
+		int prevul = 0;
+		
 		void matmat_impl(std::integral_constant<matname,matname::bdpa> c, const cmat& m, cmat& w, const csmat& thmat, const cvec& params, int l, int ul) {
 			int wrank;
 			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
-			
-			csmat& bdpalph0  = getbdpmat<p00>(l,ul);
-			csmat& bdpalph0k = getbdpmat<p0k>(l,ul);
-			csmat& bdpalphk0 = getbdpmat<pk0>(l,ul);
-			csmat& bdpalphkk = getbdpmat<pkk>(l,ul);
-			
-			int localNth = thmat.rows();
 			
 			// cout << "l array: " << larray << std::endl;
 			
@@ -664,6 +668,68 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				// }
 			// }
 			
+			// cout << "Current time: " << vExt->getTime() << endl;
+			
+			if(vExt->getTime() != prevTime) {
+				//#pragma omp for
+				for(int pp = 0; pp < dkbpart::Npts; pp++) {
+					bdpalph[0][pp] = std::vector<csmat>(localNl - locall0);
+					bdpalph[1][pp] = std::vector<csmat>(localNl - locall0);
+					for(int ll = locall0; ll < localNl; ll++) {
+						bdpalph[0][pp][ll-locall0] = csmat(radqN(),radqN());
+						bdpalph[1][pp][ll-locall0] = csmat(radqN(),radqN());
+					}
+				}
+			
+		//		prevL = bdpl;
+				bdpft pT = vExt->template axialPart<axis::t>(vExt->getTime());
+				//#pragma omp for collapse(2)
+				for(int ll = locall0; ll < localNl; ll++) {
+					for(int pp = 0; pp < dkbpart::Npts; pp++) {
+						for(int alpha = 0; alpha < 6; alpha++) {
+							if(ll%2 != alpha%2) {
+								// cout << "ll: " << ll << ", alpha: " << alpha << endl;
+								
+								csmat& dpalph = getbdpmat(pp,ll,alpha);
+								
+								
+								bdpalph[0][pp][ll-locall0] += (pT(alpha,0).real() * dpalph);
+								
+							}
+						}
+						bdpalph[1][pp][ll-locall0] = csmat(bdpalph[0][pp][ll-locall0].adjoint());
+					
+					}
+				}
+			}
+			
+			
+			// if(vExt->getTime()!=prevTime || bdpl!=prevL || ul!=prevul) {
+				// prevL = bdpl;
+				// prevul = ul;
+				
+				// bdpalph00 = csmat(radqN(),radqN());
+				// bdpalph0k = csmat(radqN(),radqN());
+				// bdpalphk0 = csmat(radqN(),radqN());
+				// bdpalphkk = csmat(radqN(),radqN());
+				
+				// for(int alpha = 0; alpha < 6; alpha++) {
+					// if(bdpl%2 != alpha%2) {
+						// csmat& dpalph0  = getbdpmat<p00>(bdpl,alpha);
+						// csmat& dpalph0k = getbdpmat<p0k>(bdpl,alpha);
+						// csmat& dpalphk0 = getbdpmat<pk0>(bdpl,alpha);
+						// csmat& dpalphkk = getbdpmat<pkk>(bdpl,alpha);
+						
+						// double pT = (double) vExt->template axialPart<axis::t>(vExt->getTime())(alpha,0).real();
+						
+						// bdpalph00 += (pT *  dpalph0);
+						// bdpalph0k += (pT * dpalphk0);
+						// bdpalphk0 += (pT * dpalph0k);
+						// bdpalphkk += (pT * dpalphkk);
+					// }
+				// }
+			// }
+			
 			if(!isCached(kappasmat)) {
 				iarray kappas = ik(params.real().cast<int>());
 				kappasmat = csmat(kappas.rows(),kappas.rows());
@@ -671,8 +737,8 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				kappasmat.diagonal() = kappas.matrix().cast<cdouble>();
 			}
 			
-			iarray localKappas = ik(params.segment(wrank*localNth,localNth).real().cast<int>());
-			csmat localKappasmat = csmat(localNth,localNth);
+			iarray localKappas = ik(params.segment(localth0,localNth-localth0).real().cast<int>());
+			csmat localKappasmat = csmat(localNth-localth0,localNth-localth0);
 			localKappasmat.setIdentity();
 			localKappasmat.diagonal() = localKappas.matrix().cast<cdouble>();
 			
@@ -682,10 +748,20 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			// cout << "ul: " << ul << std::endl;
 			
-			// cout << "dpalph0  dims: (" << dpalph0 .rows() << ", " << dpalph0 .cols() << ")\n";
-			// cout << "dpalph0k dims: (" << dpalph0k.rows() << ", " << dpalph0k.cols() << ")\n";
-			// cout << "dpalphk0 dims: (" << dpalphk0.rows() << ", " << dpalphk0.cols() << ")\n";
-			// cout << "dpalphkk dims: (" << dpalphkk.rows() << ", " << dpalphkk.cols() << ")\n";
+			
+			// if(ul==UPPER) {
+				// cout << "bdpalph00 dims: (" << bdpalph[0][0][l-locall0].rows() << ", " << bdpalph[0][0][l-locall0].cols() << ")\n";
+				// cout << "bdpalph0k dims: (" << bdpalph[0][1][l-locall0].rows() << ", " << bdpalph[0][1][l-locall0].cols() << ")\n";
+				// cout << "bdpalphk0 dims: (" << bdpalph[0][2][l-locall0].rows() << ", " << bdpalph[0][2][l-locall0].cols() << ")\n";
+				// cout << "bdpalphkk dims: (" << bdpalph[0][3][l-locall0].rows() << ", " << bdpalph[0][3][l-locall0].cols() << ")\n";
+			// }
+			
+			// if(ul==LOWER) {
+				// cout << "bdpalph00 dims: (" << bdpalph[1][0][l-locall0].rows() << ", " << bdpalph[1][0][l-locall0].cols() << ")\n";
+				// cout << "bdpalph0k dims: (" << bdpalph[1][1][l-locall0].rows() << ", " << bdpalph[1][1][l-locall0].cols() << ")\n";
+				// cout << "bdpalphk0 dims: (" << bdpalph[1][2][l-locall0].rows() << ", " << bdpalph[1][2][l-locall0].cols() << ")\n";
+				// cout << "bdpalphkk dims: (" << bdpalph[1][3][l-locall0].rows() << ", " << bdpalph[1][3][l-locall0].cols() << ")\n";
+			// }
 			
 			// cout << "m dims: (" << m.rows() << ", " << m.cols() << ")\n";
 			// cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
@@ -695,48 +771,51 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			// cout << std::endl;
 			
-			// cout << "dpalph0 :\n" << dpalph0  << std::endl;
-			// cout << "dpalph0k:\n" << dpalph0k << std::endl;
-			// cout << "dpalphk0:\n" << dpalphk0 << std::endl;
-			// cout << "dpalphkk:\n" << dpalphkk << std::endl;
+			// cout << "bdpalph00:\n" << bdpalph00 << std::endl;
+			// cout << "bdpalph0k:\n" << bdpalph0k << std::endl;
+			// cout << "bdpalphk0:\n" << bdpalphk0 << std::endl;
+			// cout << "bdpalphkk:\n" << bdpalphkk << std::endl;
 			
 			
-			// w.transposeInPlace();
 
-			// cout << "dpa00*m dims: (" << (thmat * (dpalph0 * m).transpose()).rows() << ", "  << (thmat * (dpalph0 * m).transpose()).cols() << ")" << endl;
-			// cout << "dpak0*m dims: (" << ((kappasmat * thmat * (dpalphk0 * m).transpose()).transpose()).rows() 
+			// cout << "bdpa00*m dims: (" << (thmat * (dpalph0 * m).transpose()).rows() << ", "  << (thmat * (dpalph0 * m).transpose()).cols() << ")" << endl;
+			// cout << "bdpak0*m dims: (" << ((kappasmat * thmat * (dpalphk0 * m).transpose()).transpose()).rows() 
 									  // << ", "  << ((kappasmat * thmat * (dpalphk0 * m).transpose()).transpose()).cols() << ")" << endl;
-			// cout << "dpa0k*m dims: (" << ((thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()) * (dpalph0k * m).transpose()).transpose()).rows() 
+			// cout << "bdpa0k*m dims: (" << ((thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()) * (dpalph0k * m).transpose()).transpose()).rows() 
 									  // << ", "  << ((thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()) * (dpalph0k * m).transpose()).transpose()).cols() << ")" << endl;
-			// cout << "dpakk*m dims: (" << ((kappasmat * thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()))).rows() 
+			// cout << "bdpakk*m dims: (" << ((kappasmat * thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()))).rows() 
 									  // << ", "  << ((kappasmat * thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()))).cols() << ")" << endl;
 
-			// cmat mat1 = dpalph0k * m;
+			// cmat mat1 = bdpalph[0][1][l-locall0] * m;
 			
 			// cout << "mat1 dims: (" << mat1.rows() << ", " << mat1.cols() << ")" << endl; 
 			
-			// cmat mat2 = kappasmat * mat1.transpose();
+			// cmat mat2 = localKappasmat * mat1.transpose();
 			
 			// cout << "mat2 dims: (" << mat2.rows() << ", " << mat2.cols() << ")" << endl; 
 			
 			// cmat mat3 = thmat * mat2;
 			
 			// cout << "mat3 dims: (" << mat3.rows() << ", " << mat3.cols() << ")" << endl; 
-		
+			// // w.transposeInPlace();
+			
+			// cmat mI = cmat::Constant(m.cols(),m.rows(),1.0);
+			
 			if(ul == LOWER) {
-				w.noalias() += (thmat * (bdpalph0 * m).transpose());
-				w.noalias() += (localKappasmat * thmat * (bdpalphk0 * m).transpose());
-				
-				w.noalias() += (thmat * kappasmat * (bdpalph0k * m).transpose()); // (thmat * ((kappasmat.middleRows(wrank*thmat.cols(),thmat.cols()) * (dpalph0k * m)))).transpose();
-				w.noalias() += ((localKappasmat * thmat * kappasmat) * (bdpalphkk * m).transpose());
+				w.noalias() += (thmat * (bdpalph[1][0][l-locall0] * m).transpose());
+				w.noalias() += (thmat * localKappasmat * (bdpalph[1][1][l-locall0] * m).transpose());
+				w.noalias() += (kappasmat * thmat * (bdpalph[1][2][l-locall0] * m).transpose());
+				w.noalias() += ((kappasmat * thmat * localKappasmat) * (bdpalph[1][3][l-locall0] * m).transpose());
 			}
 
 			if(ul == UPPER) {
-				w.noalias() += (thmat * (bdpalph0 * m).transpose());
-				w.noalias() += (localKappasmat * thmat * (bdpalphk0 * m).transpose());
-				w.noalias() += (thmat * kappasmat * (bdpalph0k * m).transpose());
-				w.noalias() += (localKappasmat * thmat * kappasmat * (bdpalphkk * m).transpose());
+				w.noalias() += (thmat * (bdpalph[0][0][l-locall0] * m).transpose());
+				w.noalias() += (kappasmat * thmat * (bdpalph[0][1][l-locall0] * m).transpose());
+				w.noalias() += (thmat * localKappasmat * (bdpalph[0][2][l-locall0] * m).transpose());
+				w.noalias() += ((kappasmat * thmat * localKappasmat) * (bdpalph[0][3][l-locall0] * m).transpose());
 			}
+
+			// w.transposeInPlace();
 
 			// w.transposeInPlace();
 		}

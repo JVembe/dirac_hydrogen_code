@@ -166,6 +166,7 @@ class basis {
 			return i;
 		}
 		
+		void slp(int a1,int a2, int b1, int b2) { }
 	public:
 		
 		//Default constructor and destructor
@@ -401,6 +402,10 @@ class basis {
 		cvec interpFrom(basis<basistype>& otherBasis, cvec& v) {
 			return static_cast<Derived*>(this)->interpolate(otherBasis,v);
 		}
+		
+		void setLocalParams(int a1, int a2, int b1, int b2) {
+			return static_cast<Derived*>(this)->slp(a1,a2,b1,b2);
+		}
 };
 
 //This never got far because finite difference is a terrible basis for this system
@@ -542,7 +547,7 @@ class spnrbasis: public basis<spnrbasis> {
 				case 1:
 					return bdplmats[l+bdplmax()];
 				default:
-					cout << "No, fuck you for trying to put 0 in ul here, have a segmentation fault instead\n";
+					cout << "ul should always be 1 or -1";
 					return bdplmats[2*bdplmax()];
 			}
 		}

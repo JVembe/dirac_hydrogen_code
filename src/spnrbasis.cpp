@@ -442,6 +442,7 @@ csmat& spnrbasis::bdpalphsigmaXmat(int ul, int l) {
 				}
 			}
 		}
+		// bdpalphm.setIdentity();
 		return bdpalphm;
 	}
 }

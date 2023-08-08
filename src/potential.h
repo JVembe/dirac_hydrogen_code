@@ -449,11 +449,11 @@ class beyondDipolePulse:public Potential<beyondDipolePulse> {
 			
 			
 			// out.row(0) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
-			// out.row(1) = MatrixType::Constant(x.size(),0.0).real() * (l==1);
+			// out.row(1) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
 			// out.row(2) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
-			// out.row(3) = MatrixType::Constant(x.size(),0.0).real() * (l==1);
+			// out.row(3) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
 			// out.row(4) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
-			// out.row(5) = MatrixType::Constant(x.size(),0.0).real() * (l==1);
+			// out.row(5) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
 			
 			
 			out.row(0) = /*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l  ) * */ (( (2*PI/(SoL * T) + k ) * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();

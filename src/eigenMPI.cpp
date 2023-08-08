@@ -46,9 +46,9 @@ int main() {
 	//Simulation parameters
 	int Nsplines = 100;
 	int Ntime = 8000;
-	int Nkappa = 8;
-	int Nmu = 0;
-	int Nl = 10;
+	int Nkappa = 4;
+	int Nmu = 2;
+	int Nl = 2;
 	double rBox = 30.0;
 	
 	//Formats for outputting matrices
@@ -104,7 +104,7 @@ int main() {
 
 	//This is for verifying that things work before starting the simulation
 	double dt = (0.6*PI)/Ntime;
-	double T = 1.00;
+	double T = 1.75;
 	bdpp.setTime(T);
 	
 	//Construct basis for Hamiltonian
@@ -114,7 +114,9 @@ int main() {
 	//This involves an expensive estimation of the matrix exponential which could probably be replaced by something else
 	vec angInit = vec::Zero(rthphb.angqN());
 	angInit[0] = 1.0;
-	rthphb.pruneUncoupled(angInit,false);
+	// vec angInit = vec::Constant(rthphb.angqN(),1.0);
+	
+	rthphb.pruneUncoupled(angInit,true);
 	
 	//Allocate memory for cached matrix-vector products
 	dkbb.prepbdpvecs(rthphb.angqN(), spnrb.bdplmax());
@@ -125,21 +127,20 @@ int main() {
 		cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
 	}
 	
-	rthphb.blockDistribute();
-	
-	MPI_Finalize();
-	return 0;
 	
 	//Construct dipole alpha matrix, both upper and lower versions
 	dkbb.dpam(1,1,1);
 	dkbb.dpam(1,1,-1);
+	for(int l = 0; l < spnrb.bdplmax(); l++) {
+		dkbb.bdpam(1,1,1,l,bdpp);
+		dkbb.bdpam(1,1,-1,l,bdpp);
+	}
 	
-	
-	using Htype = Dirac<dirbs>;
+	using Htype = DiracBDP<dirbs>;
 	//using Htype = Dirac<dirbs>;
-	//Htype H(rthphb,bdpp);
+	Htype H(rthphb,bdpp);
 	//Initialize Hamiltonian and set Coulomb potential
-	Htype H(rthphb,&dplA<15,50,INTENSITY>);
+	// Htype H(rthphb,&dplA<15,50,INTENSITY>);
 	H.Vfunc = &coloumb<Z>;
 	
 	
@@ -179,13 +180,18 @@ int main() {
 	
 	// cout << "Hv_gather " << rthphb.dpamatvecMPIblock(testvec).format(outformat);
 	
-	// for(int i = 0; i < 1000; i++) {
-	rthphb.bdpamatvecMPIblock(testvec);
-	// }
-	// auto t2 = std::chrono::system_clock::now();
+	rthphb.blockDistribute();
 	
-	MPI_Finalize();
-	return 0;
+	bdpp.setTime(1.25);
+	
+	// for(int i = 0; i < 1000; i++) {
+	// cout << "HIv_mpi" << rthphb.bdpamatvecMPIblock(testvec).format(outformat);
+	// cout << "HIv_old" << rthphb.template matfree<bdpa>(testvec).format(outformat);
+	// // }
+	// // auto t2 = std::chrono::system_clock::now();
+	
+	// MPI_Finalize();
+	// return 0;
 	
 	// for(int i = 0; i < Ntime; i++) {	
 	b = H.S(testvec) - dt * cdouble(0,0.5) * H.H(T,testvec);
