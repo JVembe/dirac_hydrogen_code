@@ -1,3 +1,11 @@
+/*
+	This header file contains the class RtsMat, a wrapper class whose only purpose is to pass the action of an arbitrary Hamiltonian matrix H on a coefficient vector to Eigen's linear solvers
+	
+	It also contains the class SubmatPreconditioner, a specialization of the IncompleteLUT preconditioner which exploits the block structure of the Hamiltonian matrix to save memory and precondition the system in parallel.
+	
+	Other classes in here have previously been used for testing purposes.
+*/
+
 #ifndef RtsMat_H
 #define RtsMat_H
 
@@ -26,9 +34,7 @@ namespace Eigen {
 }
  
 
-// Example of a matrix-free wrapper from a user type to Eigen's compatible type
-//Reverse propagator part of crank nicholson propagator
-// For the sake of simplicity, this example simply wrap a Eigen::SparseMatrix.
+// Reverse propagator part of crank nicholson propagator
 
 template<typename Htype>
 class RtsMat : public Eigen::EigenBase<RtsMat<Htype> > {

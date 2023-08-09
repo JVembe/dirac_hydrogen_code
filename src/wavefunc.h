@@ -1,3 +1,7 @@
+/*
+Glorified wrapper for an Eigen::vector object with complex coefficients. Mostly used for slight optimizations of inner products in non-orthogonal bases.
+*/
+
 #ifndef WAVEFUNC_H
 #define WAVEFUNC_H
 

@@ -1,3 +1,8 @@
+/*
+defs.h is for typedefs, enums and functions that are used throughout the code.
+A lot of Eigen types are given shorthand names here.
+*/
+
 #ifndef DEFS_H
 #define DEFS_H
 
@@ -63,6 +68,8 @@ enum dkbpart {
 	Npts
 };
 
+//These functions serve to enumerate the quantum numbers kappa,mu and l,m.
+
 int ik(int i);
 int ki(int kappa);
 double imu(int i);
@@ -99,5 +106,45 @@ bool isCached(const Eigen::EigenBase<Derived>* obj) {
 	}
 }
 
+template <typename D, typename S> 
+std::complex<D> cast(const std::complex<S> s)
+{
+    return std::complex<D>(s.real(), s.imag());
+}
 
+//Simple potentials are implemented through function pointers. This does not work that well for the nondipole potential, which has its own handling.
+
+template <int Z>
+long double coloumb(long double r) {
+	if(r == 0.0) return 0;
+	else return -(long double)Z/r;
+}
+
+template <int N, int omega, int E0>
+long double dplA(long double t) {
+	
+	long double T = (long double)N*2*PI / omega;
+	
+	return (long double)E0/(long double)omega * pow(sin(PI*t/(long double)T),2) * sin((long double)omega*t) * (t < (long double)T);
+}
+
+template <class scalar>
+Eigen::Matrix<scalar,Eigen::Dynamic,Eigen::Dynamic> expm(Eigen::Matrix<scalar,Eigen::Dynamic,Eigen::Dynamic> in, int n) {
+	int N = in.rows();
+	Eigen::Matrix<scalar,Eigen::Dynamic,Eigen::Dynamic> out(N,N);
+	Eigen::Matrix<scalar,Eigen::Dynamic,Eigen::Dynamic> powm(N,N);
+	powm.setZero();
+	for(int i = 0; i < N; i++) {
+		powm(i,i) = 1;
+	}
+	
+	out = powm;
+	
+	for(int i = 1; i < n; i++) {
+		powm = (in * powm)/i;
+		out = out + powm;
+	}
+	
+	return out;
+}
 #endif

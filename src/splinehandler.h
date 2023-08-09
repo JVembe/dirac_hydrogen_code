@@ -1,7 +1,14 @@
+/*
+The splineHandler class makes more sense when the Schrödinger code is also included, as it is a parent class of both the pure b-spline basis used in the Schrödinger picture and the dual kinetic balance basis used in the Dirac picture
+
+The class contains functionality directly dealing with generating B-splines for use by other bases.
+*/
+
 #ifndef SPLINEHANDLER_H
 #define SPLINEHANDLER_H
 
 #include "defs.h"
+#include <boost/math/special_functions/legendre.hpp>
 
 class splineHandler {
 	protected:

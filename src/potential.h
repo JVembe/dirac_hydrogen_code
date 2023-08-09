@@ -1,8 +1,14 @@
+/*
+	Class for potentials, primarily the nondipole laser pulse potential.
+	
+	There's a lot of stuff in here that's questionable in terms of how useful it actually is, as I wrote it with some intention of making it a lot more expandable than it needs to be right now 
+*/
+
 #ifndef POTENTIAL_H
 #define POTENTIAL_H
 #include <boost/math/special_functions/bessel.hpp>
 #include <boost/math/special_functions/spherical_harmonic.hpp>
-#include "cWavefunc.h"
+#include "defs.h"
 
 
 

@@ -1,9 +1,19 @@
+/*
+basis.h defines the basis class, a generic interface for basis expansions of the wavefunction
+
+
+There are also class declarations for some of the less complicated basis classes: 
+	-spharmbasis (spherical harmonic basis), which represents the angular component of the wavefunction in spherical harmonics limited to the magnetic quantum number m=0. Used for the Schrödinger equation
+	-spharmbasisLM, which expands the above functionality to include arbitrary m.
+	-spnrbasis, which instead uses Dirac bispinors as its basis functions, serving as a relativistic substitute for the spherical harmonics, used for the Dirac equation
+*/
+
 #ifndef BASIS_H
 #define BASIS_H
 
 #include "defs.h"
 #include "potential.h"
-
+#include <iostream>
 
 //Matname enum is used in template functions that act on specific matrices
 //It seemed clever at the time
@@ -406,32 +416,6 @@ class basis {
 		void setLocalParams(int a1, int a2, int b1, int b2) {
 			return static_cast<Derived*>(this)->slp(a1,a2,b1,b2);
 		}
-};
-
-//This never got far because finite difference is a terrible basis for this system
-
-class fdbasis: public basis<fdbasis> {
-	friend class basis<fdbasis>;
-	int ncomps;
-	int nprecs;
-	
-	double dr;
-	double rmax;
-
-	public:
-		fdbasis(vec &t, int nprec,int ncomps);
-		void setst(int i);
-		
-		csmat& olmat();
-		csmat& ddmat(int dn);
-		csmat& Emat(long double (*V)(long double));
-		csmat& p1mat();
-		
-		csmat& kappamat();
-		csmat& ulcmat();
-		csmat& dpalphmat(int k1,int k2, int ul);
-		
-		int rqn();
 };
 
 //Spherical harmonic basis with no m quantum number. Sort of useless for anything not dipole

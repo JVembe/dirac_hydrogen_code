@@ -1,3 +1,9 @@
+/*
+This is the old file containing the main() function for a simulation run using the Dirac equation in a nondipole regime.
+
+eigenMPI.cpp is copied from this file with modifications to make it use the MPI functionality.
+*/
+
 #include "potential.h"
 #include "RtsMat.h"
 #include "dkbbasis.h"

@@ -1,8 +1,10 @@
+/*
+	This implements parts of the dual kinetic balance basis, see dkbbasis.h for the rest
+*/
+
 #include "defs.h"
 #include "dkbbasis.h"
 #include "potential.h"
-#define ENABLE_DKB 1
-// #pragma message("Compiling without dual kinetic balance! Remember to set ENABLE_DKB = 1!")
 
 
 int dkbbasis::rqn() {
@@ -93,7 +95,6 @@ dkbbasis::dkbbasis(vec &t, int splinedeg): splineHandler(t,splinedeg) {
 	
 	ALSO, IT IS THE UPPER COMPONENT OF DDMAT THAT IS NEGATIVE
 	
-	
 */
 
 
@@ -124,7 +125,7 @@ clsmat dkbbasis::dkbCache(lvec& x,int ul) {
 			if(!isCached(dkbU0)) {
 				dkbU0 = clsmat(Nx,2*Ns);
 				dkbU0.leftCols(Ns) = splines;
-				dkbU0.rightCols(Ns) = -1/(2*SoL) * ENABLE_DKB * dsplines;
+				dkbU0.rightCols(Ns) = -1/(2*SoL) *  dsplines;
 			}
 			
 			if(!isCached(dkbUk)) {
@@ -135,7 +136,7 @@ clsmat dkbbasis::dkbCache(lvec& x,int ul) {
 				}
 				
 				dkbUk = clsmat(Nx,2*Ns);
-				dkbUk.rightCols(Ns) = 1/(2*SoL) * ENABLE_DKB * (kappapot * (splines));
+				dkbUk.rightCols(Ns) = 1/(2*SoL) *  (kappapot * (splines));
 			}
 			
 			out = dkbU0 + kappa * dkbUk;
@@ -144,7 +145,7 @@ clsmat dkbbasis::dkbCache(lvec& x,int ul) {
 			if(!isCached(dkbL0)) {
 				dkbL0 = clsmat(Nx,2*Ns);
 				dkbL0.rightCols(Ns) = splines;
-				dkbL0.leftCols(Ns) = 1/(2*SoL) * ENABLE_DKB * dsplines;
+				dkbL0.leftCols(Ns) = 1/(2*SoL) *  dsplines;
 			}
 			
 			if(!isCached(dkbLk)) {
@@ -155,7 +156,7 @@ clsmat dkbbasis::dkbCache(lvec& x,int ul) {
 				}
 				
 				dkbLk = clsmat(Nx,2*Ns);
-				dkbLk.leftCols(Ns) = 1/(2*SoL) * ENABLE_DKB * (kappapot * (splines));
+				dkbLk.leftCols(Ns) = 1/(2*SoL) *  (kappapot * (splines));
 			}
 			
 			out = dkbL0 + kappa * dkbLk;
@@ -240,7 +241,7 @@ clsmat dkbbasis::dDkbCache(lvec& x,int ul) {
 				ddkbU0 = clsmat(Nx,2*Ns);
 				
 				ddkbU0.leftCols(Ns) = dsplines;
-				ddkbU0.rightCols(Ns) = - ENABLE_DKB * 1/(2*SoL) * d2splines;
+				ddkbU0.rightCols(Ns) = -  1/(2*SoL) * d2splines;
 			}
 			
 			if(!isCached(ddkbUk)) {
@@ -253,7 +254,7 @@ clsmat dkbbasis::dDkbCache(lvec& x,int ul) {
 					kappapot.insert(i,i) = 1.0 / x[i];
 					kappasqpot.insert(i,i) = 1.0 / pow(x[i],2);
 				}
-				ddkbUk.rightCols(Ns) = ENABLE_DKB * 1/(2*SoL) * (kappapot * dsplines - kappasqpot * splines);
+				ddkbUk.rightCols(Ns) =  1/(2*SoL) * (kappapot * dsplines - kappasqpot * splines);
 			}
 			
 			out = ddkbU0 + ddkbUk;
@@ -264,7 +265,7 @@ clsmat dkbbasis::dDkbCache(lvec& x,int ul) {
 				ddkbL0 = clsmat(Nx,2*Ns);
 				
 				ddkbL0.rightCols(Ns) = dsplines;
-				ddkbL0.leftCols(Ns) = ENABLE_DKB * 1/(2*SoL) * d2splines;
+				ddkbL0.leftCols(Ns) =  1/(2*SoL) * d2splines;
 			}
 			
 			if(!isCached(ddkbLk)) {
@@ -277,7 +278,7 @@ clsmat dkbbasis::dDkbCache(lvec& x,int ul) {
 					kappapot.insert(i,i) = 1.0 / x[i];
 					kappasqpot.insert(i,i) = 1.0 / pow(x[i],2);
 				}
-				ddkbLk.leftCols(Ns) = ENABLE_DKB * 1/(2*SoL) * (kappapot * dsplines - kappasqpot * splines);
+				ddkbLk.leftCols(Ns) =  1/(2*SoL) * (kappapot * dsplines - kappasqpot * splines);
 			}
 			
 			out = ddkbL0 + ddkbLk;

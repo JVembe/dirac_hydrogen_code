@@ -1,8 +1,13 @@
+/*
+	This specialization of the basis class takes two other basis objects ("rbasis", "thphbasis") and combines them into a basis for representing a full 3D wavefunction.
+	
+	It implements matrix-vector products rather than explicitly calculating any matrix representation of the operators, as it's infeasible to store the full matrix representation in memory.
+*/
+
 #ifndef RTHPHBASIS_H
 #define RTHPHBASIS_H
 
 #include "defs.h"
-#include "cWavefunc.h"
 #include <omp.h>
 #include "mpiFuncs.h"
 
@@ -1502,6 +1507,28 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			cmat vblocks;
 			pseudoscatterVec(v,vblocks,Nr);
 			
+			int lth0;
+			int lNth;
+			
+			if(Nth%wsize == 0) {
+				lNth = Nth/wsize;
+				lth0 = wrank*lNth;
+			}
+			else {
+				cout << "remainder: " << Nth%wsize << endl;
+				int rem = Nth%wsize;
+				cout << "lNth as float: " << 1.*Nth/wsize << endl;
+				if(wrank%(rem) == rem-1) {
+					lNth = ceil(1.*Nth/wsize);
+				}
+				else {
+					lNth = floor(1.*Nth/wsize);
+				}
+				
+				lth0 = round(1.* wrank * Nth/wsize);
+			}
+			
+			cout << "lth0, lNth at wrank " << wrank << ": " << lth0 << ", " << lNth << endl;
 			
 			//Prepare ilist w/ only indices relevant to rank
 			cvec ilist = cvec::Zero(Nth/wsize);
@@ -2245,7 +2272,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				
 				// cout << rn << "," << an << "\n";
 				
-				cmat eangc = expm(angcp,angcp.rows());
+				cmat eangc = expm(angcp,20);
 				
 				// cout << eangc << "\n";
 				

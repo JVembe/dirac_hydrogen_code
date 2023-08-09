@@ -45,7 +45,7 @@ int main() {
 	
 	//Simulation parameters
 	int Nsplines = 100;
-	int Ntime = 8000;
+	int Ntime = 10;
 	int Nkappa = 4;
 	int Nmu = 2;
 	int Nl = 2;
@@ -166,7 +166,10 @@ int main() {
 	
 	// cout << "Sv:\n" << H.S(testvec) << endl;
 	
-	// cout << "Hv:\n" << H.H(T,testvec) << endl;
+	cout << "Hv:\n" << H.H(T,testvec) << endl;
+
+	MPI_Finalize();
+	return 0;
 
 	int Nr = rthphb.radqN();
 	
@@ -258,36 +261,38 @@ int main() {
 	
 	// cnp.setDumpfile((filenamePrefix + "_dump"));
 	
-	cnp.propagate(psi1,(0.6*PI)/Ntime,Ntime,10);
+	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
 	
-	dirwf wft = cnp.wf[Ntime/10 - 1];
+	dirwf wft = cnp.wf[Ntime - 1];
 	
-	cmat projt = psi1 * cnp.wf;
+	cout << "wft" << wft.coefs.format(outformat);
 	
-	mat dPdE = H.dPdE(wft,5000,-0.500007,500);
+	// cmat projt = psi1 * cnp.wf;
 	
-	if(wrank == 0) {
-		ofstream psievf(filenamePrefix + "_psiev");
-		psievf << "psit " << wft.coefs.format(outformat) << "\n";
+	// mat dPdE = H.dPdE(wft,5000,-0.500007,500);
+	
+	// if(wrank == 0) {
+		// ofstream psievf(filenamePrefix + "_psiev");
+		// psievf << "psit " << wft.coefs.format(outformat) << "\n";
 
-		psievf << "evl"   << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
-		psievf << "psiev" << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
+		// psievf << "evl"   << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
+		// psievf << "psiev" << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
 
-		for(int i = 0; i < evecs.size(); i++) {
-			psievf << "evl" << filenamePrefix << "["<<i<<"]" << evals[i].format(outformat) << std::endl;
-			psievf << "psiev" << filenamePrefix << "["<<i<<"] " << cmat(wft * evecs[i]).format(outformat) << std::endl;
-		}
+		// for(int i = 0; i < evecs.size(); i++) {
+			// psievf << "evl" << filenamePrefix << "["<<i<<"]" << evals[i].format(outformat) << std::endl;
+			// psievf << "psiev" << filenamePrefix << "["<<i<<"] " << cmat(wft * evecs[i]).format(outformat) << std::endl;
+		// }
 
-		psievf << "projt " << projt.format(outformat) << "\n";
+		// psievf << "projt " << projt.format(outformat) << "\n";
 
-		psievf.close();
+		// psievf.close();
 
-		ofstream dPdEf(filenamePrefix + "_dPdE");
+		// ofstream dPdEf(filenamePrefix + "_dPdE");
 
-		dPdEf << "dPdE" << filenamePrefix << dPdE.format(outformat);
+		// dPdEf << "dPdE" << filenamePrefix << dPdE.format(outformat);
 
-		dPdEf.close();
-	}
+		// dPdEf.close();
+	// }
 	
 	
 	

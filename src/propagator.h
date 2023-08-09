@@ -1,9 +1,14 @@
+/*
+	This file deals with the time evolution of a wavefunc object using a Hamiltonian.
+	
+	In practice, only the specialization Cranknich<Htype,basistype,true> currently sees much use.
+*/
+
 #ifndef PROPAGATOR_H
 #define PROPAGATOR_H
 
 #include "defs.h"
 #include "RtsMat.h"
-#include "cWavefunc.h"
 
 #include <Eigen/Core>
 #include <Eigen/Dense>

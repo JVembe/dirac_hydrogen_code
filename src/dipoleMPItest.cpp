@@ -46,9 +46,9 @@ int main() {
 	//Simulation parameters
 	int Nsplines = 100;
 	int Ntime = 10;
-	int Nkappa = 4;
+	int Nkappa = 20;
 	int Nmu = 0;
-	int Nl = 3;
+	int Nl = 0;
 	double rBox = 30.0;
 	
 	//Formats for outputting matrices

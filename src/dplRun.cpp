@@ -1,3 +1,7 @@
+/*
+This is the old file for dipole runs. Keeping it around in case it becomes useful.
+*/
+
 #include "RtsMat.h"
 #include "dkbbasis.h"
 #include "rthphbasis.h"

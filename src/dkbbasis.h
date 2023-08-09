@@ -1,3 +1,8 @@
+/*
+This class generates matrix elements corresponding to the projection of various operators into a dual kinetic balance basis.
+It is also responsible for matrix-vector products performed in this basis. The .h file is pretty big, as a lot of the code would've gotten very repetitive without the use of templates
+*/
+
 #ifndef DKBBASIS_H
 #define DKBBASIS_H
 
@@ -6,9 +11,6 @@
 #include "basis.h"
 #include "splinehandler.h"
 #include <mpi.h>
-
-//This class generates matrix elements corresponding to the projection of various operators into a dual kinetic balance basis
-//It is also responsible for matrix-vector products performed in this basis
 
 class dkbbasis: public basis<dkbbasis>, public splineHandler {
 	friend class basis<dkbbasis>;
@@ -1388,5 +1390,14 @@ template<matname M>
 inline void dkbbasis::precacheMatvec(const cvec& v, int cacheId) {
 	
 }
+
+csmat factorisedglintmat(csmat& M0, csmat& Mk, csmat& Mkk,
+						const clsmat& aP0,const clsmat& aQ0,const clsmat& bP0,const clsmat& bQ0,
+						const clsmat& aPk,const clsmat& aQk,const clsmat& bPk,const clsmat& bQk,
+						int k, const clsmat& wts, int kappa, csmat(*func)(const clsmat& aP,const clsmat& aQ,const clsmat& bP,const clsmat& bQ,const clsmat& wts,int k, int ul, int sumcoef), int ul = 0, int sumcoef = 1);
+
+csmat dkbglintmat(const clsmat& a0, const clsmat& b0, const clsmat& ws, int k);
+
+csmat dkbglintmat(const clsmat& a0,const clsmat&  a1,const clsmat& b0,const clsmat& b1,const clsmat& ws,int k, int ul = 0, int sumcoef = 1);
 
 #endif

@@ -1,3 +1,7 @@
+/*
+	This header contains template functions for dealing with Eigen matrices in MPI. Most are currently unused, and were implemented to learn MPI.
+*/
+
 #ifndef MPIFUNCS_H
 #define MPIFUNCS_H
 
@@ -104,7 +108,7 @@ void recMat(Eigen::MatrixBase<Derived>& mat, int wrank, int wsize, int inrank){
 	MPI_Get_count(&status,MPI_BYTE,&matsize);
 	int matN = matsize/sizeof(typename Eigen::MatrixBase<Derived>::Scalar);
 	
-	cout << "Size of incoming matrix: " << matsize << ", number of matrix elements: " << matN << std::endl;
+	// cout << "Size of incoming matrix: " << matsize << ", number of matrix elements: " << matN << std::endl;
 	
 	
 	
@@ -113,14 +117,14 @@ void recMat(Eigen::MatrixBase<Derived>& mat, int wrank, int wsize, int inrank){
 	
 	MPI_Recv((void*)indata,matsize, MPI_BYTE, inrank,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 	
-	for(int i = 0; i < 9; i++) {
-		cout << indata[i] << ",\n";
-	}
+	// for(int i = 0; i < 9; i++) {
+		// cout << indata[i] << ",\n";
+	// }
 	
 	mat = Eigen::Map<Derived>(indata,rows,cols);
 	
-	cout << "Received matrix: " << mat << endl;
-	cout << "Mat dims: " << mat.rows() << ", " << mat.cols() << endl;
+	// cout << "Received matrix: " << mat << endl;
+	// cout << "Mat dims: " << mat.rows() << ", " << mat.cols() << endl;
 }
 
 template <typename Derived>
