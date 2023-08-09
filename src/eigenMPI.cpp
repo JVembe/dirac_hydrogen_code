@@ -166,10 +166,10 @@ int main() {
 	
 	// cout << "Sv:\n" << H.S(testvec) << endl;
 	
-	cout << "Hv:\n" << H.H(T,testvec) << endl;
+	// cout << "Hv:\n" << H.H(T,testvec) << endl;
 
-	MPI_Finalize();
-	return 0;
+	// MPI_Finalize();
+	// return 0;
 
 	int Nr = rthphb.radqN();
 	

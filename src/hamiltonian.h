@@ -461,6 +461,7 @@ class Hamiltonian {
 		vector<vector<double> > angsepla();
 		
 		int Dim() const {
+			// cout << "Dim() call returns: " << this->bs->angqN() * this->bs->radqN() << endl;
 			return this->bs->angqN() * this->bs->radqN();
 		}
 		

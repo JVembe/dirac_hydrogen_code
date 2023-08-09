@@ -1504,8 +1504,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 			int Nr = this->radqN();
 			int Nth = this->angqN();
-			cmat vblocks;
-			pseudoscatterVec(v,vblocks,Nr);
+			
 			
 			int lth0;
 			int lNth;
@@ -1515,31 +1514,28 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				lth0 = wrank*lNth;
 			}
 			else {
-				cout << "remainder: " << Nth%wsize << endl;
-				int rem = Nth%wsize;
-				cout << "lNth as float: " << 1.*Nth/wsize << endl;
-				if(wrank%(rem) == rem-1) {
-					lNth = ceil(1.*Nth/wsize);
-				}
-				else {
-					lNth = floor(1.*Nth/wsize);
-				}
+				float flNth = 1.*Nth/wsize;
 				
-				lth0 = round(1.* wrank * Nth/wsize);
+				lth0 = round(wrank * flNth);
+				
+				lNth = round((wrank + 1) * flNth) - lth0;
+				
 			}
 			
-			cout << "lth0, lNth at wrank " << wrank << ": " << lth0 << ", " << lNth << endl;
+			// cout << "lth0, lNth at wrank " << wrank << ": " << lth0 << ", " << lNth << endl;
+			
+			cmat vblocks = v.reshaped(Nr,Nth).middleCols(lth0,lNth);
 			
 			//Prepare ilist w/ only indices relevant to rank
-			cvec ilist = cvec::Zero(Nth/wsize);
+			cvec ilist = cvec::Zero(lNth);
 			
-			for(int i = 0; i < angids.size()/wsize; i++) {
-				ilist[i] = angids[angids.size()/wsize * wrank + i];
+			for(int i = 0; i < lNth; i++) {
+				ilist[i] = angids[lth0 + i];
 			}
 			
 			// cout << ilist;
 			
-			cmat outs = cmat::Zero(Nr,Nth/wsize);
+			cmat outs = cmat::Zero(Nr,lNth);
 			
 			this->rbasis->template matmat<H0>(vblocks,outs,ilist);
 			
@@ -1550,6 +1546,8 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			allgatherVec(outs,outv);
 			
 			// outv = cvec::Zero(this->angqN()*this->radqN());
+			
+			// cout << "h0matvec outv size: " << outv.size() << endl;
 			
 			return outv;
 		}
@@ -1564,24 +1562,37 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 			int Nr = this->radqN();
 			int Nth = this->angqN();
-			cmat vblocks;
-			// cout << "smatvecMPIblock test" << endl;
-			// cout << "v:\n" << v;
 			
-			pseudoscatterVec(v,vblocks,Nr);
+			int lth0;
+			int lNth;
 			
-			// cout << "vblocks:\n" << vblocks;
+			if(Nth%wsize == 0) {
+				lNth = Nth/wsize;
+				lth0 = wrank*lNth;
+			}
+			else {
+				float flNth = 1.*Nth/wsize;
+				
+				lth0 = round(wrank * flNth);
+				
+				lNth = round((wrank + 1) * flNth) - lth0;
+				
+			}
+			
+			// cout << "lth0, lNth at wrank " << wrank << ": " << lth0 << ", " << lNth << endl;
+			
+			cmat vblocks = v.reshaped(Nr,Nth).middleCols(lth0,lNth);
 			
 			//Prepare ilist w/ only indices relevant to rank
-			cvec ilist = cvec::Zero(Nth/wsize);
+			cvec ilist = cvec::Zero(lNth);
 			
-			for(int i = 0; i < angids.size()/wsize; i++) {
-				ilist[i] = angids[angids.size()/wsize * wrank + i];
+			for(int i = 0; i < lNth; i++) {
+				ilist[i] = angids[lth0 + i];
 			}
 			
 			// cout << ilist;
 			
-			cmat outs = cmat::Zero(Nr,Nth/wsize);
+			cmat outs = cmat::Zero(Nr,lNth);
 			
 			// cout <<"vblocks\n" << vblocks << std::endl;
 			
@@ -1593,6 +1604,8 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 			allgatherVec(outs,outv);
 			// outv = cvec::Zero(this->angqN()*this->radqN());
+			
+			// cout << "smatvec outv size: " << outv.size() << endl;
 			
 			return outv;
 		}

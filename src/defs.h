@@ -72,13 +72,33 @@ enum dkbpart {
 
 int ik(int i);
 int ki(int kappa);
-double imu(int i);
-int il(int i);
-int li(int i);
-int im(int i);
-
 iarray ik(iarray i);
-iarray il(iarray i);
+double imu(int i);
+
+inline int il(int i) {
+	//int ii = i/2;
+	
+	return floor(sqrt(i));
+}
+
+
+inline iarray il(iarray i) {
+	return floor(sqrt(i));
+}
+
+inline int li(int l) {
+	return pow(l,2);
+}
+
+inline int im(int i) {
+	int l = il(i);
+	
+	int ii = i - pow(il(i),2);
+	
+
+	return (ii % (il(i)*2 + 1)) - il(i);
+}
+
 
 template <typename Derived>
 bool isCached(const Eigen::EigenBase<Derived>& obj) {

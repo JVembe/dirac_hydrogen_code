@@ -324,35 +324,44 @@ void allgatherVec(Eigen::MatrixBase<Derived1>& invecs,Eigen::MatrixBase<Derived2
 	int blkRows = invecs.rows();
 	int blkCols = invecs.cols();
 	
-	int totblks;
 	
-	
-	// MPI_Barrier(MPI_COMM_WORLD);
+	int* recvcols = new int[wsize];
+	int* recvn = new int[wsize];
+	int* disps = new int[wsize];
+	int totblks = 0;
 	
 	// cout << "BlkCols at rank " << wrank << ": " << blkCols << endl;
 	// cout << "BlkRows at rank " << wrank << ": " << blkRows << endl;
 	// MPI_Barrier(MPI_COMM_WORLD);
-	totblks = wsize * blkCols;
-	// MPI_Allreduce(&blkCols,&totblks, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-	// MPI_Barrier(MPI_COMM_WORLD);
-	// cout << "Total number of blocks: " << totblks << std::endl;
-	vdata = new Scalar[totblks * blkRows];
+	// totblks = wsize * blkCols;
+	MPI_Allgather(&blkCols,1, MPI_INT, recvcols, 1, MPI_INT, MPI_COMM_WORLD);
+	// cout << "Receiving number of blocks: " << endl;
 	
-	// MPI_Barrier(MPI_COMM_WORLD);
+	for(int i = 0; i < wsize; i++) {
+		// cout << recvcols[i] << std::endl;
+		totblks += recvcols[i];
+		recvn[i] = recvcols[i] * blkRows;
+		disps[i] = 0;
+		for(int j = 0; j < i; j++) {
+			disps[i] += recvcols[j] * blkRows;
+		}
+		// cout << disps[i] << endl;
+	};
 	
-	//Check blocks
+	vdata = new Scalar[blkRows*totblks];
+	
+	// Check blocks
 	// for(int i = 0; i < blkRows * blkCols; i++) {
 		// cout << blkdata[i] << "\n";
 	// }
 	
 	// MPI_Barrier(MPI_COMM_WORLD);
 	
-	MPI_Allgather((void*)blkdata,blkRows*blkCols*sizeof(Scalar),MPI_BYTE,(void*)vdata,blkRows*blkCols*sizeof(Scalar),MPI_BYTE,MPI_COMM_WORLD);
+	MPI_Allgatherv(blkdata,blkRows*blkCols,mpi_get_type<Scalar>(),vdata,recvn,disps,mpi_get_type<Scalar>(),MPI_COMM_WORLD);
 	// MPI_Barrier(MPI_COMM_WORLD);
 	
 	// delete [] blkdata;
 	
-	// if(wrank == 0) {
 	// cout << "vdata raw buffer" << endl;
 	// for(int i = 0; i < totblks*blkRows; i++) {
 		// cout << vdata[i] << "\n";
@@ -361,6 +370,8 @@ void allgatherVec(Eigen::MatrixBase<Derived1>& invecs,Eigen::MatrixBase<Derived2
 	// MPI_Barrier(MPI_COMM_WORLD);
 	outvec = Eigen::Map<Derived2>(vdata,blkRows * totblks,1);
 	delete[] vdata;
+	delete[] recvcols;
+	delete[] recvn;
 }
 
 template <typename Derived>

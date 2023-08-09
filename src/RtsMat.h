@@ -59,6 +59,7 @@ public:
  
 	template<typename Rhs>
 	Eigen::Product<RtsMat,Rhs,Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs>& x) const {
+		// cout << "x size " << x.size() << endl;
 		return Eigen::Product<RtsMat,Rhs,Eigen::AliasFreeProduct>(*this, x.derived());
 	}
 
@@ -117,12 +118,12 @@ namespace Eigen {
 					// cout << "rtsMatProd" << endl;
 					const Eigen::IOFormat outformatLine(Eigen::FullPrecision,Eigen::DontAlignCols,", "," ","(","),"," = npy.array((\n","\n))\n",' ');
 				
-					// cout << "rhs_mpi" << rhs.format(outformatLine) << endl;
+					// cout << "rhs_mpi size " << rhs.size() << endl;
 					
 					
 					dst.noalias() += alpha * (lhs.Svec(rhs) + cdouble(0,0.5) * lhs.getDt() * lhs.Hvec(rhs));
 					
-					// cout << "dst_mpi" << dst.format(outformatLine) << endl;
+					// cout << "dst_mpi size " << dst.size() << endl;
 			}
 		};
 	 
@@ -226,53 +227,53 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 			return *this;
 		}
 		
-		template<typename Htype, typename basistype> 
-		SubmatPreconditioner& setup(const SchrodingerBase<Htype,basistype>& H,double dt) {
-			int angMax = H.angMax();
-			negAng = false;
-			//cout << "Lmax used: " << angMax << std::endl;
-			for(int i = 0; i <= angMax; i++) {
-				//cout << "Subsolver setup for l = " << i << std::endl;
-				H.getBasis().getRadial().setState(li(i),li(i),1);
+		// template<typename Htype, typename basistype> 
+		// SubmatPreconditioner& setup(const SchrodingerBase<Htype,basistype>& H,double dt) {
+			// int angMax = H.angMax();
+			// negAng = false;
+			// //cout << "Lmax used: " << angMax << std::endl;
+			// for(int i = 0; i <= angMax; i++) {
+				// //cout << "Subsolver setup for l = " << i << std::endl;
+				// H.getBasis().getRadial().setState(li(i),li(i),1);
 				
 				
 				
-				csmat mat1 = H.template S<radial>() - dt * cdouble(0,0.5)  * H.template H0<radial>();
-				amats.push_back(mat1);
+				// csmat mat1 = H.template S<radial>() - dt * cdouble(0,0.5)  * H.template H0<radial>();
+				// amats.push_back(mat1);
 				
-				ILUT* subsolver = new ILUT(mat1); 
-				subsolver->analyzePattern(mat1);
-				subsolver->factorize(mat1);
+				// ILUT* subsolver = new ILUT(mat1); 
+				// subsolver->analyzePattern(mat1);
+				// subsolver->factorize(mat1);
 				
-				solvers.push_back(subsolver);
+				// solvers.push_back(subsolver);
 				
 				
-				Nmat = mat1.rows();
-				/*
-				H.getBasis().getRadial().setState(ki(-i),ki(-i),1);
+				// Nmat = mat1.rows();
+				// /*
+				// H.getBasis().getRadial().setState(ki(-i),ki(-i),1);
 				
-				csmat mat2 = H.template S<radial>() + dt * cdouble(0,0.5)  * H.template H0<radial>();
-				amats.push_back(mat2);
-				ILUT* subsolver2 = new ILUT(mat2);
+				// csmat mat2 = H.template S<radial>() + dt * cdouble(0,0.5)  * H.template H0<radial>();
+				// amats.push_back(mat2);
+				// ILUT* subsolver2 = new ILUT(mat2);
 				
-				subsolver2->analyzePattern(mat2);
-				subsolver2->factorize(mat2);
+				// subsolver2->analyzePattern(mat2);
+				// subsolver2->factorize(mat2);
 				
-				solvers.push_back(subsolver2);
+				// solvers.push_back(subsolver2);
 				
-				Nmat = mat2.rows();
-				//cout << "setup loop: " << i << std::endl;*/
-			}
+				// Nmat = mat2.rows();
+				// //cout << "setup loop: " << i << std::endl;*/
+			// }
 			
-			setup(amats[0]);
+			// setup(amats[0]);
 			
-			angids = std::vector<int>(H.getBasis().angqN());
-			for(int i = 0; i < H.getBasis().angqN(); i++) {
-				angids[i] = H.getBasis().indexTransform(i);
-			}
+			// angids = std::vector<int>(H.getBasis().angqN());
+			// for(int i = 0; i < H.getBasis().angqN(); i++) {
+				// angids[i] = H.getBasis().indexTransform(i);
+			// }
 			
-			return *this;
-		}
+			// return *this;
+		// }
 		
 		template<typename MatrixType>
 		SubmatPreconditioner& setup(const MatrixType& amat)
@@ -295,19 +296,6 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 			return MPIsolve(b);
 			//cout << "Solvers size: " << solvers.size() << std::endl;
 				
-						   
-   
-										
-   
-									  
-   
-					
-   
-										 
-										
-   
-		   
-   
 			if(this->solvers.size() == 0) {
 				//cout << "Hello, the solver list size is " << solvers.size() << "and we are in the 0 case" << std::endl;
 				Rhs out (b.size());
@@ -351,18 +339,38 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 		template<typename Rhs>
 		Rhs MPIsolve(const Rhs& b) const
 		{	
-			//cout << "Solvers size: " << solvers.size() << std::endl;
-			cmat bblk;
-			pseudoscatterVec(b,bblk,Nmat);
-			
-			// cout << "bblk:\n" << bblk << endl;
-			
-			cmat outs(bblk.rows(),bblk.cols());
-			
 			int wrank, wsize;
 			
 			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
 			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+			
+			//cout << "Solvers size: " << solvers.size() << std::endl;
+			cmat bblk;
+			
+			int Nth = b.rows()/Nmat;
+			int Nr = Nmat;
+			
+			int lth0;
+			int lNth;
+			
+			if(Nth%wsize == 0) {
+				lNth = Nth/wsize;
+				lth0 = wrank*lNth;
+			}
+			else {
+				float flNth = 1.*Nth/wsize;
+				
+				lth0 = round(wrank * flNth);
+				
+				lNth = round((wrank + 1) * flNth) - lth0;
+				
+			}
+			
+			// cout << "lth0, lNth at wrank " << wrank << ": " << lth0 << ", " << lNth << endl;
+			
+			bblk = b.reshaped(Nr,Nth).middleCols(lth0,lNth);
+			
+			cmat outs(bblk.rows(),bblk.cols());
 			
 			Rhs out;
 			
@@ -379,9 +387,9 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 				//cout << "Hello, the solver list size is " << solvers.size() << " and we are in the else case" << std::endl;
 
 				// Rhs out (b.size());
-				int Nblock = bblk.cols();
-				for(int i = 0; i < Nblock; i++) {
-					int rankind = wrank * Nblock + i;
+				
+				for(int i = 0; i < lNth; i++) {
+					int rankind = lth0 + i;
 					if(negAng) {
 						
 						int kappa = ik(angids[rankind]);
