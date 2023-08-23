@@ -10,6 +10,7 @@ Glorified wrapper for an Eigen::vector object with complex coefficients. Mostly 
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include "mpiFuncs.h"
 
 Eigen::IOFormat saveformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 
@@ -65,6 +66,8 @@ class wavefunc {
 			savefile << coefs.format(saveformat);
 			savefile.close();
 		}
+		
+		
 };
 
 
@@ -102,8 +105,41 @@ template <typename basistype>
 cmat wavefunc<basistype>::operator*(const wavefunc& psi) {
 	if(!cached) {
 		
-		lcoefs = coefs.adjoint() * bs->Sm();
-		return  lcoefs * psi.coefs;
+		lcoefs = bs->template matfree<S>(coefs).adjoint();
+		// cout << "lcoefs dims = (" << lcoefs.rows() << ", " << lcoefs.cols() << ")" << endl;
+		
+		// cout << "psi.coefs dims = (" << psi.coefs.rows() << ", " << psi.coefs.cols() << ")" << endl;
+		
+		// cout << "lcoefs * psi.coefs = " << lcoefs * psi.coefs << endl;
+		
+		int lth0, lNth, ll0, lNl;
+		
+		bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		// cout << "lth0, lNth = " << lth0 << ", " << lNth << endl;
+		// cout << "bs->radqN() * (lNth - lth0) = " << bs->radqN() * (lNth - lth0) << endl;
+		
+		if((lcoefs.cols() == psi.coefs.rows()) && (lcoefs.cols() == (bs->radqN() * bs->angqN()))) {
+			// cout << "Nonparallel dot product" << endl;
+			return  lcoefs * psi.coefs;
+		}
+		else if((lcoefs.cols() == psi.coefs.rows()) && (lcoefs.cols() == (bs->radqN() * (lNth - lth0)))) {
+			// cout << "Parallel dot product" << endl;
+			cmat localDot = lcoefs * psi.coefs;
+			// cout << "localDot = " << lcoefs * psi.coefs << endl;
+			cmat dot;
+			
+			allreduceMat(localDot,dot);
+			
+			// cout << "dot = " << dot << endl;
+			
+			return dot;
+		}
+		else {
+			cout << "wtf??"<< endl;
+			cout << lcoefs.cols() << endl << psi.coefs.rows() << endl <<  (bs->radqN() * (lNth - lth0)) << endl;
+			return  lcoefs * psi.coefs;
+		}
 	}
 	else {
 		return  lcoefs * psi.coefs;

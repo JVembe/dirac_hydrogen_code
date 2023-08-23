@@ -593,6 +593,19 @@ csmat& dkbbasis::p1mat() {
 	return p1m;
 }
 
+// csmat& dkbbasis::H0mat() {
+	// csmat& H0m = getmat<H0>();
+	
+	// csmat& H0_0 = getH0mat(0);
+	// csmat& H0_k = getH0mat(1);
+	// csmat& H0_k2 = getH0mat(2);
+	// csmat& H0_k3 = getH0mat(3);
+	
+	// H0m = H0_0 + kappa * H0_k + pow(kappa,2) * H0_k2 + pow(kappa,3) * H0_k3;
+	
+	// return H0m;
+// }
+
 csmat& dkbbasis::dpalphmat(int k1,int k2, int ul) {
 	csmat& dpalphm = getmat<dpa>();
 	csmat& dpalph0 = get0mat<dpa>(ul);
