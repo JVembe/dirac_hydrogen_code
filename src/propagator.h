@@ -324,7 +324,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			this->setup();
 			auto starttime = std::chrono::system_clock::now();
 			cout << "OpenMP max threads at rank " << wrank << ": " << omp_get_max_threads() << endl;
-			cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
+			// cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
 			for(int i = 1; i < Nt; i++) {
 				t = i*dt;
 				if (i%10 == 0) {

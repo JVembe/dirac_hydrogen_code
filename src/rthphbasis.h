@@ -2430,6 +2430,255 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 		}
 		
+		cvec blockDistribute3(const cvec& v) {
+			int wrank, wsize;
+			
+			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+			
+			
+			int Nr = this->radqN();
+			int Nth = this->angqN();
+			int Nl = this->thphbasis->bdplmax();
+			
+			Eigen::Matrix<int,Eigen::Dynamic,Eigen::Dynamic> wtmat(Nth,Nth);
+			wtmat.setIdentity();
+			
+			wtmat *=2;
+			
+			cvec ilist = cvec::Zero(Nth);
+			
+			for(int i = 0; i < angids.size(); i++) {
+				ilist[i] = angids[i];
+			}
+			
+			if(!isCached(angidmat)) {
+				angidmat = csmat(this->thphbasis->angqN(),ilist.rows());
+				// cout << "(" << Nth << ", " << ilist.rows() << ")" << endl;
+				for(int i = 0; i < ilist.rows(); i++) {
+					// cout << "(" << ilist.real().cast<int>()(i) << "," << i << ")" << endl;
+					angidmat.insert(ilist.real().cast<int>()(i),i) = 1;
+				}
+			}
+			
+			for(int i = 0; i < this->thphbasis->bdplmax(); i++) {
+				
+				
+				csmat bdpamU = this->thphbasis->bdpam(UPPER,i);
+				csmat bdpamL = this->thphbasis->bdpam(LOWER,i);
+				
+				csmat tempmatU = (angidmat.transpose() * bdpamU * angidmat);
+				csmat tempmatL = (angidmat.transpose() * bdpamL * angidmat);
+				
+				cdouble* iidU = tempmatU.valuePtr();
+				cdouble* iidL = tempmatL.valuePtr();
+				for(int i = 0; i < tempmatU.nonZeros(); i++) {
+					iidU[i] = cdouble(1,0);
+				}
+				for(int i = 0; i < tempmatL.nonZeros(); i++) {
+					iidL[i] = cdouble(1,0);
+				}
+				
+				wtmat += tempmatU.real().cast<int>() + tempmatL.real().cast<int>();
+				
+			} 
+			
+			Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
+			cout << "wtmat\n\n" << wtmat.format(outformat) << "\n\n";
+			
+			
+			int W = wsize;
+			
+			int N = wtmat.sum();
+			
+			cout << "W: " << W << endl;
+			cout << "N: " << N << endl;
+			
+			int th01 = 0,th02 = 0,thN1 = Nth,thN2 = Nth;
+			
+			int wid = wrank;
+			while(W>1) {
+				int W0 = floor(W/2.);
+				int W1 = ceil(W/2.);
+				
+				cout << "wid: " << wid << endl;
+				cout << "W0: " << W0 <<"\nW1: " << W1 << endl;
+				
+				int sth1 = thN1 - th01;
+				int sth2 = thN2 - th02;
+				
+				double W00 = 1.*W0/W;
+				double W01 = 1.*W1/W;
+				
+				cout << "W00: " << W00 << endl;
+				cout << "W01: " << W01 << endl;
+				
+				int n0, n1;
+				int N0,N1;
+				
+				if(sth1>sth2) {
+					
+					n0 = floor(W00 * sth1);
+					n1 =  ceil(W01 * sth1);
+					
+					cout << "n0, n1: " << n0 << ", " << n1 << endl;
+					
+					cout << "(" << th01 << ", " << th02 << ", " << n0 <<", " << sth2 << ")" << endl;
+					cout << "(" << th01+n0 << ", " << th02 << ", " << n1 <<", " << sth2 << ")" << endl;
+					
+					N0 = wtmat.block(th01,th02,n0,sth2).sum();
+					N1 = wtmat.block(th01+n0,th02,n1,sth2).sum();
+					
+				}
+				else
+				{
+					cout << "n0, n1: " << n0 << ", " << n1 << endl;
+					
+					n0 = floor(W00 * sth2);
+					n1 =  ceil(W01 * sth2);
+					
+					cout << "(" << th01 << ", " << th02 << ", " << sth1 <<", " << n0 << ")" << endl;
+					cout << "(" << th01 << ", " << th02+n0 <<", " << sth1 << ", " << n1  << ")" << endl;
+					
+					N0 = wtmat.block(th01,th02,sth1,n0).sum();
+					N1 = wtmat.block(th01,th02+n0,sth1,n0).sum();
+				}
+				
+				cout << "n0, n1 at wrank " << wrank << ": " << n0 << ", " << n1 << endl;
+				cout << "N0, N1 at wrank " << wrank << ": " << N0 << ", " << N1 << endl;
+				
+				int N0target = floor(W00 * N);
+				
+				cout << "Target N0: " << N0target << endl << "Difference: " << abs(N0 - N0target);
+				
+				//Adjust n0,n1 s.t. N0,N1 approximately equal
+				
+				int N0new = N0;
+				
+				while(true) {
+					int n0new, n1new;
+					
+					if(N0new < N0target) {
+						n0new = n0 + 1;
+						n1new = n1 - 1;
+					}
+					else {
+						n0new = n0 - 1;
+						n1new = n1 + 1;
+					}						
+					
+					if(sth1>sth2) {
+						N0new = wtmat.block(th01,th02,n0new,sth2).sum();
+					}
+					else {
+						N0new = wtmat.block(th01,th02,sth1,n0new).sum();
+					}
+					
+					// cout << "n0new: "  << n0 <<", n1new: " << n1 << ", N0new: " << N0new << endl;
+					
+					// cout << "newDiff: " << abs(N0target - N0new) << ", oldDiff: " << abs(N0target - N0) << endl;
+					
+					if((abs(N0target - N0new) >= abs(N0target - N0)) && (N0new!= 0 && N0new!=N)) {
+						break;
+					}
+					
+					N0 = N0new;
+					n0 = n0new;
+					n1 = n1new;
+				}
+				
+				
+				if(wid < W0) { 
+					W = W0;
+					if(sth1>sth2) {
+						thN1 = th01 + n0;
+					} else {
+						thN2 = th02 + n0;
+					}
+				}
+				else {
+					wid = wid - W0;
+					W = W1;
+					
+					if(sth1>sth2) {
+						th01 += n0;
+					} else {
+						th02 += n0;
+					}
+				}
+				
+				cout << "W at wrank "<< wrank << ": " << W << endl;
+				cout << "th1,th2 intervals: {" << th01 << ", " << thN1 << "}, {" << th02 << ", " << thN2 << "}" << endl;
+				// cout << "local mat\n" << wtmat.block(locall0,localth0,localNl-locall0,localNth-localth0) << endl;
+				N = wtmat.block(th01,th02,thN1-th01,thN2-th02).sum();
+				
+				cout << "N: " << N << endl;
+			}
+			
+			
+			// locall0-=2;
+			// localNl-=2;
+			
+			
+			// for(int l = 0; l < Nl; l++) {
+				// if(l < locall0 || l>= localNl) {
+					// this->rbasis->clearDkbMats(l);
+				// }
+			// }
+			
+			// if(locall0 < 0)
+				// this->rbasis->setLocalParams(localth0,localNth,0,localNl);
+			// else
+			this->rbasis->setLocalParams(th01,thN1,0,Nl);
+			
+			// localNths = new int[wsize];
+			// localth0s = new int[wsize];
+			
+			// int localN = (localNth - localth0)*Nr;
+			// int localDisp = localth0 * Nr;
+			
+			// MPI_Allgather(&localN,1,MPI_INT,localNths,1,MPI_INT,MPI_COMM_WORLD);
+			// MPI_Allgather(&localDisp,1,MPI_INT,localth0s,1,MPI_INT,MPI_COMM_WORLD);
+			
+			// if(wrank == 0) { 
+				// cout << "localNths:\n";
+				// for(int i = 0; i < wsize; i++) {
+					// cout << localNths[i] << endl;
+				// }
+				
+				
+				// cout << "localth0s:\n";
+				// for(int i = 0; i < wsize; i++) {
+					// cout << localth0s[i] << endl;
+				// }
+			// }
+			
+			int* th01s = new int[wsize];
+			int* th02s = new int[wsize];
+			int* thN1s = new int[wsize];
+			int* thN2s = new int[wsize];
+			
+			MPI_Allgather(&th01, 1, MPI_INT, th01s, 1, MPI_INT, MPI_COMM_WORLD);
+			MPI_Allgather(&th02, 1, MPI_INT, th02s, 1, MPI_INT, MPI_COMM_WORLD);
+			MPI_Allgather(&thN1, 1, MPI_INT, thN1s, 1, MPI_INT, MPI_COMM_WORLD);
+			MPI_Allgather(&thN2, 1, MPI_INT, thN2s, 1, MPI_INT, MPI_COMM_WORLD);
+			
+			Eigen::Matrix<int,Eigen::Dynamic,Eigen::Dynamic> blockmat(Nth,Nth);
+			
+			for(int i = 0; i < wsize; i++) {
+				blockmat.block(th01s[i],th02s[i],thN1s[i] - th01s[i], thN2s[i] - th02s[i]) 
+					= Eigen::Matrix<int,Eigen::Dynamic,Eigen::Dynamic>::Constant(thN1s[i] - th01s[i], thN2s[i] - th02s[i],i);
+			}
+			
+			cout << "blockmat" << blockmat.format(outformat);
+			
+			MPI_Barrier(MPI_COMM_WORLD);
+			
+			
+			return cvec::Zero(0);//return v.segment(localth0*Nr,(localNth-localth0)*Nr);//.reshaped(Nr,(localNth-localth0)));
+		}
+		
+		
 		cmat bdpamatvecMPIblock(const cmat& vblocks) {
 			int wrank, wsize;
 			

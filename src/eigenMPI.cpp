@@ -47,9 +47,9 @@ int main() {
 	//Simulation parameters
 	int Nsplines = 200;
 	int Ntime = 8000;
-	int Nkappa = 8;
-	int Nmu = 4;
-	int Nl = 5;
+	int Nkappa = 20;
+	int Nmu = 10;
+	int Nl = 10;
 	double rBox = 30.0;
 	
 	
@@ -155,7 +155,10 @@ int main() {
 	// Htype H(rthphb,&dplA<15,50,INTENSITY>);
 	H.Vfunc = &coloumb<Z>;
 	
-	
+	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
+	cvec testsegs = rthphb.blockDistribute3(testvec);
+	MPI_Finalize();
+	return 0;
 	
 	//Eigenvalue solution of time-independent part of Hamiltonian
 	
@@ -170,7 +173,6 @@ int main() {
 	
 	//psi1 set from ground state and normalized
 	
-	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 	
 	// cout << "testvec: " << testvec << endl;
 	
@@ -192,7 +194,11 @@ int main() {
 	
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(wrank == 0) cout << "Distributing matrix blocks..." << endl;
-	cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
+	
+	cvec coefsE0 = rthphb.blockDistribute3(evecs[0].col(Nsplines+5));
+	MPI_Finalize();
+	return 0;
+	// cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
 	
 	dirwf psi1 = dirwf(rthphb,coefsE0);
 	psi1.normalize();
