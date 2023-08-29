@@ -9,13 +9,13 @@
 
 #include "defs.h"
 #include "RtsMat.h"
+#include "parallelBiCGSTAB.h"
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/IterativeLinearSolvers>
 //#include <Eigen/unsupported/IterativeSolvers>
 #include <mpi.h>
-
 #include<chrono>
 
 Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
@@ -201,9 +201,9 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 		double dt;
 	public:
 	
-		Eigen::BiCGSTAB<RtsMat<Htype>,SubmatPreconditioner<cdouble> >* solver;
+		Eigen::ParBiCGSTAB<RtsMat<Htype>,SubmatPreconditioner<cdouble> >* solver;
 		//Eigen::GMRES<RtsMat<Htype>,SubmatPreconditioner<cdouble> >* solver;
-		SubmatSolver<Eigen::SparseLU<csmat> > Sinv_solver;
+		// SubmatSolver<Eigen::SparseLU<csmat> > Sinv_solver;
 		
 		RtsMat<Htype>* proptest;
 		
@@ -297,10 +297,10 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 		void propagate(wavefunc<basistype>& psi, double dt, int tmax, int nSave = 1) {
 			int Nt = tmax;
 			int ncoef = H->Dim();
-			cmat wfcoefs = cmat(ncoef,Nt/nSave);
+			// cmat wfcoefs = cmat(ncoef,Nt/nSave);
 			cmat wfct = cmat(ncoef,1);
 			
-			wfcoefs.setZero();
+			// wfcoefs.setZero();
 			wfct.setZero();
 			
 			int wrank;
@@ -308,11 +308,11 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			
 			if(wrank==0) {
 				cout << "psi dimensions: " << psi.coefs.rows() << ", " << psi.coefs.cols() << "\n";
-				cout << "wfcoefs dimensions: " << wfcoefs.rows() << ", " << wfcoefs.cols() << "\n";
+				// cout << "wfcoefs dimensions: " << wfcoefs.rows() << ", " << wfcoefs.cols() << "\n";
 			}
 			
-			wfcoefs.col(0) = psi.coefs.col(0);
-			wf = wavefunc<basistype>(H->getBasis(),wfcoefs);
+			// wfcoefs.col(0) = psi.coefs.col(0);
+			// wf = wavefunc<basistype>(H->getBasis(),wfcoefs);
 			wfct = psi.coefs;
 			
 			wft = wavefunc<basistype>(H->getBasis(),wfct);
@@ -324,7 +324,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			this->setup();
 			auto starttime = std::chrono::system_clock::now();
 			cout << "OpenMP max threads at rank " << wrank << ": " << omp_get_max_threads() << endl;
-			cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
+			// cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
 			for(int i = 1; i < Nt; i++) {
 				t = i*dt;
 				if (i%10 == 0) {
@@ -347,19 +347,19 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 				this->timeStep();
 				
 				
-				if(i%nSave == 0 && i < Nt && wrank == 0) {
-					int saveId = i/nSave;
+				//if(i%nSave == 0 && i < Nt && wrank == 0) {
+					// int saveId = i/nSave;
 					
-					cout << "Step " << i << " complete, Saving wft to wf col " << saveId << ", wf size" << wf.coefs.cols() << std::endl;
+					// cout << "Step " << i << " complete, Saving wft to wf col " << saveId << ", wf size" << wf.coefs.cols() << std::endl;
 					
-					wf.coefs.col(saveId) = wft.coefs;
+					// wf.coefs.col(saveId) = wft.coefs;
 					
-					if(!dumpfilename.empty())
-						wft.save(dumpfilename,saveId);
-					else {
-						cout << "Warning: No dumpfile name!" << std::endl;
-					}
-				}
+					// if(!dumpfilename.empty())
+						// wft.save(dumpfilename,saveId);
+					// else {
+						// cout << "Warning: No dumpfile name!" << std::endl;
+					// }
+				// }
 				
 				
 			}

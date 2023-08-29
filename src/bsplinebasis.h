@@ -5,7 +5,7 @@
 #include "basis.h"
 #include "splinehandler.h"
 #include "potential.h"
-#include <omp.h>
+// #include <omp.h>
 
 class bsbasis: public basis<bsbasis>, public splineHandler {
 	friend class basis<bsbasis>;
@@ -301,7 +301,7 @@ inline void bsbasis::precacheMatvec<bdpAsq>(const cvec& v, int cacheSize, int lm
 
 	int kappamax = (lmax - 1)/2;
 	
-	#pragma omp parallel for collapse(2)
+	//#pragma omp parallel for collapse(2)
 	for(int cacheId = 0; cacheId < cacheSize; cacheId++) {
 		for(int l = 0; l < lmax; l++) { 
 			cvec& vcache = getcachevec(cacheId,l);

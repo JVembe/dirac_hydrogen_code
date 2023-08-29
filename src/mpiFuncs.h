@@ -332,9 +332,9 @@ void allgatherVec(Eigen::MatrixBase<Derived1>& invecs,Eigen::MatrixBase<Derived2
 	
 	// cout << "BlkCols at rank " << wrank << ": " << blkCols << endl;
 	// cout << "BlkRows at rank " << wrank << ": " << blkRows << endl;
-	// MPI_Barrier(MPI_COMM_WORLD);
-	// totblks = wsize * blkCols;
+	
 	MPI_Allgather(&blkCols,1, MPI_INT, recvcols, 1, MPI_INT, MPI_COMM_WORLD);
+	
 	// cout << "Receiving number of blocks: " << endl;
 	
 	for(int i = 0; i < wsize; i++) {
@@ -350,7 +350,7 @@ void allgatherVec(Eigen::MatrixBase<Derived1>& invecs,Eigen::MatrixBase<Derived2
 	
 	vdata = new Scalar[blkRows*totblks];
 	
-	// Check blocks
+	// // Check blocks
 	// for(int i = 0; i < blkRows * blkCols; i++) {
 		// cout << blkdata[i] << "\n";
 	// }
@@ -366,12 +366,13 @@ void allgatherVec(Eigen::MatrixBase<Derived1>& invecs,Eigen::MatrixBase<Derived2
 	// for(int i = 0; i < totblks*blkRows; i++) {
 		// cout << vdata[i] << "\n";
 	// }
-	// }
+	
 	// MPI_Barrier(MPI_COMM_WORLD);
 	outvec = Eigen::Map<Derived2>(vdata,blkRows * totblks,1);
 	delete[] vdata;
 	delete[] recvcols;
 	delete[] recvn;
+	delete[] disps;
 }
 
 template <typename Derived>
@@ -440,6 +441,76 @@ void allreduceMat(Eigen::MatrixBase<Derived>& inmats, Eigen::MatrixBase<Derived>
 		// outmat = cmat::Zero(0,0);
 	// }
 	outmat = Eigen::Map<Derived>(outdata,Nrow,Ncol);
+	delete [] outdata;
+}
+
+template <typename Derived>
+void reduceScatterMat(Eigen::MatrixBase<Derived>& inmats, Eigen::MatrixBase<Derived>& outmat,int* localNs, int* localth0s) {
+	using Scalar = typename Eigen::MatrixBase<Derived>::Scalar;
+	
+	int wrank, wsize;
+	MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+	MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
+
+	Scalar* indata;
+	Scalar* reddata;
+	Scalar* outdata;
+	
+	int Nrow,Ncol;
+	
+	indata = &inmats(0);
+	int N = inmats.size();
+	// // cout << "inmats:\n" << inmats;
+	// cout << "Inmats size: " << inmats.size() << endl;
+	
+	Nrow = outmat.rows();
+	Ncol = outmat.cols();
+	
+	// if(wrank == 0) {
+		// reddata = new Scalar[N];
+	// }
+	outdata = new Scalar[localNs[wrank] ];
+	
+	// cout << "Data of input matrix" << endl;
+	// for(int i = 0; i < inmats.size(); i++) {
+		// cout << indata[i] << endl;
+	// // }
+	// cout << "LocalNs:" << endl;
+	// for(int i = 0; i < wsize; i++) {
+		// cout << localNs[i] << endl;
+	// }
+	
+	// cout << "Localth0s:" << endl;
+	// for(int i = 0; i < wsize; i++) {
+		// cout << localth0s[i] << endl;
+	// }
+	
+	// cout << "outmat size: " << outmat.size() << endl;
+	//Reduce_scatter fails in cases where there are overlapping th intervals, so we must use Reduce and then Scatterv
+	MPI_Reduce_scatter(indata,outdata,localNs,mpi_get_type<Scalar>(),MPI_SUM,MPI_COMM_WORLD);
+	
+	// MPI_Reduce(indata,reddata,N,mpi_get_type<Scalar>(),MPI_SUM,0,MPI_COMM_WORLD);
+	// MPI_Scatterv(reddata,localNs,localth0s,mpi_get_type<Scalar>(), outdata, localNs[wrank], mpi_get_type<Scalar>(), 0, MPI_COMM_WORLD);
+	
+	// cout << "Data of reduce-scattered matrix" << endl;
+	
+	//NOTE: Can't use inmats after this!!
+	
+	// if(isCached(outmat)) {
+		// outmat = cmat::Zero(0,0);
+	// }
+	
+	// for(int i = 0; i < outmat.size(); i++) {
+		// cout << outdata[i] << endl;
+	// }
+	
+	MPI_Barrier(MPI_COMM_WORLD);
+	
+	// cout << "Nrow*Ncol = " << Nrow*Ncol << endl;
+	// cout << "N = " << N << endl;
+	
+	outmat = Eigen::Map<Derived>(outdata,Nrow,Ncol);
+	// if(wrank == 0) delete [] reddata;
 	delete [] outdata;
 }
 

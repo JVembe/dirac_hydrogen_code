@@ -175,8 +175,13 @@ class basis {
 		int idxtfrm(int i) {
 			return i;
 		}
+		void cldkbm(int l) {
+			
+		}
 		
 		void slp(int a1,int a2, int b1, int b2) { }
+		
+		void glp(int& a1, int& a2, int& b1, int& b2) { }
 	public:
 		
 		//Default constructor and destructor
@@ -397,6 +402,18 @@ class basis {
 			}
 		}
 		
+		//Clear matrices that aren't used for time propagation
+		void clearOperatorMats() {
+			for(int i = 0; i < matname::N_MATS; i++) {
+				if(i != matname::bdpa && i!=matname::dpa && i!= matname::S && i != matname::H0)
+					mats[i] = csmat(0,0);
+			}
+		}
+		
+		void clearDkbMats(int l) {
+			static_cast<Derived*>(this)->cldkbm(l);
+		}
+		
 		//This is used in the nondipole case to clear the vector cache actually
 		void clearVecs() {
 			return static_cast<Derived*>(this)->clvcs();
@@ -415,6 +432,10 @@ class basis {
 		
 		void setLocalParams(int a1, int a2, int b1, int b2) {
 			return static_cast<Derived*>(this)->slp(a1,a2,b1,b2);
+		}
+		
+		void getLocalParams(int& a1, int& a2, int& b1, int& b2) {
+			static_cast<Derived*>(this)->glp(a1,a2,b1,b2);
 		}
 };
 

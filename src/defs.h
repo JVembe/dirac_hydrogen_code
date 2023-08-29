@@ -15,6 +15,8 @@ A lot of Eigen types are given shorthand names here.
 #define UPPER 1
 #define LOWER -1
 #define USEMPI 0
+//#define USE_MY_OPENMP
+#define EIGEN_DONT_PARALLELIZE 1
 
 using namespace std;
 

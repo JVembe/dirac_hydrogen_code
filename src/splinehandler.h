@@ -48,6 +48,13 @@ class splineHandler {
 		cvec fit(const vec& x, const vec& y) {
 			
 		}
+		
+		void clearCaches() {
+			for(int i = 0; i < splineCaches.size(); i++) {
+				splineCaches[i] = clsmat(0,0);
+				wtmt = clsmat(0,0);
+			}
+		}
 };
 
 

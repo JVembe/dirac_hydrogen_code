@@ -9,9 +9,10 @@
 #include "wavefunc.h"    //Effectively a wrapper class for the Eigen vector class
 #include "hamiltonian.h" //Contains the physics in the Hamiltonian class and derived classes
 #include "propagator.h"  //Time evolution code
-#include <omp.h>		 //This is openMP
+// #include <omp.h>		 //This is openMP
 #include "mpiFuncs.h"    //Functions for sending and receiving Eigen matrices with MPI
 #include <chrono>
+#include "parallelBiCGSTAB.h"
 
 #define INTENSITY 10
 #define Z 1
@@ -44,12 +45,13 @@ int main() {
 	using dirwf = wavefunc<dirbs>;
 	
 	//Simulation parameters
-	int Nsplines = 100;
-	int Ntime = 10;
-	int Nkappa = 4;
-	int Nmu = 2;
-	int Nl = 2;
+	int Nsplines = 200;
+	int Ntime = 8000;
+	int Nkappa = 20;
+	int Nmu = 10;
+	int Nl = 10;
 	double rBox = 30.0;
+	
 	
 	//Formats for outputting matrices
 	Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
@@ -57,13 +59,15 @@ int main() {
 	
 	//Initialize MPI
 	MPI_Init(NULL,NULL);
+	Eigen::initParallel();
 	int wrank;
 	MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
 	
-	cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime 
+	if(wrank == 0) {
+		cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime 
 		<< "\nkappa max quantum number: " << Nkappa << "\nmu max quantum number: " << Nmu 
 		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << INTENSITY << std::endl;
-	
+	}
 	//t: List of spline knots, here evenly distributed
 	
 	std::stringstream fnpstream;
@@ -92,7 +96,7 @@ int main() {
 	spnrbasis spnrb(Nkappa,Nmu);
 	
 	//bdplOverride limits the number of l terms in the Bessel expansion of the interaction Hamiltonian
-	// spnrb.bdplOverride(Nl);
+	spnrb.bdplOverride(Nl);
 	
 	int Nth = spnrb.angqN();
 	
@@ -123,19 +127,27 @@ int main() {
 	dkbb.clvcs();
 	
 	//Dump enumeration of angular momentum states, this is needed in postprocessing of data
-	for(int i = 0; i < rthphb.angids.size(); i++) {
-		cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
+	if(wrank == 0) {
+		for(int i = 0; i < rthphb.angids.size(); i++) {
+			cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
+		}
 	}
 	
-	
 	//Construct dipole alpha matrix, both upper and lower versions
-	dkbb.dpam(1,1,1);
-	dkbb.dpam(1,1,-1);
+	// dkbb.dpam(1,1,1);
+	// dkbb.dpam(1,1,-1);
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(wrank == 0) cout << "Initializing matrices..." << endl;
 	for(int l = 0; l < spnrb.bdplmax(); l++) {
+		if (wrank == 0) cout << l << endl;
 		dkbb.bdpam(1,1,1,l,bdpp);
 		dkbb.bdpam(1,1,-1,l,bdpp);
 	}
 	
+	// cout << dkbb.bdpam(1,1,1,0,bdpp).nonZeros() << endl;
+	
+	// MPI_Finalize();
+	// return 0;
 	using Htype = DiracBDP<dirbs>;
 	//using Htype = Dirac<dirbs>;
 	Htype H(rthphb,bdpp);
@@ -143,22 +155,24 @@ int main() {
 	// Htype H(rthphb,&dplA<15,50,INTENSITY>);
 	H.Vfunc = &coloumb<Z>;
 	
-	
+	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
+	cvec testsegs = rthphb.blockDistribute3(testvec);
+	MPI_Finalize();
+	return 0;
 	
 	//Eigenvalue solution of time-independent part of Hamiltonian
+	
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(wrank == 0) cout << "Diagonalizing..." << endl;
 	H.prepeigs(Nsplines,Nsplines/2);
 	//Assemble H0 for propagation
 	H.H0radprep();
-	
 	//Get eigenvalues and eigenvectors
 	vector<vec>& evals = H.getevals();
 	vector<dsmat>& evecs = H.getevecs();
 	
 	//psi1 set from ground state and normalized
-	dirwf psi1 = dirwf(rthphb,evecs[0].col(Nsplines + 5));
-	psi1.normalize();
 	
-	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 	
 	// cout << "testvec: " << testvec << endl;
 	
@@ -177,13 +191,62 @@ int main() {
 	// cout << "Sv_mpi" << rthphb.smatvecMPIblock(testvec).format(outformat) << endl;
 	// cout << "H0v" << H.H0(testvec).format(outformat) << endl;
 	// cout << "H0v_mpi" << rthphb.h0matvecMPIblock(testvec).format(outformat) << endl;
-	// cout << "Htv" << rthphb.template matfree<dpa>(testvec).format(outformat) << endl;
-	// cout << "Htv_mpi" << rthphb.dpamatvecMPIblock(testvec).format(outformat) << endl;
+	
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(wrank == 0) cout << "Distributing matrix blocks..." << endl;
+	
+	cvec coefsE0 = rthphb.blockDistribute3(evecs[0].col(Nsplines+5));
+	MPI_Finalize();
+	return 0;
+	// cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
+	
+	dirwf psi1 = dirwf(rthphb,coefsE0);
+	psi1.normalize();
+	
+	// cout << psi1.coefs << endl;
+	
+	// cmat testblks; 
+	// testblks = testblocks.reshaped(Nr,testblocks.size()/Nr);
+	
+	// cout << "Htv" << rthphb.template matfree<bdpa>(testvec).format(outformat) << endl;
+	
+	// cout << "Htv_MPI " << rthphb.bdpamatvecMPIblock(testblks).format(outformat);
 	
 	
-	// cout << "Hv_gather " << rthphb.dpamatvecMPIblock(testvec).format(outformat);
+	// MPI_Finalize();
+	// return 0;
 	
-	rthphb.blockDistribute();
+	
+	// cvec Htv = rthphb.template matfree<bdpa>(psi1.coefs);
+	// cout << "Htv_mpi" << Htv.format(outformat) << endl;
+	// cvec H0v = rthphb.template matfree<H0>(psi1.coefs);
+	// cout << "H0v_mpi" << H0v.format(outformat) << endl;
+	// cvec Sv  = rthphb.template matfree<S>(psi1.coefs);
+	// cout << "Sv_mpi"  << Sv.format(outformat)  << endl;
+	
+	// cout << "|Htv| = " << Htv.squaredNorm() << endl;
+	// cout << "|H0v| = " << H0v.squaredNorm() << endl;
+	// cout << "|Sv| = " << Sv.squaredNorm() << endl;
+	// MPI_Finalize();
+	// return 0;
+	RtsMat<Htype> proptest;
+	// RtsMat<Htype> oldproptest;
+	
+	//RtsMat needs setup
+	proptest.setDt(dt);
+	proptest.setTime(T);
+	proptest.attachHamiltonian(H);
+	proptest.overrideRows(psi1.coefs.rows());
+	proptest.overrideCols(psi1.coefs.rows());
+	
+	// oldproptest.setDt(dt);
+	// oldproptest.setTime(T);
+	// oldproptest.attachHamiltonian(H);
+	// cout << "H.H(v)\n" << H.H(1.75,testblocks);
+	// cout << "proptestv\n" << proptest * testblocks;
+	
+	
+	
 	
 	bdpp.setTime(1.25);
 	
@@ -195,34 +258,40 @@ int main() {
 	
 	// MPI_Finalize();
 	// return 0;
-	
+	// cout << "calculating b..." << endl;
 	// for(int i = 0; i < Ntime; i++) {	
-	b = H.S(testvec) - dt * cdouble(0,0.5) * H.H(T,testvec);
+	b = H.S(psi1.coefs) - dt * cdouble(0,0.5) * H.H(T,psi1.coefs);
 		//b = H.Ht(T,psi1.coefs);
 		// cmat outv;
 		
 		// allreduceMat(vblocks,outv);
 		// cout << i << endl;
 	
-	// cout << "b " << b.format(outformat) << endl;
+	// cout << "b"<<wrank<<" " << b.format(outformat) << endl;
+	
+	MPI_Barrier(MPI_COMM_WORLD);
+	// cout << endl;
+	cmat bblock = b.reshaped(Nr,b.size()/Nr);
+	
+	
+	
+	// cvec bFull;
+	
+	// allgatherVec(bblock,bFull);
+	
+	// cout << "bFull " << bFull.format(outformat) << endl;
+	
 	
 	// MPI_Finalize();
 	// return 0;
-	// MPI_Finalize();
-	// return 0;
-	
 	
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
-	Eigen::BiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
+	// Eigen::debugBiCGSTAB<RtsMat<Htype >, SubmatPreconditioner_old<cdouble> > oldSolver;
+	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
 	
 	//RtsMat is a helper class needed by the preconditioner, and functions as a wrapper to the Hamiltonian class that masks the time step formula as a matrix-vector product.
 	//RtsMat.h is quite p ossibly the most haunted file in this code. I do not understand how it works.
-	RtsMat<Htype> proptest;
 	
-	//RtsMat needs setup
-	proptest.setDt(dt);
-	proptest.setTime(T);
-	proptest.attachHamiltonian(H);
 
 	//Typically, if it fails to converge within 1000 iterations there's trouble
 
@@ -233,25 +302,58 @@ int main() {
 	
 	//Preconditioner setup performs ILUT factorizations of individual blocks of H0
 	solver.preconditioner().setup(H,dt);
-	//Eigen solvers need a compute step to be performed before solving
+	// oldSolver.preconditioner().setup(H,dt);
+	
+	// cvec slvb = solver.preconditioner().solve(b);
+	// cout << "slvb " << slvb.format(outformat) << endl;
+	
+	// cvec slvbFull = oldSolver.preconditioner().solve(bFull);
+	// cout << "slvbFull " << slvbFull.format(outformat) << endl;
+	// MPI_Finalize();
+	// return 0;
+	MPI_Barrier(MPI_COMM_WORLD);
+	
+	dkbb.clearOperatorMats();
+	dkbb.clearCaches();
+	// MPI_Finalize();
+	// return 0;
+	// //Eigen solvers need a compute step to be performed before solving
+	
+	MPI_Barrier(MPI_COMM_WORLD);
+	
+	// cout << "Computing solvers" << endl;
+	// oldSolver.compute(oldproptest);
 	solver.compute(proptest);
+	// cout << "setMaxIterations" << endl;
+	// oldSolver.setMaxIterations(100);
+	// solver.setMaxIterations(100);
 	
-	solver.setMaxIterations(1000);
-	
+	MPI_Barrier(MPI_COMM_WORLD);
+	// cout << "solving oldSolver" << endl;
+	// cvec psi2Full = oldSolver.solve(bFull);
+	// cout << "solving solver" << endl;
 	cvec psi2 = solver.solve(b);
-	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
+	
+	// // cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
+	MPI_Barrier(MPI_COMM_WORLD);
 	
 	// cout << "psi2" << psi2.format(outformat) << endl;
-	// cout << "psi2_mpi" << psi2_mpi.format(outformat) << endl;
 	
+	// cout << "psi2Full" << psi2Full.format(outformat) << endl;
 	
-	cout << "iterations: "  << solver.iterations();
+	// // cout << "psi2_mpi" << psi2_mpi.format(outformat) << endl;
+	MPI_Barrier(MPI_COMM_WORLD);
 	
-	// cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
+	// cout << "oldSolver iterations: "  << oldSolver.iterations() << endl;
+	cout << "iterations: "  << solver.iterations() << endl;
 	
 	// MPI_Finalize();
 	// return 0;
-	// //Initialize crank-nicholson propagator
+	// // // cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
+	
+	// MPI_Finalize();
+	// return 0;
+	// // //Initialize crank-nicholson propagator
 	Cranknich<Htype,dirbs,true> cnp(H);
 	
 	
@@ -261,40 +363,37 @@ int main() {
 	
 	// cnp.setDumpfile((filenamePrefix + "_dump"));
 	
-	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
+	cnp.propagate(psi1,(0.6*PI)/Ntime,Ntime,1);
 	
-	dirwf wft = cnp.wf[Ntime - 1];
+	cmat wft_local = cnp.wft.coefs.reshaped(Nr,cnp.wft.coefs.size()/Nr);//[Ntime - 1];
 	
-	cout << "wft" << wft.coefs.format(outformat);
+	// cout << "wft_local" << wft_local.format(outformat);
 	
-	// cmat projt = psi1 * cnp.wf;
+	cmat wftcoefs;
+	
+	allgatherVec(wft_local,wftcoefs);
+	
+	dirwf wft(rthphb,wftcoefs);
 	
 	// mat dPdE = H.dPdE(wft,5000,-0.500007,500);
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(wrank == 0) {
+		ofstream psievf("psiev");
+		psievf << "psit " << wft.coefs.format(outformat) << "\n";
+
+		psievf << "evl"   << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
+		psievf << "psiev" << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
+
+		for(int i = 0; i < evecs.size(); i++) {
+			psievf << "evl" << filenamePrefix << "["<<i<<"]" << evals[i].format(outformat) << std::endl;
+			psievf << "psiev" << filenamePrefix << "["<<i<<"] " << cmat(wft * evecs[i]).format(outformat) << std::endl;
+		}
+
+		psievf.close();
+
+	}
 	
-	// if(wrank == 0) {
-		// ofstream psievf(filenamePrefix + "_psiev");
-		// psievf << "psit " << wft.coefs.format(outformat) << "\n";
-
-		// psievf << "evl"   << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
-		// psievf << "psiev" << filenamePrefix << " = npy.zeros((" << evecs.size() << "),dtype = object)\n";
-
-		// for(int i = 0; i < evecs.size(); i++) {
-			// psievf << "evl" << filenamePrefix << "["<<i<<"]" << evals[i].format(outformat) << std::endl;
-			// psievf << "psiev" << filenamePrefix << "["<<i<<"] " << cmat(wft * evecs[i]).format(outformat) << std::endl;
-		// }
-
-		// psievf << "projt " << projt.format(outformat) << "\n";
-
-		// psievf.close();
-
-		// ofstream dPdEf(filenamePrefix + "_dPdE");
-
-		// dPdEf << "dPdE" << filenamePrefix << dPdE.format(outformat);
-
-		// dPdEf.close();
-	// }
-	
-	
+	MPI_Barrier(MPI_COMM_WORLD);
 	
 	MPI_Finalize();
 	return 0;

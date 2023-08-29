@@ -10,6 +10,7 @@ It is also responsible for matrix-vector products performed in this basis. The .
 #include "mpiFuncs.h"
 #include "basis.h"
 #include "splinehandler.h"
+// #include <omp.h>
 #include <mpi.h>
 
 class dkbbasis: public basis<dkbbasis>, public splineHandler {
@@ -194,6 +195,13 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			ddkbLk = clsmat(0,0);
 		}
 		
+		void cldkbm(int l) {
+			for(int alpha = 0; alpha < 6; alpha++) {
+				for(int pp = 0; pp < 4; pp++) {
+					getbdpmat(pp, l, alpha) = csmat(0,0);
+				}
+			}
+		}
 	
 		void prepbdpvecs(int cacheSize, int lmax) {
 			for(int p = 0; p < dkbpart::Npts; p++) {
@@ -252,6 +260,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 		csmat& ddmat(int dn);
 		csmat& Emat(long double (*V)(long double));
 		csmat& p1mat();
+		// csmat& H0mat();
 		
 		csmat& kappamat();
 		csmat& ulcmat();
@@ -435,11 +444,27 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			// cout << "params dims: (" << params.rows() << ", " << params.cols() << ")\n";
 			
+				
+			///WHY does this not parallelize with OpenMP?
+			// Eigen::initParallel();
+
+			// cout << "H0_0.nonZeros() * m.cols() = " <<  H0_0.nonZeros() * m.cols() << endl;
+			// cout << "H0_k.nonZeros() * m.cols() = " <<  H0_k.nonZeros() * m.cols() << endl;
+			// cout << "H0_k2.nonZeros() * m.cols() = " << H0_k2.nonZeros() * m.cols() << endl;
+			// cout << "H0_k3.nonZeros() * m.cols() = " << H0_k3.nonZeros() * m.cols() << endl;
+			
+			// #ifdef EIGEN_HAS_OPENMP
+			// cout << "EIGEN_HAS_OPENMP TRUE" << endl;
+			// #endif
+			
+			// cout << "number of Eigen threads " << Eigen::nbThreads() << endl;
+			
+			
 			w.noalias() += H0_0 * m;
 			w.noalias() += ((H0_k * m).array().rowwise() * kappas.cast<cdouble>().transpose()).matrix();
 			w.noalias() += ((H0_k2 * m).array().rowwise() * kappas.pow(2).cast<cdouble>().transpose()).matrix();
 			w.noalias() += ((H0_k3 * m).array().rowwise() * kappas.pow(3).cast<cdouble>().transpose()).matrix();
-			
+
 		}
 		
 		// void matmat_MPI(std::integral_constant<matname,matname::H0> c, const cmat& m, cmat& w, const cvec& params)  {
@@ -673,7 +698,6 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			// cout << "Current time: " << vExt->getTime() << endl;
 			
 			if(vExt->getTime() != prevTime) {
-				//#pragma omp for
 				for(int pp = 0; pp < dkbpart::Npts; pp++) {
 					bdpalph[0][pp] = std::vector<csmat>(localNl - locall0);
 					bdpalph[1][pp] = std::vector<csmat>(localNl - locall0);
@@ -685,7 +709,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 		//		prevL = bdpl;
 				bdpft pT = vExt->template axialPart<axis::t>(vExt->getTime());
-				//#pragma omp for collapse(2)
+				#pragma omp parallel for collapse(2)
 				for(int ll = locall0; ll < localNl; ll++) {
 					for(int pp = 0; pp < dkbpart::Npts; pp++) {
 						for(int alpha = 0; alpha < 6; alpha++) {
@@ -765,7 +789,6 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				// cout << "bdpalphkk dims: (" << bdpalph[1][3][l-locall0].rows() << ", " << bdpalph[1][3][l-locall0].cols() << ")\n";
 			// }
 			
-			// cout << "m dims: (" << m.rows() << ", " << m.cols() << ")\n";
 			// cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
 			// cout << "kappasmat dims: (" << kappasmat.rows() << ", " << kappasmat.cols() << ")\n";
 			
@@ -802,21 +825,24 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			// // w.transposeInPlace();
 			
 			// cmat mI = cmat::Constant(m.cols(),m.rows(),1.0);
+			// #pragma omp parallel cout << "
 			
-			if(ul == LOWER) {
-				w.noalias() += (thmat * (bdpalph[1][0][l-locall0] * m).transpose());
-				w.noalias() += (thmat * localKappasmat * (bdpalph[1][1][l-locall0] * m).transpose());
-				w.noalias() += (kappasmat * thmat * (bdpalph[1][2][l-locall0] * m).transpose());
-				w.noalias() += ((kappasmat * thmat * localKappasmat) * (bdpalph[1][3][l-locall0] * m).transpose());
-			}
+			// m dims: (" << m.rows() << ", " << m.cols() << ")\n";
+			{
+				if(ul == LOWER) {
+					w.noalias() += (thmat * (bdpalph[1][0][l-locall0] * m).transpose());
+					w.noalias() += (thmat * localKappasmat * (bdpalph[1][1][l-locall0] * m).transpose());
+					w.noalias() += (kappasmat * thmat * (bdpalph[1][2][l-locall0] * m).transpose());
+					w.noalias() += ((kappasmat * thmat * localKappasmat) * (bdpalph[1][3][l-locall0] * m).transpose());
+				}
 
-			if(ul == UPPER) {
-				w.noalias() += (thmat * (bdpalph[0][0][l-locall0] * m).transpose());
-				w.noalias() += (kappasmat * thmat * (bdpalph[0][1][l-locall0] * m).transpose());
-				w.noalias() += (thmat * localKappasmat * (bdpalph[0][2][l-locall0] * m).transpose());
-				w.noalias() += ((kappasmat * thmat * localKappasmat) * (bdpalph[0][3][l-locall0] * m).transpose());
+				if(ul == UPPER) {
+					w.noalias() += (thmat * (bdpalph[0][0][l-locall0] * m).transpose());
+					w.noalias() += (kappasmat * thmat * (bdpalph[0][1][l-locall0] * m).transpose());
+					w.noalias() += (thmat * localKappasmat * (bdpalph[0][2][l-locall0] * m).transpose());
+					w.noalias() += ((kappasmat * thmat * localKappasmat) * (bdpalph[0][3][l-locall0] * m).transpose());
+				}
 			}
-
 			// w.transposeInPlace();
 
 			// w.transposeInPlace();
@@ -854,10 +880,12 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			
 			
-			w.noalias() += M0 * m;
-			w.noalias() += ((Mk * m).array().rowwise() * kappas.cast<cdouble>().transpose()).matrix();
-			w.noalias() += ((Mkk * m).array().rowwise() * kappas.pow(2).cast<cdouble>().transpose()).matrix();
-			
+			// #pragma omp parallel 
+			// {
+				w.noalias() += M0 * m;
+				w.noalias() += ((Mk * m).array().rowwise() * kappas.cast<cdouble>().transpose()).matrix();
+				w.noalias() += ((Mkk * m).array().rowwise() * kappas.pow(2).cast<cdouble>().transpose()).matrix();
+			// }
 		}
 		
 		int rqn();

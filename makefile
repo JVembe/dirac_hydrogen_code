@@ -38,6 +38,9 @@ mpitest: $(mpiObjs) $(BUILDDIR)/eigenMPI.o
 	
 dipolempitest: $(mpiObjs) $(BUILDDIR)/dipoleMPItest.o
 	$(MPIXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/dipoleMPItest.o $(LDLIBS) -o dipoleMPItest.out
+	
+nondipolempitest: $(mpiObjs) $(BUILDDIR)/nondipoleMPItest.o
+	$(MPIXX) $(CXXFLAGS) $(coreObjs) $(BUILDDIR)/nondipoleMPItest.o $(LDLIBS) -o nondipoleMPItest.out
 
 
 clean:

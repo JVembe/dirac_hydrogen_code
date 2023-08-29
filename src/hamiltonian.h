@@ -140,6 +140,10 @@ class Hamiltonian {
 			return static_cast<const Derived*>(this)->Svec(v);
 		}
 		
+		// cmat S(const cmat& v) const {
+			// return static_cast<const Derived*>(this)->Svec(v);
+		// }
+		
 		const csmat& H0() const {
 			return static_cast<const Derived*>(this)->H0mat();
 		}
@@ -204,6 +208,17 @@ class Hamiltonian {
 			// cout << "Hv dims: (" << Hv.rows() << ", " << Hv.cols() << ")"<<endl;
 			return Hv;
 		}
+		
+		// cmat H(double t, const cmat& v) const {
+			
+			
+			// cmat Hv;// = H0v + Htv;
+			
+			// Hv = static_cast<const Derived*>(this)->HtVec(t, v) + static_cast<const Derived*>(this)->H0vec(v);
+			
+			// return Hv;
+		// }
+		
 		
 		double sigmaE(const cvec& v) {
 			cvec Hv = this->H0(v);
@@ -511,7 +526,15 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			else
 				return this->bs->template matfree<H0>(v);
 		}
+		
+		cmat H0vec(const cmat& v) const {
+			if(!isCached(this->bs->getRadial().getH0mat(0)))
+				return SoL * (this->bs->template matfree<dd>(v) + this->bs->template matfree<k>(v)) + (this->bs->template matfree<E>(v)) + (this->bs->template matfree<ulc>(v));
+			else
+				return static_cast<basistype*>(this->bs)->h0matvecMPIblock(v);
+		}
 	
+		
 		cvec H0radvec(const cvec& v) const {
 			if(this->matfreePrepped) {
 				return SoL * (this->bs->getRadial().template matfree<dd>(v) + this->bs->getRadial().template matfree<k>(v)) + (this->bs->getRadial().template matfree<E>(v)) + (this->bs->getRadial().template matfree<ulc>(v));
@@ -551,8 +574,8 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		
 		void prepeigs(int nev, int ncv, bool angSep = true) {
-			this->H0();
-			this->S();
+			// this->H0();
+			// this->S();
 			
 			this->angSep = angSep;
 			if(!angSep){
@@ -652,7 +675,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 					}
 				}
 				if(!USEMPI) {
-					#pragma omp parallel for
+					//#pragma omp parallel for
 					for(int j = 0; j < Nang; j++) {
 						// cout << j << "\n";
 						dsmat imat = dsmat(Nr*Nang,Nr);
@@ -831,6 +854,23 @@ class DiracBDP: public DiracBase<DiracBDP<basistype>, basistype> {
 			
 			//for(int alpha = 0; alpha < 6; alpha++) {
 			out = SoL * this->bs->template matfree<bdpa>(v);
+			//}
+			
+			return out;
+		}
+		
+		cmat HtVec(double t, const cmat& v) const {
+			vExt->setTime(t);
+			
+			//bdpft vt = vExt->template axialPart<axis::t>(t);
+			
+			cmat out;// = cmat::Zero(v.size());
+			
+			// cout << "out size: " << out.size() << std::endl;
+			// cout << "matfree size: " << this->bs->template matfree<bdpa>(v,0).size() << std::endl;
+			
+			//for(int alpha = 0; alpha < 6; alpha++) {
+			out = SoL * static_cast<basistype*>(this->bs)->bdpamatvecMPIblock(v);
 			//}
 			
 			return out;
