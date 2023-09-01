@@ -45,22 +45,23 @@ int main() {
 	
 	//Simulation parameters
 	
-	int Nsplines = 250; 
+	int Nsplines = 150; 
 	//Technically not the number of splines, but the number of knots. In practice this acts as the radial resolution of the simulation.
 	//Typical values used to get sufficient accuracy have been in the 200-250 range
 	
 	int Ntime = 10; 
 	//Number of time steps to do. Typical values have been in the 8000-20000 range
+	//In this setup step size is calculated assuming a full 15-cycle laser pulse would be 8000 steps, but only performing Ntime steps.
 	
-	int Nkappa = 20;
+	int Nkappa = 10;
 	//Maximum absolute value of the kappa quantum number, which ranges from -Nkappa to +Nkappa, not including 0. 
-	//Typically need this to be 16 or higher.
+	//Typically need this to be 16 or higher for serious high-intensity work.
 	
-	int Nmu = 10;
+	int Nmu = 5;
 	//If 0, the mu quantum number follows selection rules and may only take half integer values in the interval{-|kappa|,|kappa|}
 	//High values typically aren't important, so the option of a cutoff has been implemented to reduce the problem size
 	
-	int Nl = 10;
+	int Nl = 5;
 	//For spatial dependence we rely on a Bessel function expansion, this parameter limits the number of terms.
 	
 	double rBox = 30.0;
@@ -73,11 +74,17 @@ int main() {
 	//Initialize MPI
 	MPI_Init(NULL,NULL);
 	int wrank;
+	int wsize;
 	MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+	MPI_Comm_size(MPI_COMM_WORLD,&wsize);
 	
 	cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime 
 		<< "\nkappa max quantum number: " << Nkappa << "\nmu max quantum number: " << Nmu 
 		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << INTENSITY << std::endl;
+	
+	cout << "MPI world size: " << wsize << endl;
+	cout << "MPI rank: " << wrank << endl;
+	cout << "OpenMP threads: " << omp_get_max_threads() << endl;
 	
 	//t: List of spline knots, here evenly distributed
 	
@@ -107,7 +114,7 @@ int main() {
 	spnrbasis spnrb(Nkappa,Nmu);
 	
 	//bdplOverride limits the number of l terms in the Bessel expansion of the interaction Hamiltonian
-	// spnrb.bdplOverride(Nl);
+	spnrb.bdplOverride(Nl);
 	
 	int Nth = spnrb.angqN();
 	
@@ -131,7 +138,7 @@ int main() {
 	angInit[0] = 1.0;
 	// vec angInit = vec::Constant(rthphb.angqN(),1.0);
 	
-	rthphb.pruneUncoupled(angInit,true);
+	rthphb.pruneUncoupled(angInit,true); //true means using nondipole couplings
 	
 	//Dump enumeration of angular momentum states, this is needed in postprocessing of data
 	for(int i = 0; i < rthphb.angids.size(); i++) {
@@ -177,7 +184,7 @@ int main() {
 
 	int Nr = rthphb.radqN();
 	
-	b = H.S(testvec) - dt * cdouble(0,0.5) * H.H(T,testvec);
+	b = H.S(psi1.coefs) - dt * cdouble(0,0.5) * H.H(T,psi1.coefs);
 
 	
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
@@ -191,6 +198,8 @@ int main() {
 	proptest.setDt(dt);
 	proptest.setTime(T);
 	proptest.attachHamiltonian(H);
+	proptest.overrideRows(psi1.coefs.rows());
+	proptest.overrideCols(psi1.coefs.rows());							   
 
 	//Typically, if it fails to converge within 1000 iterations there's trouble
 
@@ -231,7 +240,7 @@ int main() {
 	
 	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
 	
-	dirwf wft = cnp.wf[Ntime/1 - 1];
+	dirwf wft = cnp.wft;
 	
 	if(wrank==0)
 	cout << "wft" << wft.coefs.format(outformat);

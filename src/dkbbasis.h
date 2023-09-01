@@ -583,7 +583,6 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			csmat& dpalphk0 = getk0mat<dpa>(ul);
 			csmat& dpalphkk = getkkmat<dpa>(ul);
 			
-			int localNth = thmat.cols();
 			
 			// cout << "l array: " << larray << std::endl;
 			
@@ -601,8 +600,10 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				kappasmat.diagonal() = kappas.matrix().cast<cdouble>();
 			}
 			
-			iarray localKappas = ik(params.segment(wrank*localNth,localNth).real().cast<int>());
-			csmat localKappasmat = csmat(localNth,localNth);
+			// cout << "localth0, localNth: " << localth0 << ", " << localNth << endl;
+			
+			iarray localKappas = ik(params.segment(localth0,localNth-localth0).real().cast<int>());
+			csmat localKappasmat = csmat(localNth-localth0,localNth-localth0);
 			localKappasmat.setIdentity();
 			localKappasmat.diagonal() = localKappas.matrix().cast<cdouble>();
 			
@@ -620,6 +621,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			// cout << "m dims: (" << m.rows() << ", " << m.cols() << ")\n";
 			// cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
 			// cout << "kappasmat dims: (" << kappasmat.rows() << ", " << kappasmat.cols() << ")\n";
+			// cout << "localKappasmat dims: (" << localKappasmat.rows() << ", " << localKappasmat.cols() << ")\n";
 			
 			// cout << "thmat dims: (" << thmat.rows() << ", " << thmat.cols() << ")\n";
 			
@@ -632,13 +634,17 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			
 			
-			// // cout << "dpa00*m dims: (" << (thmat * (dpalph0 * m).transpose()).rows() << ", "  << (thmat * (dpalph0 * m).transpose()).cols() << ")" << endl;
-			// // cout << "dpak0*m dims: (" << ((kappasmat * thmat * (dpalphk0 * m).transpose()).transpose()).rows() 
-									  // // << ", "  << ((kappasmat * thmat * (dpalphk0 * m).transpose()).transpose()).cols() << ")" << endl;
-			// // cout << "dpa0k*m dims: (" << ((thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()) * (dpalph0k * m).transpose()).transpose()).rows() 
-									  // // << ", "  << ((thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()) * (dpalph0k * m).transpose()).transpose()).cols() << ")" << endl;
-			// // cout << "dpakk*m dims: (" << ((kappasmat * thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()))).rows() 
-									  // // << ", "  << ((kappasmat * thmat * kappasmat.middleRows(wrank*thmat.rows(),thmat.rows()))).cols() << ")" << endl;
+			// cout << "dpa00*m dims: (" << (thmat * (dpalph0 * m).transpose()).rows() << ", "  
+									  // << (thmat * (dpalph0 * m).transpose()).cols() << ")" << endl;
+									  
+			// cout << "dpak0*m dims: (" << ((kappasmat * thmat * (dpalphk0 * m).transpose())).rows() << ", "  
+									  // << ((kappasmat * thmat * (dpalphk0 * m).transpose())).cols() << ")" << endl;
+									  
+			// cout << "dpa0k*m dims: (" << (thmat * localKappasmat * (dpalph0k * m).transpose()).rows() << ", "  
+									  // << (thmat * localKappasmat * (dpalph0k * m).transpose()).cols() << ")" << endl;
+			
+			// cout << "dpakk*m dims: (" << ((kappasmat * thmat * localKappasmat) * (dpalphkk * m).transpose()).rows() << ", "  
+									  // << ((kappasmat * thmat * localKappasmat) * (dpalphkk * m).transpose()).cols() << ")" << endl;
 
 			// cmat mat1 = dpalph0k * m;
 			
@@ -651,7 +657,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			// cmat mat3 = thmat * mat2;
 			
 			// cout << "mat3 dims: (" << mat3.rows() << ", " << mat3.cols() << ")" << endl; 
-			w.transposeInPlace();
+			// w.transposeInPlace();
 
 			if(ul == LOWER) {
 				w.noalias() += (thmat * (dpalph0 * m).transpose());
@@ -668,7 +674,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				w.noalias() += (kappasmat * thmat * localKappasmat * (dpalphkk * m).transpose());
 			}
 
-			w.transposeInPlace();
+			// w.transposeInPlace();
 		}
 		
 		int locall0,localNl,localth0,localNth;
