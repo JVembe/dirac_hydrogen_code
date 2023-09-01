@@ -44,12 +44,25 @@ int main() {
 	using dirwf = wavefunc<dirbs>;
 	
 	//Simulation parameters
+	
 	int Nsplines = 100;
+	//Technically not the number of splines, but the number of knots. In practice this acts as the radial resolution of the simulation.
+	//Typical values used to get sufficient accuracy have been in the 200-250 range
+	
 	int Ntime = 10;
+	//Number of time steps to do. Typical values have been in the 8000-20000 range
+	//In this setup step size is calculated assuming a full 15-cycle laser pulse would be 8000 steps, but only performing Ntime steps.
+	
 	int Nkappa = 20;
+	//Maximum absolute value of the kappa quantum number, which ranges from -Nkappa to +Nkappa, not including 0. 
+	//Typically need this to be 16 or higher for serious high-intensity work.
+																										  
 	int Nmu = 0;
-	int Nl = 0;
+	//In the dipole approximation mu is static, and so this variable is only set due to dipole being treated as a special case of nondipole																									  
+	int Nl = 1;
+	//Needs to be 1 for load balancing to work, as dipole workload is equivaent to only using the first term of the nondipole expansion	
 	double rBox = 30.0;
+	//Radius of the system, in atomic units. 30 is very small, but works for our purposes							  
 	
 	//Formats for outputting matrices
 	Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
@@ -58,11 +71,17 @@ int main() {
 	//Initialize MPI
 	MPI_Init(NULL,NULL);
 	int wrank;
+	int wsize;
 	MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+	MPI_Comm_size(MPI_COMM_WORLD,&wsize);
 	
 	cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime 
 		<< "\nkappa max quantum number: " << Nkappa << "\nmu max quantum number: " << Nmu 
 		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << INTENSITY << std::endl;
+	
+	cout << "MPI world size: " << wsize << endl;
+	cout << "MPI rank: " << wrank << endl;
+	cout << "OpenMP threads: " << omp_get_max_threads() << endl;
 	
 	//t: List of spline knots, here evenly distributed
 	
@@ -92,7 +111,7 @@ int main() {
 	spnrbasis spnrb(Nkappa,Nmu);
 	
 	//bdplOverride limits the number of l terms in the Bessel expansion of the interaction Hamiltonian
-	// spnrb.bdplOverride(Nl);
+	spnrb.bdplOverride(Nl);
 	
 	int Nth = spnrb.angqN();
 	
@@ -116,7 +135,7 @@ int main() {
 	angInit[0] = 1.0;
 	// vec angInit = vec::Constant(rthphb.angqN(),1.0);
 	
-	rthphb.pruneUncoupled(angInit,false);
+	rthphb.pruneUncoupled(angInit,false);  //false means not using nondipole couplings
 	
 	//Dump enumeration of angular momentum states, this is needed in postprocessing of data
 	for(int i = 0; i < rthphb.angids.size(); i++) {
@@ -145,7 +164,11 @@ int main() {
 	vector<dsmat>& evecs = H.getevecs();
 	
 	//psi1 set from ground state and normalized
-	dirwf psi1 = dirwf(rthphb,evecs[0].col(Nsplines + 5));
+	//blockDistribute2 is a sort of hacked together attempt to load balance the matrix-vector product for the time evolution operator
+	//see rthphbasis.h for code. Currenlty definitely far from optimal.
+	cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
+	
+	dirwf psi1 = dirwf(rthphb,coefsE0);
 	psi1.normalize();
 	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
@@ -154,11 +177,10 @@ int main() {
 
 	int Nr = rthphb.radqN();
 	
-	b = H.S(testvec) - dt * cdouble(0,0.5) * H.H(T,testvec);
+	b = H.S(psi1.coefs) - dt * cdouble(0,0.5) * H.H(T,psi1.coefs);
 
-	
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
-	Eigen::BiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
+	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
 	
 	//RtsMat is a helper class needed by the preconditioner, and functions as a wrapper to the Hamiltonian class that masks the time step formula as a matrix-vector product.
 	//RtsMat.h is quite p ossibly the most haunted file in this code. I do not understand how it works.
@@ -168,6 +190,8 @@ int main() {
 	proptest.setDt(dt);
 	proptest.setTime(T);
 	proptest.attachHamiltonian(H);
+	proptest.overrideRows(psi1.coefs.rows());
+	proptest.overrideCols(psi1.coefs.rows());
 
 	//Typically, if it fails to converge within 1000 iterations there's trouble
 
@@ -184,7 +208,6 @@ int main() {
 	solver.setMaxIterations(1000);
 	
 	cvec psi2 = solver.solve(b);
-	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 	
 	// cout << "psi2" << psi2.format(outformat) << endl;
 	// cout << "psi2_mpi" << psi2_mpi.format(outformat) << endl;
@@ -208,7 +231,7 @@ int main() {
 	
 	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
 	
-	dirwf wft = cnp.wf[Ntime/1 - 1];
+	dirwf wft = cnp.wft;
 	
 	if(wrank==0)
 	cout << "wft" << wft.coefs.format(outformat);

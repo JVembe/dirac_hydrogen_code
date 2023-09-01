@@ -311,8 +311,8 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 			}
 			
 			
-			int firstkappa = ik(lth0);
-			int lastkappa = ik(lth0+lNth-1);
+			int firstkappa = ik(angids[lth0]);
+			int lastkappa = ik(angids[lNth-1]);
 			
 			int id0 = ki(firstkappa);
 			int id1 = ki(lastkappa);
@@ -509,10 +509,14 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 			// cout << "Solvers size: " << solvers.size() << std::endl;
 			cmat bblk;
 			
-			int Nth = b.rows()/Nmat;
+			// int Nth = b.rows()/Nmat;
 			int Nr = Nmat;
 			
+			// cout << "b size = " << b.size() << endl;
+			
 			// cout << "lth0, lNth at wrank " << wrank << ": " << lth0 << ", " << lNth << endl;
+			
+			// cout << "(Nr,lNth-lth0) = (" << Nr << ", " << lNth-lth0 << ")" << endl;
 			
 			bblk = b.reshaped(Nr,lNth-lth0);
 			
@@ -533,7 +537,7 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 				// cout << "Hello, the solver list size is " << solvers.size() << " and we are in the else case" << std::endl;
 
 				// Rhs out (b.size());
-				#pragma omp parallel for
+				// #pragma omp parallel for
 				for(int i = 0; i < lNth-lth0; i++) {
 					int rankind = lth0 + i;
 					// cout << "i: " << i << ", rankind: " << rankind << endl;

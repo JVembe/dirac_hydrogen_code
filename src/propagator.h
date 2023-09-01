@@ -76,7 +76,7 @@ class Propagator {
 			wft = wavefunc<basistype>(H->getBasis(),wfct);
 			this->dt = dt;
 			t = 0;
-			cout << "Number of openMP threads at start: " << omp_get_num_threads() << std::endl;
+			// cout << "Number of openMP threads at start: " << omp_get_num_threads() << std::endl;
 			//Initialises preconditioner for propagation
 			setup();
 			auto starttime = std::chrono::system_clock::now();
@@ -323,7 +323,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			//Initialises preconditioner for propagation
 			this->setup();
 			auto starttime = std::chrono::system_clock::now();
-			cout << "OpenMP max threads at rank " << wrank << ": " << omp_get_max_threads() << endl;
+			// cout << "OpenMP max threads at rank " << wrank << ": " << omp_get_max_threads() << endl;
 			// cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
 			for(int i = 1; i < Nt; i++) {
 				t = i*dt;

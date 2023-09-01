@@ -198,7 +198,7 @@ int main() {
 	cvec coefsE0 = rthphb.blockDistribute3(evecs[0].col(Nsplines+5));
 	MPI_Finalize();
 	return 0;
-	// cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
+	cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
 	
 	dirwf psi1 = dirwf(rthphb,coefsE0);
 	psi1.normalize();
@@ -271,7 +271,7 @@ int main() {
 	
 	MPI_Barrier(MPI_COMM_WORLD);
 	// cout << endl;
-	cmat bblock = b.reshaped(Nr,b.size()/Nr);
+	// cmat bblock = b.reshaped(Nr,b.size()/Nr);
 	
 	
 	

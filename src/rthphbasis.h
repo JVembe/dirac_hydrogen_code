@@ -1708,7 +1708,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 		csmat dpthLR = csmat(0,0);
 		
 		cvec dpamatvecMPIblock(const cvec& v) {
-			return dpamatvecMPIblock_reduce(v);
+			return dpamatvecMPIblock_reduceScatter(v);
 		}
 		
 		cvec dpamatvecMPIblock_gather(const cvec& v) {
@@ -1843,6 +1843,129 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 			
 			return outv;
+		}
+		
+		cvec dpamatvecMPIblock_reduceScatter(const cvec& v) {
+			int wrank, wsize;
+			
+			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+			
+			int Nr = this->radqN();
+			int Nth = this->angqN();
+			int Nl = this->thphbasis->bdplmax();
+			
+			if(v.size() == Nr*Nth) {
+				if(Nth <= localNth - localth0) {
+					cmat vblocks = v.reshaped(Nr,Nth);
+					
+					// cout << "vblocks dims = (" << vblocks.rows() << ", " << vblocks.cols() << ")" << endl;
+					
+					cmat svb = dpamatvecMPIblock(vblocks);
+					
+					// cout << "svb dims = (" << svb.rows() << ", " << svb.cols() << ")" << endl;
+					
+					return svb.reshaped(Nr*Nth,1);
+				}
+				else {
+					cmat vblocks = v.reshaped(Nr,Nth).middleCols(localth0,localNth-localth0);
+					
+					// cout << "vblocks dims = (" << vblocks.rows() << ", " << vblocks.cols() << ")" << endl;
+					
+					cmat svb = dpamatvecMPIblock(vblocks);
+					
+					// cout << "svb dims = (" << svb.rows() << ", " << svb.cols() << ")" << endl;
+					
+					cvec outv;
+			
+					allgatherVec(svb,outv);
+					
+					return outv;
+					// return svb.transpose().reshaped(Nr*(localNth-localth0),1);
+				}
+			}
+			else {
+				cmat vblocks = v.reshaped(Nr,localNth - localth0);
+
+				// cout << "vblocks dims = (" << vblocks.rows() << ", " << vblocks.cols() << ")" << endl;
+				
+				cmat svb = dpamatvecMPIblock(vblocks);
+				
+				// cout << "svb dims = (" << svb.rows() << ", " << svb.cols() << ")" << endl;
+				
+				return svb.reshaped(Nr*(localNth - localth0),1);
+			}
+		}
+		
+		cmat dpamatvecMPIblock(const cmat& vblocks) {
+			int wrank, wsize;
+			
+			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+			
+			int Nr = this->radqN();
+			int Nth = this->angqN();
+			int Nl = this->thphbasis->bdplmax();
+			
+			// cout << "New bdpa Nth: " << Nth << endl;
+			
+			csmat dpthU = this->thphbasis->dpam(UPPER);
+			csmat dpthL = this->thphbasis->dpam(LOWER);
+			
+			cvec ilist = cvec::Zero(Nth);
+			
+			for(int i = 0; i < angids.size(); i++) {
+				ilist[i] = angids[i];
+			}
+			
+			//Local interval variables are set by the blockDistribute function
+			
+			// cout << "wsize: " << wsize <<", wrank: " << wrank << ", bdplmax: " <<  Nl << ", Nth: " << Nth << endl; 
+			
+			// cout << "Local th0: " << localth0 << "\n Local Nth: " << localNth << "\n local l0: " << locall0 << "\n local Nl: " << localNl << endl;
+			
+			if(!isCached(angidmat)) {
+				angidmat = csmat(dpthU.rows(),ilist.rows());
+				// cout << "(" << Nth << ", " << ilist.rows() << ")" << endl;
+				for(int i = 0; i < ilist.rows(); i++) {
+					// cout << "(" << ilist.real().cast<int>()(i) << "," << i << ")" << endl;
+					angidmat.insert(ilist.real().cast<int>()(i),i) = 1;
+				}
+			}
+			
+			
+			cmat outs = cmat::Zero(Nth,Nr);
+			
+			csmat tempmat;
+
+		    if(!isCached(dpthUR)) {
+				tempmat = (angidmat.transpose() * dpthU * angidmat).transpose();
+				
+				dpthUR = tempmat.middleRows(localth0,localNth-localth0).transpose();
+				
+				tempmat = (angidmat.transpose() * dpthL * angidmat).transpose();
+				
+				dpthLR = tempmat.middleRows(localth0,localNth-localth0).transpose();
+			}
+			
+			((dkbbasis*)(this->rbasis))->matmat_impl_reduce(vblocks,outs,dpthLR,ilist,0,LOWER);
+			((dkbbasis*)(this->rbasis))->matmat_impl_reduce(vblocks,outs,dpthUR,ilist,0,UPPER);
+			
+			Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
+			
+			// cout << "local intervals (" << localth0 << ", " << localNth << "), (" << locall0 << ", " << localNl << ")" << endl;
+			// cout << "localOuts " << outs.format(outformat) << endl;
+			
+			outs.transposeInPlace();
+			
+			cmat outv(Nr,localNth - localth0);
+			
+			reduceScatterMat(outs,outv,localNths,localth0s);
+			
+			// cout << outv.rows() << ", " << outv.cols() << endl;
+			
+			return outv;
+			
 		}
 		
 		csmat* bdpthUR = NULL;
@@ -2718,10 +2841,10 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 			cmat outs = cmat::Zero(Nth,Nr);
 			
-			// if(!isCached(bdpthUR)) {
+			if(!isCached(bdpthUR)) {
 				bdpthUR = new csmat[localNl - locall0];
 				bdpthLR = new csmat[localNl - locall0];
-			// }
+			}
 			csmat tempmat;
 			
 			for(int l = locall0 + 2; l < localNl; l++) {
