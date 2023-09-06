@@ -1,13 +1,21 @@
 # Define the source files
-set(SOURCES
+set(SOURCES_DIPOLE
   dipoleMPItest.cpp
   dkbbasis.cpp
   splinehandler.cpp
-  spnrbasis.cpp
-)
+  spnrbasis.cpp)
+
+set(SOURCES_NONDIPOLE
+  nondipoleMPItest.cpp
+  dkbbasis.cpp
+  splinehandler.cpp
+  spnrbasis.cpp)
 
 # Add the executable for dipoleMPItest
-add_executable(dipoleMPItest ${SOURCES})
+add_executable(dipoleMPItest ${SOURCES_DIPOLE})
+
+# Add the executable for nondipoleMPItest
+add_executable(nondipoleMPItest ${SOURCES_NONDIPOLE})
 
 # Specify compile features
 target_compile_features(dipoleMPItest PRIVATE cxx_std_11)
@@ -26,6 +34,7 @@ target_compile_options(dipoleMPItest PRIVATE
 # Include directories if wignerSymbols is not found
 if(NOT wignerSymbols_FOUND)
   target_include_directories(dipoleMPItest PRIVATE ${wignerSymbols_SOURCE_DIR}/include)
+  target_include_directories(nondipoleMPItest PRIVATE ${wignerSymbols_SOURCE_DIR}/include)  # Add this line
 endif()
 
 # Link libraries
@@ -39,3 +48,11 @@ target_link_libraries(dipoleMPItest
   PRIVATE
     nlohmann_json::nlohmann_json
 )
+
+target_link_libraries(nondipoleMPItest
+  PUBLIC
+    MPI::MPI_CXX
+    wignerSymbols
+    OpenMP::OpenMP_CXX
+  PRIVATE
+    nlohmann_json::nlohmann_json)
