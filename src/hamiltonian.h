@@ -746,7 +746,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 						
 					}
 				} else if(USEMPI) {
-					
+					#pragma omp parallel for
 					for(int j = 0; j < Nang; j++) {
 						// cout << j << "\n";
 						dsmat imat = dsmat(Nr*Nang,Nr);

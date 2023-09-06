@@ -183,7 +183,7 @@ int main() {
 	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
 	
 	//RtsMat is a helper class needed by the preconditioner, and functions as a wrapper to the Hamiltonian class that masks the time step formula as a matrix-vector product.
-	//RtsMat.h is quite p ossibly the most haunted file in this code. I do not understand how it works.
+	//RtsMat.h is quite possibly the most haunted file in this code. I do not understand how it works.
 	RtsMat<Htype> proptest;
 	
 	//RtsMat needs setup
