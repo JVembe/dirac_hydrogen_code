@@ -28,5 +28,14 @@ if(NOT wignerSymbols_FOUND)
   target_include_directories(dipoleMPItest PRIVATE ${wignerSymbols_SOURCE_DIR}/include)
 endif()
 
-# Link libraries, including OpenMP and MPI
-target_link_libraries(dipoleMPItest PUBLIC MPI::MPI_CXX wignerSymbols OpenMP::OpenMP_CXX)
+# Link libraries
+# MPI::MPI_CXX, wignerSymbols, and OpenMP::OpenMP_CXX are linked publicly
+# nlohmann_json::nlohmann_json is linked privately
+target_link_libraries(dipoleMPItest
+  PUBLIC
+    MPI::MPI_CXX
+    wignerSymbols
+    OpenMP::OpenMP_CXX
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
