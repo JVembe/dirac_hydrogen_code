@@ -16,7 +16,7 @@ A lot of Eigen types are given shorthand names here.
 #define LOWER -1
 #define USEMPI 0
 //#define USE_MY_OPENMP
-#define EIGEN_DONT_PARALLELIZE 1
+// #define EIGEN_DONT_PARALLELIZE 1
 
 using namespace std;
 
@@ -169,4 +169,6 @@ Eigen::Matrix<scalar,Eigen::Dynamic,Eigen::Dynamic> expm(Eigen::Matrix<scalar,Ei
 	
 	return out;
 }
+
+
 #endif

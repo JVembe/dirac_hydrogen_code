@@ -394,6 +394,11 @@ class basis {
 			return static_cast<Derived*>(this)->idxtfrm(i);
 		}
 		
+		template <typename... ArgTs>
+		int indexQn(ArgTs... Args) {
+			return static_cast<Derived*>(this)->iqn(Args...);
+		}
+		
 		
 		//It's here in case you want to clear all the matrices I guess
 		void clearMats() {
@@ -437,6 +442,8 @@ class basis {
 		void getLocalParams(int& a1, int& a2, int& b1, int& b2) {
 			static_cast<Derived*>(this)->glp(a1,a2,b1,b2);
 		}
+		
+		
 };
 
 //Spherical harmonic basis with no m quantum number. Sort of useless for anything not dipole

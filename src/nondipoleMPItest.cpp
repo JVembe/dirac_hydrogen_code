@@ -46,6 +46,7 @@ void printSparseNonZeros(const csmat& mat) {
 	cout << "))\n";
 }
 
+
 int main(int argc, char* argv[]) {
   // Check argument count
   if(argc != 2) {
@@ -157,7 +158,10 @@ int main(int argc, char* argv[]) {
 	for(int i = 0; i < rthphb.angids.size(); i++) {
 		cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
 	}
-
+	
+	// for(int i = 0; i < rthphb.angidsReverse.size(); i++) {
+		// cout << "(" << i << ", " << rthphb.angidsReverse[i] << ")," << std::endl;
+	// }
 
 	//Construct nondipole alpha matrices, both upper and lower versions
 	for(int l = 0; l < spnrb.bdplmax(); l++) {
@@ -172,25 +176,32 @@ int main(int argc, char* argv[]) {
 	Htype H(rthphb,bdpp);
 	H.Vfunc = &coloumb<Z>;
 
-
-
-	//Eigenvalue solution of time-independent part of Hamiltonian
-	H.prepeigs(Nsplines,Nsplines/2);
+	
 	//Assemble H0 for propagation
-	H.H0radprep();
 
-	//Get eigenvalues and eigenvectors
-	vector<vec>& evals = H.getevals();
-	vector<dsmat>& evecs = H.getevecs();
 
-	//psi1 set from ground state and normalized
 	//blockDistribute2 is a sort of hacked together attempt to load balance the matrix-vector product for the time evolution operator
 	//see rthphbasis.h for code. Currenlty definitely far from optimal.
-	cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
+	rthphb.blockDistribute2();
+
+	// cout << "coefsE0:" << endl << coefsE0;
+	//Get eigenvalues and eigenvectors
+	H.prepeigsLowMem(Nsplines,Nsplines/2, true);
+
+	H.H0radprep();
+	//psi1 set from ground state and normalized
+	
+	cvec coefsE0 = H.getevec(Nsplines+5,-1,-0.5);
+	
 
 	dirwf psi1 = dirwf(rthphb,coefsE0);
 	psi1.normalize();
-
+	
+	// H.eigProj(psi1);
+	
+	
+	
+	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 
 	cvec b;

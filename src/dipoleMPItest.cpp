@@ -168,25 +168,24 @@ int main(int argc, char* argv[]) {
 	Htype H(rthphb,&dplA<15,50,INTENSITY>);
 	H.Vfunc = &coloumb<Z>;
 
-
-
-	//Eigenvalue solution of time-independent part of Hamiltonian
-	H.prepeigs(Nsplines,Nsplines/2);
 	//Assemble H0 for propagation
-	H.H0radprep();
 
-	//Get eigenvalues and eigenvectors
-	vector<vec>& evals = H.getevals();
-	vector<dsmat>& evecs = H.getevecs();
-
-	//psi1 set from ground state and normalized
+	
 	//blockDistribute2 is a sort of hacked together attempt to load balance the matrix-vector product for the time evolution operator
 	//see rthphbasis.h for code. Currenlty definitely far from optimal.
-	cvec coefsE0 = rthphb.blockDistribute2(evecs[0].col(Nsplines+5));
-
+	rthphb.blockDistribute2();
+	//Get eigenvalues and eigenvectors
+	H.prepeigsLowMem(Nsplines,Nsplines/2, true);
+	
+    H.H0radprep();
+	
+	//psi1 set from ground state and normalized
+	cvec coefsE0 = H.getevec(Nsplines+5,-1,-0.5); 
 	dirwf psi1 = dirwf(rthphb,coefsE0);
 	psi1.normalize();
 
+	// H.eigProj(psi1);
+	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 
 	cvec b;

@@ -94,6 +94,21 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			return angids[i];
 		}
 		
+		int iqn(int kappa, double mu) {
+			
+			int idl = ki(kappa);
+			
+			cout << idl << endl;
+			
+			if(abs(mu)<abs(kappa)) {
+				idl += abs(kappa) + mu - 0.5;
+				cout << idl << endl;
+			}
+			else return -1;
+			
+			return angidsReverse[idl];
+		}
+		
 		rthphbasis(basis<rbtype>& rbasis, basis<thphbtype>& thphbasis):basis<rthphbasis<rbtype,thphbtype> >() {
 			this->rbasis = &rbasis;
 			this->thphbasis = &thphbasis;
@@ -2192,7 +2207,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 		int* localth0s;
 		
 		//This version of blockDistribute also accounts for H0 and S, and distributes the input vector
-		cvec blockDistribute2(const cvec& v) {
+		void blockDistribute2() {
 			int wrank, wsize;
 			
 			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
@@ -2409,6 +2424,11 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 					cout << localth0s[i] << endl;
 				}
 			}
+		}
+		
+		cvec blockDistribute2(const cvec& v) {
+			blockDistribute2();
+			int Nr = this->radqN();
 			return v.segment(localth0*Nr,(localNth-localth0)*Nr);//.reshaped(Nr,(localNth-localth0)));
 		}
 		
