@@ -234,6 +234,10 @@ class Hamiltonian {
 			
 			return sqrt(Esq - pow(E,2));
 		}
+		cmat eigenstateProject(const wavefunc<basistype> psi) {
+			return static_cast<Derived*>(this)->eigProj(psi);
+		}
+		
 		/*
 		void prepeigs(int nev, int ncv, bool angSep = true) {
 			this->angSep = angSep;
@@ -521,6 +525,8 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		
 		cvec H0vec(const cvec& v) const {
+			// cout << "h0mat dims = (" << this->bs->getRadial().getH0mat(0).rows()  << ", " << this->bs->getRadial().getH0mat(0).cols() << ")\n";
+			
 			if(!isCached(this->bs->getRadial().getH0mat(0)))
 				return SoL * (this->bs->template matfree<dd>(v) + this->bs->template matfree<k>(v)) + (this->bs->template matfree<E>(v)) + (this->bs->template matfree<ulc>(v));
 			else
@@ -798,6 +804,302 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				}
 			}
 		}
+		
+		
+	std::vector<mat> kappaevecs;
+	std::vector<vec> kappaevals;
+	std::vector<int> kappas;
+	
+	void prepeigsLowMem(int nev, int ncv, bool localOnly = false) {
+		this->H0();
+		this->S();
+		
+		this->angSep = true;
+		
+		//Separate H0 and S by angular quantum number
+		int Nr = this->bs->radqN();
+		int Nang = this->bs->angqN();
+		
+		int Ntot = Nr*Nang;
+		
+		this->eigvecs = vector<dsmat>(Nang);
+		this->eigvals = vector<vec>(Nang);
+		
+		
+		
+		int kappamax = this->angMax();
+		if(!localOnly) {
+			for(int kappa = 1; kappa <= kappamax; kappa++) {
+				int iL = ki(-kappa);
+				
+				cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+				
+				kappas.push_back(-kappa);
+				
+				this->bs->getRadial().setState(iL);
+				
+				dsmat H0rL = this->template H0<axis::radial>().real();
+				dsmat SrL = this->template S<axis::radial>().real();
+				
+				this->gseigs.compute(H0rL,SrL);
+				
+				vec evalsL = gseigs.eigenvalues().real();
+				
+				kappaevals.push_back(evalsL);
+				int eigNL = evalsL.size();
+				
+				kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				
+				int iU = ki(kappa);
+				
+				cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+				
+				kappas.push_back(kappa);
+				
+				this->bs->getRadial().setState(iU);
+				
+				dsmat H0rU = this->template H0<axis::radial>().real();
+				dsmat SrU = this->template S<axis::radial>().real();
+				
+				this->gseigs.compute(H0rU,SrU);
+				
+				vec evalsU = gseigs.eigenvalues().real();
+				
+				kappaevals.push_back(evalsU);
+				int eigNU = evalsU.size();
+				
+				kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				
+				
+			}
+			
+			for(int k = 0; k < kappaevecs.size(); k++) {
+				cout << "Applying sign convention to eigenvectors for kappa " << kappas[k] << "..." << endl; 
+				for(int i = 0; i < kappaevecs[k].cols(); i++) {
+					// cout << i << " ";
+					
+					//Determine if nonzero 
+					double vmax = abs(kappaevecs[k].col(i).maxCoeff());
+					double vmin = abs(kappaevecs[k].col(i).minCoeff());
+					
+					double vv;
+					
+					if(vmin>vmax) vv = vmin;
+					else vv = vmax;
+					
+					int j = 0;
+					while(true) {
+						if(abs(kappaevecs[k](j,i)*100) > vv) {
+							break;
+						}
+						j++;
+					}
+					
+					if(kappaevecs[k](j,i) < 0) kappaevecs[k].col(i) = -kappaevecs[k].col(i);
+				}
+			}
+			
+		}
+		else {
+			int lth0, lNth, ll0, lNl;
+			
+			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+			
+			
+			int firstkappa = ik(this->bs->indexTransform(lth0));
+			int lastkappa = ik(this->bs->indexTransform(lNth-1));
+			
+			int id0 = ki(firstkappa);
+			int id1 = ki(lastkappa);
+			cout << "first kappa: " << firstkappa << ", last kappa: " << lastkappa << endl;
+			
+			cout << "id0: " << id0 << ", id1: " << id1 << endl;
+			
+			for(int kappa = 1; kappa <= kappamax; kappa++) {
+				int iL = ki(-kappa);
+				
+				
+				if(((iL >= id0) && (iL <= id1)) || (ik(iL) == ik(id1)) ) {
+					cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+					
+					kappas.push_back(-kappa);
+					
+					this->bs->getRadial().setState(iL);
+					
+					dsmat H0rL = this->template H0<axis::radial>().real();
+					dsmat SrL = this->template S<axis::radial>().real();
+					
+					this->gseigs.compute(H0rL,SrL);
+					
+					vec evalsL = gseigs.eigenvalues().real();
+					
+					kappaevals.push_back(evalsL);
+					int eigNL = evalsL.size();
+					
+					kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				}
+				int iU = ki(kappa);
+				
+				if(((iU >= id0) && (iU <= id1)) || (ik(iU) == ik(id1)) ) {
+					cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+					
+					kappas.push_back(kappa);
+					
+					this->bs->getRadial().setState(iU);
+					
+					dsmat H0rU = this->template H0<axis::radial>().real();
+					dsmat SrU = this->template S<axis::radial>().real();
+					
+					this->gseigs.compute(H0rU,SrU);
+					
+					vec evalsU = gseigs.eigenvalues().real();
+					
+					kappaevals.push_back(evalsU);
+					int eigNU = evalsU.size();
+					
+					kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				}
+				
+			}
+			
+			for(int k = 0; k < kappaevecs.size(); k++) {
+				cout << "Applying sign convention to eigenvectors for kappa " << kappas[k] << "..." << endl; 
+				for(int i = 0; i < kappaevecs[k].cols(); i++) {
+					// cout << i << " ";
+					
+					//Determine if nonzero 
+					double vmax = abs(kappaevecs[k].col(i).maxCoeff());
+					double vmin = abs(kappaevecs[k].col(i).minCoeff());
+					
+					double vv;
+					
+					if(vmin>vmax) vv = vmin;
+					else vv = vmax;
+					
+					int j = 0;
+					while(true) {
+						if(abs(kappaevecs[k](j,i)*100) > vv) {
+							break;
+						}
+						j++;
+					}
+					
+					if(kappaevecs[k](j,i) < 0) kappaevecs[k].col(i) = -kappaevecs[k].col(i);
+				}
+			}
+		}
+		
+
+	}
+	
+	std::vector<cmat> eigProj(const wavefunc<basistype>& psi) {
+		// cout << psi.coefs << endl;
+		// cout << "kappaevecs size = " << kappaevecs.size() << endl;
+		int kappasize = kappaevecs.size();
+		
+		int lth0, lNth, ll0,lNl;
+		
+		int Nr = this->bs->radqN();
+		
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		//Need to get evecs corresponding to current kappa
+		// cout << "Nr = " << Nr << endl;
+		// cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
+		
+		std::vector<cmat> psievs(kappasize);
+		
+		for(int th = lth0; th < lNth; th++) {
+			// cout << "Index: " << th 
+				 // << "\nTransformed index: " << this->bs->indexTransform(th) 
+				 // << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
+			int i = -1;
+			
+			
+			
+			for(int j = 0; j < kappas.size(); j++) {
+				if(kappas[j] == ik(this->bs->indexTransform(th))) i = j;
+			}
+			
+			// cout << "kappa index: " << i << endl;
+			
+			// cout << psi.coefs.size() << endl;
+			
+			this->bs->getRadial().setState(this->bs->indexTransform(th));
+			// cvec psiseg = this->bs->getRadial().template matfree<S>(psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0));
+			cvec psiseg = psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0);
+			// cout << psiseg.rows() << ", " << psiseg.cols() << endl;
+			
+			cmat skev(Nr,Nr);
+			
+			#pragma omp parallel for
+			for(int j = 0; j < kappaevecs[i].cols(); j++) {
+				skev.col(j) = this->bs->getRadial().template matfree<S>(kappaevecs[i].col(j));
+			}
+			
+			// cout << skev.rows() << ", " << skev.cols() << endl;
+			Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
+			
+			cmat psiev = (psiseg.adjoint() * skev);
+			
+			psievs[th-lth0] = psiev;
+			
+		}
+		
+		return psievs;
+	}
+	
+	void savePsievs(const wavefunc<basistype>& psi, std::string filename) {
+		int wsize, wrank;
+		
+		MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
+		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+		Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
+			
+		std::vector<cmat> psievs = eigProj(psi);
+		
+		int lth0, lNth, ll0,lNl;
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		for(int i = 0; i < wsize; i++) {
+			ofstream psievf(filename,ofstream::app);
+			if(wrank==i) {
+				for(int i = 0; i < psievs.size(); i++) {
+					psievf << "psiev[" << lth0 + i << "]" << psievs[i].format(outformat) << endl;
+				}
+			}
+			
+			psievf.close();
+			
+			MPI_Barrier(MPI_COMM_WORLD);
+		}
+	}
+	
+	cvec getevec(int N, int kappa, int mu) {
+		int i = -1;
+		for(int j = 0; j < kappas.size(); j++) {
+			if(kappas[j] == kappa) i = j;
+		}
+		
+		int lth0, lNth, ll0,lNl;
+		
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		cvec evec;
+		
+		if(i != -1) evec = kappaevecs[i].col(N);
+		
+		//Pad evec
+		
+		cmat evecpd = cmat::Zero(this->bs->radqN(), lNth - lth0);
+		
+		cout << "kappa, mu = " << kappa << ", " << mu << endl;
+		
+		int colid = this->bs->indexQn(kappa,mu);
+		
+		if(i != -1) evecpd.col(colid) = evec;
+		
+		return evecpd.reshaped(this->bs->radqN() * (lNth - lth0),1);
+	}
 };
 
 template <typename basistype>
