@@ -184,7 +184,6 @@ int main(int argc, char* argv[]) {
 	dirwf psi1 = dirwf(rthphb,coefsE0);
 	psi1.normalize();
 
-	// H.eigProj(psi1);
 	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 
@@ -251,6 +250,10 @@ int main(int argc, char* argv[]) {
 	if(wrank==0)
 	cout << "wft" << wft.coefs.format(outformat);
 
+	// std::vector<cmat> psievs = H.eigProj(wft);
+	
+	H.savePsievs(wft,"psiev");
+	
 	MPI_Finalize();
 	return 0;
 }

@@ -992,7 +992,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 
 	}
 	
-	cmat eigProj(const wavefunc<basistype>& psi) {
+	std::vector<cmat> eigProj(const wavefunc<basistype>& psi) {
 		// cout << psi.coefs << endl;
 		// cout << "kappaevecs size = " << kappaevecs.size() << endl;
 		int kappasize = kappaevecs.size();
@@ -1006,6 +1006,8 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		//Need to get evecs corresponding to current kappa
 		// cout << "Nr = " << Nr << endl;
 		// cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
+		
+		std::vector<cmat> psievs(kappasize);
 		
 		for(int th = lth0; th < lNth; th++) {
 			// cout << "Index: " << th 
@@ -1037,12 +1039,39 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			
 			// cout << skev.rows() << ", " << skev.cols() << endl;
 			Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
-	
-			cout << "psiev[" << th << "]" << (psiseg.adjoint() * skev).format(outformat);
+			
+			cmat psiev = (psiseg.adjoint() * skev);
+			
+			psievs[th-lth0] = psiev;
 			
 		}
 		
-		return psi.coefs;
+		return psievs;
+	}
+	
+	void savePsievs(const wavefunc<basistype>& psi, std::string filename) {
+		int wsize, wrank;
+		
+		MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
+		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+		Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
+			
+		std::vector<cmat> psievs = eigProj(psi);
+		
+		int lth0, lNth, ll0,lNl;
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		for(int i = 0; i < wsize; i++) {
+			ofstream psievf(filename,ofstream::app);
+			if(wrank==i) {
+				for(int i = 0; i < psievs.size(); i++) {
+					psievf << "psiev[" << lth0 + i << "]" << psievs[i].format(outformat) << endl;
+				}
+			}
+			
+			psievf.close();
+			
+			MPI_Barrier(MPI_COMM_WORLD);
+		}
 	}
 	
 	cvec getevec(int N, int kappa, int mu) {

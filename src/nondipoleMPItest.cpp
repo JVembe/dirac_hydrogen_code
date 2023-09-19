@@ -269,6 +269,8 @@ int main(int argc, char* argv[]) {
 	if(wrank==0)
 	cout << "wft" << wft.coefs.format(outformat);
 
+	H.savePsievs(wft,"psiev");
+	
 	MPI_Finalize();
 	return 0;
 }
