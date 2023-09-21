@@ -22,6 +22,24 @@ template <typename T> int sgn(T val) {
     return (T(0) < val) - (val < T(0));
 }
 
+cvec expmvec(const csmat& mat, const cvec& vec, int n) {
+	int N = mat.rows();
+	
+	cvec out = vec;
+	cvec Mv = vec;
+	
+	
+	
+	for(int i = 1; i < n; i++) {
+		Mv = (mat * Mv) / i;
+		out += Mv;
+		
+		// cout << i << endl << out << endl << endl;
+	}
+	
+	return out;
+}
+
 template <typename rbtype, typename thphbtype>
 class rthphbasis;
 
@@ -3221,7 +3239,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 		void pruneUncoupled(vec angStates,bool bdp = false) {
 			if(isCached(angCouplings(bdp))) {
 				
-				cmat angcp = -cdouble(0,1) * cmat(angCouplings(bdp));
+				csmat angcp = angCouplings(bdp);
 				
 				// cout << angcp << "\n";
 				
@@ -3230,11 +3248,14 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				
 				// cout << rn << "," << an << "\n";
 				
-				cmat eangc = expm(angcp,20);
+				// cmat eangc = expm(angcp,20);
 				
 				// cout << eangc << "\n";
 				
-				cvec angslect = eangc * angStates;
+				// cvec angslect = eangc * angStates;
+				
+				cvec angslect = expmvec(angcp,angStates,20);
+				
 				// cout << angStates << "\n";
 				// cout << angslect << "\n";
 				vector<int> slids(0);
