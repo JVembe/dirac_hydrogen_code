@@ -735,6 +735,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				}
 			}
 			
+			prevTime = vExt->getTime();
 			
 			// if(vExt->getTime()!=prevTime || bdpl!=prevL || ul!=prevul) {
 				// prevL = bdpl;
