@@ -153,7 +153,8 @@ int main(int argc, char* argv[]) {
 	// vec angInit = vec::Constant(rthphb.angqN(),1.0);
 
 	rthphb.pruneUncoupled(angInit,true); //true means using nondipole couplings
-
+	
+	
 	//Dump enumeration of angular momentum states, this is needed in postprocessing of data
 	for(int i = 0; i < rthphb.angids.size(); i++) {
 		cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
