@@ -31,6 +31,11 @@ target_compile_options(dipoleMPItest PRIVATE
   $<$<CONFIG:Release>:-O3>
 )
 
+target_compile_options(nondipoleMPItest PRIVATE
+  $<$<CONFIG:Debug>:-g>
+  $<$<CONFIG:Release>:-O3>
+)
+
 # Include directories if wignerSymbols is not found
 if(NOT wignerSymbols_FOUND)
   target_include_directories(dipoleMPItest PRIVATE ${wignerSymbols_SOURCE_DIR}/include)
