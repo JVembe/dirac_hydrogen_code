@@ -24,7 +24,6 @@
 #include "mpiFuncs.h"     // Functions for MPI and Eigen matrix operations
 
 
-#define INTENSITY 10
 #define Z 1
 
 //These global variables are the consequence of unfortunate silliness in how Bessel functions are applied during the construction of the interaction Hamiltonian. They stop being relevant once matrix elements are constructed
@@ -72,14 +71,17 @@ int main(int argc, char* argv[]) {
   using dirbs = rthphbasis<dkbbasis, spnrbasis>;
   using dirwf = wavefunc<dirbs>;
 
-  // Simulation parameters
-  int Nsplines = json_params["Nsplines"]; // Radial resolution, typical values: 200-250
-  int Ntime = json_params["Ntime"]; // Number of time steps, typical values: 8000-20000
-  int Nkappa = json_params["Nkappa"]; // Maximum absolute value of kappa quantum number, typical values: >= 16
-  int Nmu = json_params["Nmu"]; // Only set for special cases like dipole approximation
-  int Nl = json_params["Nl"]; // Must be 1 for load balancing to work with dipole approximation
-  double rBox = json_params["rBox"]; // Radius of the system in atomic units; 30 is usually sufficient for demonstration
-
+	// Simulation parameters
+	int Nsplines = json_params["Nsplines"]; // Radial resolution, typical values: 200-250
+	int Ntime = json_params["Ntime"]; // Number of time steps, typical values: 8000-20000
+	int Nkappa = json_params["Nkappa"]; // Maximum absolute value of kappa quantum number, typical values: >= 16
+	int Nmu = json_params["Nmu"]; // Only set for special cases like dipole approximation
+	int Nl = json_params["Nl"]; // Must be 1 for load balancing to work with dipole approximation
+	double rBox = json_params["rBox"]; // Radius of the system in atomic units; 30 is usually sufficient for demonstration
+	int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
+	int omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
+	int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
+	
 	//Formats for outputting matrices
 	Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 	Eigen::IOFormat outformatLine(Eigen::FullPrecision,Eigen::DontAlignCols,", "," ","(","),"," = npy.array((\n","\n))\n",' ');
@@ -93,7 +95,7 @@ int main(int argc, char* argv[]) {
 
 	cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime
 		<< "\nkappa max quantum number: " << Nkappa << "\nmu max quantum number: " << Nmu
-		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << INTENSITY << std::endl;
+		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << Intensity << std::endl;
 
 	cout << "MPI world size: " << wsize << endl;
 	cout << "MPI rank: " << wrank << endl;
@@ -103,7 +105,7 @@ int main(int argc, char* argv[]) {
 
 	std::stringstream fnpstream;
 
-	fnpstream << "dirBdp_E" << INTENSITY << "R" << Nsplines << "K" << Nkappa << "Mu" << Nmu << "r" << rBox << "T" << Ntime;
+	fnpstream << "dirBdp_E" << Intensity << "R" << Nsplines << "K" << Nkappa << "Mu" << Nmu << "r" << rBox << "T" << Ntime;
 
 	string filenamePrefix = fnpstream.str();
 
@@ -135,12 +137,12 @@ int main(int argc, char* argv[]) {
 	cmat bdpams = cmat::Zero(spnrb.angqN(),spnrb.angqN());
 
 	//Construct laser pulse with desired parameters
-	beyondDipolePulse bdpp(INTENSITY,50,15);
+	dipolePulse dpp(Intensity,omega,cycles);
 
 	//This is for verifying that things work before starting the simulation
 	double dt = (0.6*PI)/Ntime;
 	double T = 1.75;
-	bdpp.setTime(T);
+	dpp.setTime(T);
 
 	//Construct basis for Hamiltonian
 	dirbs rthphb(dkbb,spnrb);
@@ -165,7 +167,7 @@ int main(int argc, char* argv[]) {
 
 	using Htype = Dirac<dirbs>;
 	//Initialize Hamiltonian and set Coulomb potential
-	Htype H(rthphb,&dplA<15,50,INTENSITY>);
+	Htype H(rthphb,dpp);
 	H.Vfunc = &coloumb<Z>;
 
 	//Assemble H0 for propagation
