@@ -4,5 +4,8 @@
   "Nkappa": 4,
   "Nmu": 2,
   "Nl": 2,
-  "rBox": 30.0
+  "rBox": 30.0,
+  "Intensity": 400,
+  "Omega": 50,
+  "Cycles": 15;
 }

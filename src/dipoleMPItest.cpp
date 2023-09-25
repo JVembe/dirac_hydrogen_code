@@ -72,14 +72,17 @@ int main(int argc, char* argv[]) {
   using dirbs = rthphbasis<dkbbasis, spnrbasis>;
   using dirwf = wavefunc<dirbs>;
 
-  // Simulation parameters
-  int Nsplines = json_params["Nsplines"]; // Radial resolution, typical values: 200-250
-  int Ntime = json_params["Ntime"]; // Number of time steps, typical values: 8000-20000
-  int Nkappa = json_params["Nkappa"]; // Maximum absolute value of kappa quantum number, typical values: >= 16
-  int Nmu = json_params["Nmu"]; // Only set for special cases like dipole approximation
-  int Nl = json_params["Nl"]; // Must be 1 for load balancing to work with dipole approximation
-  double rBox = json_params["rBox"]; // Radius of the system in atomic units; 30 is usually sufficient for demonstration
-
+	// Simulation parameters
+	int Nsplines = json_params["Nsplines"]; // Radial resolution, typical values: 200-250
+	int Ntime = json_params["Ntime"]; // Number of time steps, typical values: 8000-20000
+	int Nkappa = json_params["Nkappa"]; // Maximum absolute value of kappa quantum number, typical values: >= 16
+	int Nmu = json_params["Nmu"]; // Only set for special cases like dipole approximation
+	int Nl = json_params["Nl"]; // Must be 1 for load balancing to work with dipole approximation
+	double rBox = json_params["rBox"]; // Radius of the system in atomic units; 30 is usually sufficient for demonstration
+	int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
+	int omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
+	int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
+	
 	//Formats for outputting matrices
 	Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 	Eigen::IOFormat outformatLine(Eigen::FullPrecision,Eigen::DontAlignCols,", "," ","(","),"," = npy.array((\n","\n))\n",' ');
