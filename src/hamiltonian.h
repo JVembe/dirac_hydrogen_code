@@ -1063,7 +1063,14 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		for(int i = 0; i < wsize; i++) {
 			ofstream psievf(filename,ofstream::app);
 			if(wrank==i) {
+				
 				for(int i = 0; i < psievs.size(); i++) {
+					int j = -1;
+					
+					for(int k = 0; k < kappas.size(); k++) {
+						if(kappas[k] == ik(this->bs->indexTransform(lth0 + i))) j = k;
+					}
+					psievf << "evl[" << lth0 + i << "]" << kappaevals[j].format(outformat) << endl;
 					psievf << "psiev[" << lth0 + i << "]" << psievs[i].format(outformat) << endl;
 				}
 			}
@@ -1110,19 +1117,24 @@ class Dirac: public DiracBase<Dirac<basistype>,basistype> {
 	
 	protected:
 		
+		Potential<dipolePulse>* vExt = NULL;
 	public:
-		Dirac(basis<basistype>& bs, long double(*extPot)(long double)):DiracBase<Dirac<basistype>, basistype> (bs) {
-			this->extPot = extPot;
+		Dirac(basis<basistype>& bs, Potential<dipolePulse>& vExt):DiracBase<Dirac<basistype>, basistype> (bs) {
+			this->vExt = &vExt;
 		}
 		
 		csmat Htmat(double t) {
-			double Et = this->extPot(t);
+			vExt->setTime(t);
+			
+			double Et = vExt->template axialPart<axis::t>(vExt->getTime());
 			
 			return Et * SoL * this->bs->dpam();;
 		}
 
 		cvec HtVec(double t, const cvec& v) const {
-			double Et = this->extPot(t);
+			vExt->setTime(t);
+			
+			double Et = vExt->template axialPart<axis::t>(vExt->getTime());
 			
 			return Et * SoL * this->bs->template matfree<dpa>(v);
 		}

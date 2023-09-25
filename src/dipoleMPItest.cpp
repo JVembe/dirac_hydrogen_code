@@ -24,7 +24,6 @@
 #include "mpiFuncs.h"     // Functions for MPI and Eigen matrix operations
 
 
-#define INTENSITY 10
 #define Z 1
 
 //These global variables are the consequence of unfortunate silliness in how Bessel functions are applied during the construction of the interaction Hamiltonian. They stop being relevant once matrix elements are constructed
@@ -96,7 +95,7 @@ int main(int argc, char* argv[]) {
 
 	cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime
 		<< "\nkappa max quantum number: " << Nkappa << "\nmu max quantum number: " << Nmu
-		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << INTENSITY << std::endl;
+		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << Intensity << std::endl;
 
 	cout << "MPI world size: " << wsize << endl;
 	cout << "MPI rank: " << wrank << endl;
@@ -106,7 +105,7 @@ int main(int argc, char* argv[]) {
 
 	std::stringstream fnpstream;
 
-	fnpstream << "dirBdp_E" << INTENSITY << "R" << Nsplines << "K" << Nkappa << "Mu" << Nmu << "r" << rBox << "T" << Ntime;
+	fnpstream << "dirBdp_E" << Intensity << "R" << Nsplines << "K" << Nkappa << "Mu" << Nmu << "r" << rBox << "T" << Ntime;
 
 	string filenamePrefix = fnpstream.str();
 
@@ -138,12 +137,12 @@ int main(int argc, char* argv[]) {
 	cmat bdpams = cmat::Zero(spnrb.angqN(),spnrb.angqN());
 
 	//Construct laser pulse with desired parameters
-	beyondDipolePulse bdpp(INTENSITY,50,15);
+	dipolePulse dpp(Intensity,omega,cycles);
 
 	//This is for verifying that things work before starting the simulation
 	double dt = (0.6*PI)/Ntime;
 	double T = 1.75;
-	bdpp.setTime(T);
+	dpp.setTime(T);
 
 	//Construct basis for Hamiltonian
 	dirbs rthphb(dkbb,spnrb);
@@ -168,7 +167,7 @@ int main(int argc, char* argv[]) {
 
 	using Htype = Dirac<dirbs>;
 	//Initialize Hamiltonian and set Coulomb potential
-	Htype H(rthphb,&dplA<15,50,INTENSITY>);
+	Htype H(rthphb,dpp);
 	H.Vfunc = &coloumb<Z>;
 
 	//Assemble H0 for propagation
