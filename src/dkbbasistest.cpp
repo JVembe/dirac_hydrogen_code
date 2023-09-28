@@ -11,16 +11,10 @@
 #include "nlohmann/json.hpp" // for JSON parsing
 
 // Custom Headers for Physics and Simulation
+#include "defs.h"
 #include "potential.h"   // Defines all laser pulse potentials
-#include "RtsMat.h"      // Helper class for preconditioners
 #include "dkbbasis.h"    // Dual kinetic balance basis
-#include "rthphbasis.h"  // Combined basis for spherical coordinates
-#include "wavefunc.h"    // Wrapper for Eigen vector
-#include "hamiltonian.h" // Physics in Hamiltonian class and derived classes
-#include "propagator.h"  // Time evolution code
 
-// Headers for MPI and Parallel Computing
-#include "mpiFuncs.h"    // Functions for MPI and Eigen matrix operations
 
 #define Z 1
 
@@ -145,26 +139,6 @@ int main(int argc, char* argv[]) {
 	double T = 1.75;
 	bdpp.setTime(T);
 
-	//Construct basis for Hamiltonian
-	dirbs rthphb(dkbb,spnrb);
-
-	//Prune uncoupled states, i.e. states that are excluded by selection rules
-	//This involves an expensive estimation of the matrix exponential which could probably be replaced by something else
-	vec angInit = vec::Zero(rthphb.angqN());
-	angInit[0] = 1.0;
-	// vec angInit = vec::Constant(rthphb.angqN(),1.0);
-
-	rthphb.pruneUncoupled(angInit,true); //true means using nondipole couplings
-	
-	
-	//Dump enumeration of angular momentum states, this is needed in postprocessing of data
-	for(int i = 0; i < rthphb.angids.size(); i++) {
-		cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
-	}
-	
-	// for(int i = 0; i < rthphb.angidsReverse.size(); i++) {
-		// cout << "(" << i << ", " << rthphb.angidsReverse[i] << ")," << std::endl;
-	// }
 
 	//Construct nondipole alpha matrices, both upper and lower versions
 	for(int l = 0; l < spnrb.bdplmax(); l++) {
@@ -174,105 +148,23 @@ int main(int argc, char* argv[]) {
 	}
 
 
-	using Htype = DiracBDP<dirbs>;
-	//Initialize Hamiltonian and set Coulomb potential
-	Htype H(rthphb,bdpp);
-	H.Vfunc = &coloumb<Z>;
-
+	//params list, needed to cache kappasmat in dkbbasis, for this test we just use an array that counts from 0 to spnrb.angqN()
 	
-	//Assemble H0 for propagation
+	cvec params = cvec::Zero(spnrb.angqN());
+	for(int i = 0; i < spnrb.angqN(); i++) {
+		params[i] = i;
+	}
 
-
-	//blockDistribute2 is a sort of hacked together attempt to load balance the matrix-vector product for the time evolution operator
-	//see rthphbasis.h for code. Currenlty definitely far from optimal.
-	rthphb.blockDistribute2();
-
-	// cout << "coefsE0:" << endl << coefsE0;
-	//Get eigenvalues and eigenvectors
-	H.prepeigsLowMem(Nsplines,Nsplines/2, true);
-
-	H.H0radprep();
-	//psi1 set from ground state and normalized
+	cmat outm = cmat::Zero(dkbb.radqN(), spnrb.angqN());
 	
-	cvec coefsE0 = H.getevec(Nsplines+5,-1,-0.5);
-	
-
-	dirwf psi1 = dirwf(rthphb,coefsE0);
-	psi1.normalize();
-	
-	// H.eigProj(psi1);
-	
-	
-	
-	
-	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
-
-	cvec b;
-
-	int Nr = rthphb.radqN();
-
-	b = H.S(psi1.coefs) - dt * cdouble(0,0.5) * H.H(T,psi1.coefs);
-
-
-	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
-	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
-
-	//RtsMat is a helper class needed by the preconditioner, and functions as a wrapper to the Hamiltonian class that masks the time step formula as a matrix-vector product.
-	//RtsMat.h is quite p ossibly the most haunted file in this code. I do not understand how it works.
-	RtsMat<Htype> proptest;
-
-	//RtsMat needs setup
-	proptest.setDt(dt);
-	proptest.setTime(T);
-	proptest.attachHamiltonian(H);
-	proptest.overrideRows(psi1.coefs.rows());
-	proptest.overrideCols(psi1.coefs.rows());
-
-	//Typically, if it fails to converge within 1000 iterations there's trouble
-
-
-
-	//Holdover from old code. Either does nothing or essential. I don't dare to remove it.
-	H.getBasis().getRadial().setState(0);
-
-	//Preconditioner setup performs ILUT factorizations of individual blocks of H0
-	solver.preconditioner().setup(H,dt);
-	//Eigen solvers need a compute step to be performed before solving
-	solver.compute(proptest);
-
-	solver.setMaxIterations(1000);
-
-	cvec psi2 = solver.solve(b);
-	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
-
-	// cout << "psi2" << psi2.format(outformat) << endl;
-	// cout << "psi2_mpi" << psi2_mpi.format(outformat) << endl;
-
-
-	cout << "iterations: "  << solver.iterations();
-
-	// cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
-
-	// MPI_Finalize();
-	// return 0;
-	// //Initialize crank-nicholson propagator
-	Cranknich<Htype,dirbs,true> cnp(H);
-
-
-
-	cnp.proptest = &proptest;
-	cnp.solver = &solver;
-
-	// cnp.setDumpfile((filenamePrefix + "_dump"));
-
-	cnp.propagate(psi1,(0.6*PI)/Ntime,Ntime,1);
-
-	dirwf wft = cnp.wft;
-
-	if(wrank==0)
-	cout << "wft" << wft.coefs.format(outformat);
-
-	H.savePsievs(wft,"psiev");
+	//We just use Ntime for the number of test iterations, because anarchy reigns
+	for(int i = 0; i < Ntime; i++) {
+		cmat inmat = cmat::Random(dkbb.radqN(), spnrb.angqN());
+		for(int l = 0; l < Nl; l++) {
+			dkbb.template matmat<bdpa>(inmat,outmat,spnrb.bdpam(LOWER,l),params,l,LOWER)
+			dkbb.template matmat<bdpa>(inmat,outmat,spnrb.bdpam(UPPER,l),params,l,UPPER)
+		}
+	}
 	
 	MPI_Finalize();
 	return 0;
