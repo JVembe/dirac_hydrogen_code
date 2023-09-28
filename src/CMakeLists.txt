@@ -37,11 +37,3 @@ target_link_libraries(dkbbasistest
   PRIVATE
     nlohmann_json::nlohmann_json
 )
-
-target_link_libraries(nondipoleMPItest
-  PUBLIC
-    MPI::MPI_CXX
-    wignerSymbols
-    OpenMP::OpenMP_CXX
-  PRIVATE
-    nlohmann_json::nlohmann_json)

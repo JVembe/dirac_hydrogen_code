@@ -60,11 +60,7 @@ int main(int argc, char* argv[]) {
   // Parse JSON parameters
   nlohmann::json json_params;
   input_file >> json_params;
-	//Define types for basis and wave function from templates
-	//rthphbasis "R, theta, phi basis" combines dkbbasis and spnrbasis to model system in spherical coordinates
-	using dirbs = rthphbasis<dkbbasis,spnrbasis>;
-	using dirwf = wavefunc<dirbs>;
-
+	
 	// Simulation parameters
 	int Nsplines = json_params["Nsplines"]; // Radial resolution, typical values: 200-250
 	int Ntime = json_params["Ntime"]; // Number of time steps, typical values: 8000-20000
@@ -138,10 +134,12 @@ int main(int argc, char* argv[]) {
 	double dt = (0.6*PI)/Ntime;
 	double T = 1.75;
 	bdpp.setTime(T);
-
+	
+	//This would normnally be done by rthphbasis::blockDistribute2()
+	dkbb.slp(0,spnrb.angqN(),0,Nl);
 
 	//Construct nondipole alpha matrices, both upper and lower versions
-	for(int l = 0; l < spnrb.bdplmax(); l++) {
+	for(int l = 0; l < Nl; l++) {
 		if (wrank == 0) cout << l << endl;
 		dkbb.bdpam(1,1,1,l,bdpp);
 		dkbb.bdpam(1,1,-1,l,bdpp);
@@ -161,9 +159,10 @@ int main(int argc, char* argv[]) {
 	for(int i = 0; i < Ntime; i++) {
 		cmat inmat = cmat::Random(dkbb.radqN(), spnrb.angqN());
 		for(int l = 0; l < Nl; l++) {
-			dkbb.template matmat<bdpa>(inmat,outmat,spnrb.bdpam(LOWER,l),params,l,LOWER)
-			dkbb.template matmat<bdpa>(inmat,outmat,spnrb.bdpam(UPPER,l),params,l,UPPER)
+			dkbb.template matmat<bdpa>(inmat,outm,spnrb.bdpam(LOWER,l),params,l,LOWER);
+			dkbb.template matmat<bdpa>(inmat,outm,spnrb.bdpam(UPPER,l),params,l,UPPER);
 		}
+		cout << i << "/" << Ntime << endl;
 	}
 	
 	MPI_Finalize();
