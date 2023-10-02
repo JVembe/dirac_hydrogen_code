@@ -796,10 +796,10 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				// cout << "bdpalphkk dims: (" << bdpalph[1][3][l-locall0].rows() << ", " << bdpalph[1][3][l-locall0].cols() << ")\n";
 			// }
 			
-			// cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
-			// cout << "kappasmat dims: (" << kappasmat.rows() << ", " << kappasmat.cols() << ")\n";
+			cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
+			cout << "kappasmat dims: (" << kappasmat.rows() << ", " << kappasmat.cols() << ")\n";
 			
-			// cout << "thmat dims: (" << thmat.rows() << ", " << thmat.cols() << ")\n";
+			cout << "thmat dims: (" << thmat.rows() << ", " << thmat.cols() << ")\n";
 			
 			// cout << std::endl;
 			
@@ -834,7 +834,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			// cmat mI = cmat::Constant(m.cols(),m.rows(),1.0);
 			// #pragma omp parallel cout << "
 			
-			// m dims: (" << m.rows() << ", " << m.cols() << ")\n";
+			cout << "m dims: (" << m.rows() << ", " << m.cols() << ")\n";
 			{
 				if(ul == LOWER) {
 					w.noalias() += (thmat * (bdpalph[1][0][l-locall0] * m).transpose());
