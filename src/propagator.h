@@ -244,7 +244,8 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			
 			//cvec c = solver->solveWithGuess(b,wftEst);
 			// cvec c = solver->solve(b);
-			wft.coefs = cvec(solver->solve(b));
+			// wft.coefs = cvec(solver->solve(b));
+			wft.coefs = cvec(solver->solveWithGuess(b,wft.coefs));
 			
 			//Do something if the solver doesn't converge. Right now, it just says that happened
 			if(solver->info()!=Eigen::ComputationInfo::Success) {
