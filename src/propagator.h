@@ -203,7 +203,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 	
 		Eigen::ParBiCGSTAB<RtsMat<Htype>,SubmatPreconditioner<cdouble> >* solver;
 		//Eigen::GMRES<RtsMat<Htype>,SubmatPreconditioner<cdouble> >* solver;
-		// SubmatSolver<Eigen::SparseLU<csmat> > Sinv_solver;
+		SubmatSolver<Eigen::SparseLU<csmat> > Sinv_solver;
 		
 		RtsMat<Htype>* proptest;
 		
@@ -231,7 +231,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			
 			b = H->S(this->wft.coefs) - dt * cdouble(0,0.5) * H->H(this->t,this->wft.coefs);
 			
-			//cvec wftEst = wft.coefs  - dt * cdouble(0,1.0) * Sinv_solver.solve(Hpsi);// - pow(dt,2) * 0.5 * Sinv_solver.solve(H->H(t,Sinv_solver.solve(H->H(this->t,this->wft.coefs))));
+			cvec wftEst = wft.coefs  - dt * cdouble(0,1.0) * Sinv_solver.solve(Hpsi);// - pow(dt,2) * 0.5 * Sinv_solver.solve(H->H(t,Sinv_solver.solve(H->H(this->t,this->wft.coefs))));
 			
 			//wftEst = wftEst/wftEst.dot(H->S(wftEst));
 			
@@ -245,7 +245,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			//cvec c = solver->solveWithGuess(b,wftEst);
 			// cvec c = solver->solve(b);
 			// wft.coefs = cvec(solver->solve(b));
-			wft.coefs = cvec(solver->solveWithGuess(b,wft.coefs));
+			wft.coefs = cvec(solver->solveWithGuess(b,wftEst));
 			
 			//Do something if the solver doesn't converge. Right now, it just says that happened
 			if(solver->info()!=Eigen::ComputationInfo::Success) {
@@ -292,7 +292,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			//proptest.setDt(dt);
 			//proptest.setTime(dt);
 			//solver.preconditioner().setup(precondMat);
-			//Sinv_solver.setup(*H,0);
+			Sinv_solver.setup(*H,0);
 		}
 		
 		void propagate(wavefunc<basistype>& psi, double dt, int tmax, int nSave = 1) {
