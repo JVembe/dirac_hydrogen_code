@@ -2,7 +2,7 @@
   "Nsplines": 200,
   "Ntime": 8000,
   "Nkappa": 4,
-  "Nmu": 1,
+  "Nmu": 4,
   "Nl": 1,
   "rBox": 30.0,
   "Intensity": 10,
