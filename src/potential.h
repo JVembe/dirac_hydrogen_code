@@ -627,28 +627,12 @@ class beyondDipolePulse:public Potential<beyondDipolePulse> {
 		
 };
 
-class beyondDipoleCounterPulse:public Potential<beyondDipoleCounterPulse> {
-	
-	protected:
-		double E0;
-		double omega;
-		double T;
-		static int l;
-		
-		double dirtheta;
-		double dirphi;
+class beyondDipoleCounterPulse:public beyondDipolePulse {
 	
 	public:
 		
-		static long double besselJ(long double x) {
-			int ll = l;
-			return bmath::sph_bessel(ll,x);		
-		}
-		beyondDipoleCounterPulse():Potential<beyondDipoleCounterPulse>() {};
-		beyondDipoleCounterPulse(double E0, double omega, double N):Potential<beyondDipoleCounterPulse>() {
-			this->E0 = E0;
-			this->omega = omega;
-			this->T = (double)N*2*PI / omega;
+		beyondDipoleCounterPulse(double E0, double omega, double N):beyondDipolePulse(E0, omega, N) {
+			
 		}
 		
 		bdpft axialPart_impl(std::integral_constant<axis,axis::t> c, double t) const {

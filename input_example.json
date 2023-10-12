@@ -3,7 +3,7 @@
   "Ntime": 8000,
   "Nkappa": 4,
   "Nmu": 4,
-  "Nl": 1,
+  "Nl": 2,
   "rBox": 30.0,
   "Intensity": 10,
   "Omega": 50,
