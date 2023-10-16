@@ -627,6 +627,170 @@ class beyondDipolePulse:public Potential<beyondDipolePulse> {
 		
 };
 
+class beyondDipoleCounterPulse:public beyondDipolePulse {
+	
+	public:
+		
+		beyondDipoleCounterPulse(double E0, double omega, double N):beyondDipolePulse(E0, omega, N) {
+			
+		}
+		
+		bdpft axialPart_impl(std::integral_constant<axis,axis::t> c, double t) const {
+			bdpft out(6,1);
+			using Scalar = double;
+			cdouble phi = cdouble(-PI/2,0);
+			// cdouble phi = cdouble(0,0);//cdouble(-PI/2,0);
+			
+			//Row 3 originally -E0. Negated to counter issue in Bessel function expansion
+			
+			// out(0,0) = ((Scalar) (E0 / (omega) ) * pow(sin(PI / T * t),2) * sin(omega * t))/3;
+			// out(1,0) = 0;
+			// out(2,0) = ((Scalar) (E0 / (omega) ) * pow(sin(PI / T * t),2) * sin(omega * t))/3;
+			// out(3,0) = 0;
+			// out(4,0) = ((Scalar) (E0 / (omega) ) * pow(sin(PI / T * t),2) * sin(omega * t))/3;
+			// out(5,0) = 0;
+			
+			
+			out(0,0) = ((Scalar) -E0/(2*omega) * cos( phi + t * (Scalar) (2 * PI / T + omega)));
+			out(1,0) = 0;//((Scalar) -E0/(4*omega) * sin( phi + t * (Scalar) (2 * PI / T + omega)));
+			out(2,0) = ((Scalar) -E0/(2*omega) * cos(-phi + t * (Scalar) (2 * PI / T - omega)));
+			out(3,0) = 0;//((Scalar)  E0/(4*omega) * sin(-phi + t * (Scalar) (2 * PI / T - omega)));
+			out(4,0) = ((Scalar)  E0/(  omega) * cos( phi + t * (Scalar) omega));
+			out(5,0) = 0;//((Scalar)  E0/(2*omega) * sin( phi + t * (Scalar) omega));
+			
+			return out;
+		}
+		
+		template <typename MatrixType>
+		bdpft axialPart_impl(std::integral_constant<axis,axis::t> c, const Eigen::MatrixBase<MatrixType>& t) const {
+			using Scalar = cldouble; //Easiest fix for earlier mistake
+			bdpft out(6,t.size());
+			
+			auto tt = t.col(0).template cast<cdouble>();
+			
+			cdouble phi = cdouble(0,0);
+			
+			
+			// out.row(0) = ((Scalar) (E0 / (omega) ) * pow(sin(PI / T * tt),2) * cos(omega * tt));
+			// out.row(1) = MatrixType::Constant(t.size(),0.0).real();
+			// out.row(2) = MatrixType::Constant(t.size(),0.0).real();
+			// out.row(3) = MatrixType::Constant(t.size(),0.0).real();
+			// out.row(4) = MatrixType::Constant(t.size(),0.0).real();
+			// out.row(5) = MatrixType::Constant(t.size(),0.0).real();
+			
+			//Row 3 originally -E0. Negated to counter issue in Bessel function expansion
+			
+			out.row(0) = ((Scalar) (-E0 / (2*omega) ) * cos(( phi + tt) * (Scalar) (2 * PI / T + omega)));
+			out.row(1) = 0;//((Scalar) (-E0 / (4*omega) ) * sin(( phi + tt) * (Scalar) (2 * PI / T + omega)));
+			out.row(2) = ((Scalar) (-E0 / (2*omega) ) * cos((-phi + tt) * (Scalar) (2 * PI / T - omega)));
+			out.row(3) = 0;//((Scalar) ( E0 / (4*omega) ) * sin((-phi + tt) * (Scalar) (2 * PI / T - omega)));
+			out.row(4) = ((Scalar) ( E0 / (  omega) ) * cos(( phi + tt) * (Scalar) omega));
+			out.row(5) = 0;//((Scalar) ( E0 / (2*omega) ) * sin(( phi + tt) * (Scalar) omega));
+			
+			
+			/*out.col(1) =  E0 / (4*omega) * cos(omega * t.col(0) + 2 * PI * t.col(0) / T);
+			out.col(2) = -E0 / (4*omega) * sin(omega * t.col(0) - 2 * PI * t.col(0) / T);
+			out.col(3) =  E0 / (4*omega) * cos(omega * t.col(0) - 2 * PI * t.col(0) / T);
+			out.col(4) = -E0 / (4*omega) * sin(omega * t.col(0));
+			out.col(5) =  E0 / (4*omega) * cos(omega * t.col(0));*/
+			
+			return out;
+		}
+		
+		bdpft axialPart_impl(std::integral_constant<axis,axis::x> c, double x) const {
+			bdpft out(6,1);
+			
+			out(0,0) = cos(omega/SoL*x + 2*PI*x/(SoL*T));
+			out(1,0) = 0;//sin(omega/SoL*x + 2*PI*x/(SoL*T));
+			out(2,0) = cos(omega/SoL*x - 2*PI*x/(SoL*T));
+			out(3,0) = 0;//sin(omega/SoL*x - 2*PI*x/(SoL*T));
+			out(4,0) = cos(omega/SoL*x);
+			out(5,0) = 0;//sin(omega/SoL*x);
+			
+			return out;
+		}
+		
+		template <typename MatrixType>
+		bdpft axialPart_impl(std::integral_constant<axis,axis::x> c, const Eigen::MatrixBase<MatrixType>& x) const {
+			bdpft out(6,x.size());
+			
+			cldouble k = omega/SoL;
+			
+			out.row(0) = cos(k * x + 2*PI * x / (SoL * T));
+			out.row(1) = 0;//sin(k * x + 2*PI * x / (SoL * T));
+			out.row(2) = cos(k * x - 2*PI * x / (SoL * T));
+			out.row(3) = 0;//sin(k * x - 2*PI * x / (SoL * T));
+			out.row(4) = cos(k * x);
+			out.row(5) = 0;//sin(k * x);
+			
+			return out;
+		}
+		
+		template <typename MatrixType>
+		bdpft axialPart_impl(std::integral_constant<axis,axis::radial> c, const Eigen::MatrixBase<MatrixType>& x,int l) const {
+			bdpft out(6,x.size());
+			
+			double k = omega/SoL;
+			
+			//Bessel function must be evaluated on x for each x, but this is expensive. Need to consider options.
+			beyondDipolePulse::l = l;
+			
+			//cout << "l: " << l << std::endl;
+			
+			//Rows 2 and 3 must be negated to avoid issues with bessel function expansion
+			
+			
+			// out.row(0) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
+			// out.row(1) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
+			// out.row(2) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
+			// out.row(3) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
+			// out.row(4) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
+			// out.row(5) = MatrixType::Constant(x.size(),1.0).real() * (l==0);
+			
+			
+			out.row(0) = /*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l  ) * */ (( (2*PI/(SoL * T) + k ) * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();
+			out.row(1) = 0;///*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l-1) * */ (( (2*PI/(SoL * T) + k ) * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();
+			out.row(2) = /*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l  ) * */ ((-(2*PI/(SoL * T) - k ) * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();
+			out.row(3) = 0;///*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l-1) * */ ((-(2*PI/(SoL * T) - k ) * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();
+			out.row(4) = /*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l  ) * */ ((                   k   * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();
+			out.row(5) = 0;///*(long double) sqrt(4*PI) * /*(2*l+1)) * pow(cldouble(0,1),l-1) * */ ((                   k   * x.real()/* MatrixType::Constant(x.size(),0.0).real()*/).unaryExpr(std::ref(besselJ))).template cast<cldouble>();
+			
+			//cout << "Radial part matrix dimensions: " << out.rows() << ", " << out.cols() << std::endl;
+			
+			return out;
+		}
+		
+		
+		template <typename MatrixType>
+		bdpft axialPart_impl(std::integral_constant<axis,axis::angular> c, const Eigen::MatrixBase<MatrixType>& m, int l) const {
+			bdpft out(6,m.size());
+			
+			for(int i = 0; i < 6; i++) {
+				for(int j = 0; j < m.size(); j++) {
+					int mm = (int)m(j);
+					if (abs(mm) <= l) {
+						cdouble ylm = bmath::spherical_harmonic(l,mm,dirtheta,dirphi);
+						if(ylm != cdouble(0,0)) {
+							out(i,j) = ylm;
+						}
+					}
+				}
+			}
+			return out;
+		}
+		
+		template <axis Ax>
+		bdpft axialPart_impl(std::integral_constant<axis,Ax> c, double a) const {
+			return bdpft::Constant(6,1,1.0);
+		}
+		
+		template <axis Ax, typename MatrixType>
+		bdpft axialPart_impl(std::integral_constant<axis,Ax> c, const Eigen::MatrixBase<MatrixType>& a) const {
+			return bdpft::Constant(6,a.size(),1.0);
+		}
+		
+};
+
 class dipolizedBeyondDipolePulse: public beyondDipolePulse {
 	public:
 		dipolizedBeyondDipolePulse(double E0, double omega, double N):beyondDipolePulse(E0, omega, N) {

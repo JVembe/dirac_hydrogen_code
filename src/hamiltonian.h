@@ -1081,7 +1081,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		}
 	}
 	
-	cvec getevec(int N, int kappa, int mu) {
+	cvec getevec(int N, int kappa, double mu) {
 		int i = -1;
 		for(int j = 0; j < kappas.size(); j++) {
 			if(kappas[j] == kappa) i = j;
