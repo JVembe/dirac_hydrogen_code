@@ -60,41 +60,6 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 	std::vector<std::vector<cvec> > bdpvecs[dkbpart::Npts][2];
 	
 	
-	template <dkbpart pp>
-	csmat& getbdpmat(int l, int alpha) {
-		//cout <<"l: " << l << ", size of bdp0mats: " << bdp0mats.size() << "\n";
-		if(alpha >= bdpmats[pp].size()) {
-			for(int i = bdpmats[pp].size(); i < alpha+1; i++) {
-				bdpmats[pp].push_back(std::vector<csmat>(0));
-			}
-		}
-		
-		if(l >= bdpmats[pp][alpha].size()) {
-			for(int i = bdpmats[pp][alpha].size(); i < l+1; i++) {
-				bdpmats[pp][alpha].push_back(csmat(0,0));
-			}
-		}
-		//cout <<"l: " << l << ", size of bdpmat: " << bdpmats[pp][alpha][l].size() << "\n";
-		return bdpmats[pp][alpha][l];
-	}
-	
-	csmat& getbdpmat(int pp, int l, int alpha) {
-		//cout <<"l: " << l << ", size of bdp0mats: " << bdp0mats.size() << "\n";
-		if(alpha >= bdpmats[pp].size()) {
-			for(int i = bdpmats[pp].size(); i < alpha+1; i++) {
-				bdpmats[pp].push_back(std::vector<csmat>(0));
-			}
-		}
-		
-		if(l >= bdpmats[pp][alpha].size()) {
-			for(int i = bdpmats[pp][alpha].size(); i < l+1; i++) {
-				bdpmats[pp][alpha].push_back(csmat(0,0));
-			}
-		}
-		//cout <<"l: " << l << ", size of bdpmat: " << bdpmats[pp][alpha][l].size() << "\n";
-		return bdpmats[pp][alpha][l];
-	}
-	
 	/*csmat& getbdpmat(int kappa,int l, int alpha) {
 		
 	}*/
@@ -182,6 +147,42 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 	
 	public:
 
+		
+		template <dkbpart pp>
+		csmat& getbdpmat(int l, int alpha) {
+			//cout <<"l: " << l << ", size of bdp0mats: " << bdp0mats.size() << "\n";
+			if(alpha >= bdpmats[pp].size()) {
+				for(int i = bdpmats[pp].size(); i < alpha+1; i++) {
+					bdpmats[pp].push_back(std::vector<csmat>(0));
+				}
+			}
+			
+			if(l >= bdpmats[pp][alpha].size()) {
+				for(int i = bdpmats[pp][alpha].size(); i < l+1; i++) {
+					bdpmats[pp][alpha].push_back(csmat(0,0));
+				}
+			}
+			//cout <<"l: " << l << ", size of bdpmat: " << bdpmats[pp][alpha][l].size() << "\n";
+			return bdpmats[pp][alpha][l];
+		}
+		
+		csmat& getbdpmat(int pp, int l, int alpha) {
+			//cout <<"l: " << l << ", size of bdp0mats: " << bdp0mats.size() << "\n";
+			if(alpha >= bdpmats[pp].size()) {
+				for(int i = bdpmats[pp].size(); i < alpha+1; i++) {
+					bdpmats[pp].push_back(std::vector<csmat>(0));
+				}
+			}
+			
+			if(l >= bdpmats[pp][alpha].size()) {
+				for(int i = bdpmats[pp][alpha].size(); i < l+1; i++) {
+					bdpmats[pp][alpha].push_back(csmat(0,0));
+				}
+			}
+			//cout <<"l: " << l << ", size of bdpmat: " << bdpmats[pp][alpha][l].size() << "\n";
+			return bdpmats[pp][alpha][l];
+		}
+		
 		const Potential<beyondDipolePulse>* vExt;								   
 		void clearDkbCache() {
 			dkbU0 = clsmat(0,0);

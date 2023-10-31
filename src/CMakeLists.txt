@@ -27,14 +27,6 @@ set(SOURCES_DUMPLINGS
 # Add the executable for dipoleMPItest
 add_executable(dumpCouplings ${SOURCES_DUMPLINGS})
 
-# Specify compile features
-target_compile_features(dipoleMPItest PRIVATE cxx_std_11)
-
-# Compiler options conditionally set based on compiler type
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(dipoleMPItest PRIVATE -ggdb3 -march=native)
-endif()
-
 # Additional compile options based on build type
 target_compile_options(dumpCouplings PRIVATE
   $<$<CONFIG:Debug>:-g>

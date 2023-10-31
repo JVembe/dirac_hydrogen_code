@@ -116,15 +116,6 @@ int main(int argc, char* argv[]) {
 		t[i] = rBox/(Nsplines)*i;
 	}
 
-	//dkbbasis: 2-compoent basis P,Q-doublet of r-dependent Bspline fucntions
-	dkbbasis dkbb(t,7);
-	dkbb.setState(-1);
-	lvec x = dkbb.glpts();
-
-	//Cache splines, first derivatives of splines and second derivatives of splines
-	clsmat& splch = dkbb.splineCache(x);
-	clsmat& dsplch = dkbb.dSplineCache(x,1);
-	clsmat& ddsplch = dkbb.dSplineCache(x,2);
 
 	//spnrbasis, spinor basis of X_{kappa,mu},X_{-kappa,mu}-doublets
 	spnrbasis spnrb(Nkappa,Nmu);
@@ -137,6 +128,38 @@ int main(int argc, char* argv[]) {
 		printSparseNonZeros(spnrb.bdpam(1,l));
 		cout << "bdpam[1][" << l<<"]";
 		printSparseNonZeros(spnrb.bdpam(-1,l));
+	}
+	
+	//dkbbasis: 2-compoent basis P,Q-doublet of r-dependent Bspline fucntions
+	dkbbasis dkbb(t,7);
+	dkbb.setState(-1);
+	lvec x = dkbb.glpts();
+
+	//Cache splines, first derivatives of splines and second derivatives of splines
+	clsmat& splch = dkbb.splineCache(x);
+	clsmat& dsplch = dkbb.dSplineCache(x,1);
+	clsmat& ddsplch = dkbb.dSplineCache(x,2);
+	
+	//Construct laser pulse with desired parameters
+	beyondDipolePulse bdpp(Intensity,omega,cycles);
+
+	//Compute bdp-alpha matrices, this stores g0...g3 in memory
+	for(int l = 0; l < spnrb.bdplmax(); l++) {
+			if (wrank == 0) cout << l << endl;
+			dkbb.bdpam(1,1,1,l,bdpp);
+			dkbb.bdpam(1,1,-1,l,bdpp);
+		}
+		
+	
+	for(int n = 0; n < 4; n++) {
+		cout << "g" << n << " = npy.zeros((6,"<<Nl<<"),dtype=object)" << endl;
+		
+		for(int alpha = 0; alpha < 6; alpha++) {
+			for(int l = 0; l < spnrb.bdplmax(); l++) {
+				cout << "g"<<n<<"["<<alpha<<"][" << l << "]";
+				printSparseNonZeros(dkbb.getbdpmat(n,l,alpha));
+			}
+		}
 	}
 	
 	MPI_Finalize();
