@@ -94,13 +94,13 @@ int main(int argc, char* argv[]) {
 	MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
 	MPI_Comm_size(MPI_COMM_WORLD,&wsize);
 
-	cout<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime
+	cerr<< "Simulation run parameters:\nSpline knots:" << Nsplines << "\nTime steps: " << Ntime
 		<< "\nkappa max quantum number: " << Nkappa << "\nmu max quantum number: " << Nmu
 		<< "\nBessel function l max: " << Nl << "\nBox radius: " << rBox << "\nIntensity: "  << Intensity << std::endl;
 
-	cout << "MPI world size: " << wsize << endl;
-	cout << "MPI rank: " << wrank << endl;
-	cout << "OpenMP threads: " << omp_get_max_threads() << endl;
+	cerr << "MPI world size: " << wsize << endl;
+	cerr << "MPI rank: " << wrank << endl;
+	cerr << "OpenMP threads: " << omp_get_max_threads() << endl;
 
 	//t: List of spline knots, here evenly distributed
 
@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
 	//bdplOverride limits the number of l terms in the Bessel expansion of the interaction Hamiltonian
 	spnrb.bdplOverride(Nl);
 	
-	cout << "bdpam = npy.zeros((2,10),dtype=object)" << endl;
+	cout << "bdpam = npy.zeros((2,100),dtype=object)" << endl;
 	for(int l = 0; l < spnrb.bdplmax(); l++) {
 		cout << "bdpam[0][" << l<<"]";
 		printSparseNonZeros(spnrb.bdpam(1,l));
