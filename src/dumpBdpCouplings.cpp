@@ -48,13 +48,21 @@ void printSparseNonZeros(const csmat& mat) {
 
 int main(int argc, char* argv[]) {
   // Check argument count
-  if(argc != 2) {
-      std::cerr << "Usage: " << argv[0] << " <path/to/parameters.json>\n";
+  if(argc < 2 || argc > 3) {
+      std::cout << "Usage: " << argv[0] << "[-g] <path/to/parameters.json>\n";
+      std::cout << "       -g:  dump the g matrices. Otherwise, dump the bdpam matrices\n";
       return 1;
   }
 
   // Get the JSON file path from command line arguments
-  std::string json_file_path = argv[1];
+  std::string json_file_path;
+  bool dump_g = false;
+  if(!std::strcmp(argv[1], "-g")){
+      dump_g = true;
+      json_file_path = argv[2];
+  } else {
+      json_file_path = argv[1];
+  }
 
   // Open and read the JSON file
   std::ifstream input_file(json_file_path);
@@ -121,47 +129,50 @@ int main(int argc, char* argv[]) {
 	spnrbasis spnrb(Nkappa,Nmu);
 	//bdplOverride limits the number of l terms in the Bessel expansion of the interaction Hamiltonian
 	spnrb.bdplOverride(Nl);
-	
-	cout << "bdpam = npy.zeros((2,100),dtype=object)" << endl;
-	for(int l = 0; l < spnrb.bdplmax(); l++) {
+
+        if(!dump_g){
+            cout << "bdpam = npy.zeros((2,100),dtype=object)" << endl;
+            for(int l = 0; l < spnrb.bdplmax(); l++) {
 		cout << "bdpam[0][" << l<<"]";
 		printSparseNonZeros(spnrb.bdpam(1,l));
 		cout << "bdpam[1][" << l<<"]";
 		printSparseNonZeros(spnrb.bdpam(-1,l));
-	}
+            }
+        } else {
 	
-	//dkbbasis: 2-compoent basis P,Q-doublet of r-dependent Bspline fucntions
-	dkbbasis dkbb(t,7);
-	dkbb.setState(-1);
-	lvec x = dkbb.glpts();
+            //dkbbasis: 2-compoent basis P,Q-doublet of r-dependent Bspline fucntions
+            dkbbasis dkbb(t,7);
+            dkbb.setState(-1);
+            lvec x = dkbb.glpts();
 
-	//Cache splines, first derivatives of splines and second derivatives of splines
-	clsmat& splch = dkbb.splineCache(x);
-	clsmat& dsplch = dkbb.dSplineCache(x,1);
-	clsmat& ddsplch = dkbb.dSplineCache(x,2);
+            //Cache splines, first derivatives of splines and second derivatives of splines
+            clsmat& splch = dkbb.splineCache(x);
+            clsmat& dsplch = dkbb.dSplineCache(x,1);
+            clsmat& ddsplch = dkbb.dSplineCache(x,2);
 	
-	//Construct laser pulse with desired parameters
-	beyondDipolePulse bdpp(Intensity,omega,cycles);
+            //Construct laser pulse with desired parameters
+            beyondDipolePulse bdpp(Intensity,omega,cycles);
 
-	//Compute bdp-alpha matrices, this stores g0...g3 in memory
-	for(int l = 0; l < spnrb.bdplmax(); l++) {
-			if (wrank == 0) cout << l << endl;
-			dkbb.bdpam(1,1,1,l,bdpp);
-			dkbb.bdpam(1,1,-1,l,bdpp);
-		}
+            //Compute bdp-alpha matrices, this stores g0...g3 in memory
+            for(int l = 0; l < spnrb.bdplmax(); l++) {
+                if (wrank == 0) cout << l << endl;
+                dkbb.bdpam(1,1,1,l,bdpp);
+                dkbb.bdpam(1,1,-1,l,bdpp);
+            }
 		
 	
-	for(int n = 0; n < 4; n++) {
+            for(int n = 0; n < 4; n++) {
 		cout << "g" << n << " = npy.zeros((6,"<<Nl<<"),dtype=object)" << endl;
 		
 		for(int alpha = 0; alpha < 6; alpha++) {
-			for(int l = 0; l < spnrb.bdplmax(); l++) {
-				cout << "g"<<n<<"["<<alpha<<"][" << l << "]";
-				printSparseNonZeros(dkbb.getbdpmat(n,l,alpha));
-			}
+                    for(int l = 0; l < spnrb.bdplmax(); l++) {
+                        cout << "g"<<n<<"["<<alpha<<"][" << l << "]";
+                        printSparseNonZeros(dkbb.getbdpmat(n,l,alpha));
+                    }
 		}
-	}
-	
+            }
+        }
+        
 	MPI_Finalize();
 	return 0;
 }
