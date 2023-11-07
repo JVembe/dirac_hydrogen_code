@@ -171,6 +171,31 @@ int main(int argc, char* argv[]) {
                     }
 		}
             }
+	
+            //Bear with me here, the scheme for assembling the h-matrices is a bit silly
+            dirbs rthphb(dkbb,spnrb);
+            vec angInit = vec::Zero(rthphb.angqN());
+            angInit[0] = 1.0;
+            rthphb.pruneUncoupled(angInit,true);
+            using Htype = DiracBDP<dirbs>;
+            Htype H(rthphb,bdpp);
+            H.Vfunc = &coloumb<Z>;
+            H.prepeigsLowMem(Nsplines,Nsplines/2, true);
+            H.H0radprep();
+	
+            for(int n = 0; n < 3; n++) {
+                cout << "h" << n << "";
+                printSparseNonZeros(dkbb.getH0mat(n));
+            }
+	
+            //And finally the overlap matrix blocks as well, s0...s2
+	
+            cout << "s0";
+            printSparseNonZeros(dkbb.get0mat<S>());
+            cout << "s1";
+            printSparseNonZeros(dkbb.get0mat<S>());
+            cout << "s2";
+            printSparseNonZeros(dkbb.get0mat<S>());
         }
         
 	MPI_Finalize();
