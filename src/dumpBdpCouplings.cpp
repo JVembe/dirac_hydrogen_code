@@ -28,7 +28,43 @@
 int beyondDipolePulse::l = 1;
 int beyondDipoleCarrierPulse::l = 1;
 
+void csr_write(const char*fname, csmat& mat)
+{
+    const csmat::StorageIndex *Ap, *Ai;
+    const csmat::Scalar *Ax;
+
+    csmat::StorageIndex nnz = mat.nonZeros();
+    csmat::StorageIndex dim = mat.rows();
+
+    // make sure we have compressed storage
+    mat.makeCompressed();
+
+    Ap = mat.outerIndexPtr();
+    Ai = mat.innerIndexPtr();
+    Ax = mat.valuePtr();
+
+    FILE *fd;
+    fd = fopen(fname, "w+");
+    if(!fd) {
+        fprintf(stderr, "cant open %s\n", fname);
+        exit(0);
+    }
+    
+    size_t fsize, nread;
+
+    // storage format: dim, nnz, Ap, Ai, Ax
+    fwrite(&dim, sizeof(csmat::StorageIndex), 1, fd);
+    fwrite(&nnz, sizeof(csmat::StorageIndex), 1, fd);
+    fwrite(Ap, sizeof(csmat::StorageIndex), dim+1, fd);
+    fwrite(Ai, sizeof(csmat::StorageIndex), nnz, fd);
+    fwrite(Ax, sizeof(csmat::Scalar), nnz, fd);
+
+    fclose(fd);
+}
+
+
 void printSparseNonZeros(const csmat& mat) {
+    cerr << mat.nonZeros() << "\n";
 	cout << " = npy.array((\n";
 
 	for(int i = 0; i < mat.outerSize(); i++) {
@@ -131,15 +167,15 @@ int main(int argc, char* argv[]) {
 	spnrb.bdplOverride(Nl);
 
         if(!dump_g){
-            cout << "bdpam = npy.zeros((2,100),dtype=object)" << endl;
             for(int l = 0; l < spnrb.bdplmax(); l++) {
-		cout << "bdpam[0][" << l<<"]";
-		printSparseNonZeros(spnrb.bdpam(1,l));
-		cout << "bdpam[1][" << l<<"]";
-		printSparseNonZeros(spnrb.bdpam(-1,l));
+                char fname[256];
+                snprintf(fname, 255, "H0l%d.csr", l);
+                csr_write(fname, spnrb.bdpam(1,l));
+                snprintf(fname, 255, "H1l%d.csr", l);
+                csr_write(fname, spnrb.bdpam(-1,l));
             }
         } else {
-	
+
             //dkbbasis: 2-compoent basis P,Q-doublet of r-dependent Bspline fucntions
             dkbbasis dkbb(t,7);
             dkbb.setState(-1);
@@ -159,43 +195,56 @@ int main(int argc, char* argv[]) {
                 dkbb.bdpam(1,1,1,l,bdpp);
                 dkbb.bdpam(1,1,-1,l,bdpp);
             }
-		
-	
+
+            // for efficiency of assembly we want the g matrices to have the same non-zero pattern,
+            // even at the expense of storing some zero entries
+            int init = 0;
+            csmat base_nnz_pattern;
             for(int n = 0; n < 4; n++) {
-		cout << "g" << n << " = npy.zeros((6,"<<Nl<<"),dtype=object)" << endl;
 		
 		for(int alpha = 0; alpha < 6; alpha++) {
                     for(int l = 0; l < spnrb.bdplmax(); l++) {
-                        cout << "g"<<n<<"["<<alpha<<"][" << l << "]";
-                        printSparseNonZeros(dkbb.getbdpmat(n,l,alpha));
+                        char fname[256];
+                        snprintf(fname, 255, "g%da%dl%d.csr", n, alpha, l);
+
+                        // we assume that the first g matrix has the non-zero pattern
+                        // that includes all subsequent matrices. It seems g0* have such property
+                        if(!init) {
+                            init = 1;
+                            base_nnz_pattern = 0*dkbb.getbdpmat(n,l,alpha);
+                        }
+                        
+                        // add base nnz pattern
+                        csmat gmat = dkbb.getbdpmat(n,l,alpha) + base_nnz_pattern;
+                        csr_write(fname, gmat);
                     }
 		}
             }
+            
+            // //Bear with me here, the scheme for assembling the h-matrices is a bit silly
+            // dirbs rthphb(dkbb,spnrb);
+            // vec angInit = vec::Zero(rthphb.angqN());
+            // angInit[0] = 1.0;
+            // rthphb.pruneUncoupled(angInit,true);
+            // using Htype = DiracBDP<dirbs>;
+            // Htype H(rthphb,bdpp);
+            // H.Vfunc = &coloumb<Z>;
+            // H.prepeigsLowMem(Nsplines,Nsplines/2, true);
+            // H.H0radprep();
 	
-            //Bear with me here, the scheme for assembling the h-matrices is a bit silly
-            dirbs rthphb(dkbb,spnrb);
-            vec angInit = vec::Zero(rthphb.angqN());
-            angInit[0] = 1.0;
-            rthphb.pruneUncoupled(angInit,true);
-            using Htype = DiracBDP<dirbs>;
-            Htype H(rthphb,bdpp);
-            H.Vfunc = &coloumb<Z>;
-            H.prepeigsLowMem(Nsplines,Nsplines/2, true);
-            H.H0radprep();
+            // for(int n = 0; n < 3; n++) {
+            //     cout << "h" << n << "";
+            //     printSparseNonZeros(dkbb.getH0mat(n));
+            // }
 	
-            for(int n = 0; n < 3; n++) {
-                cout << "h" << n << "";
-                printSparseNonZeros(dkbb.getH0mat(n));
-            }
+            // //And finally the overlap matrix blocks as well, s0...s2
 	
-            //And finally the overlap matrix blocks as well, s0...s2
-	
-            cout << "s0";
-            printSparseNonZeros(dkbb.get0mat<S>());
-            cout << "s1";
-            printSparseNonZeros(dkbb.get0mat<S>());
-            cout << "s2";
-            printSparseNonZeros(dkbb.get0mat<S>());
+            // cout << "s0";
+            // printSparseNonZeros(dkbb.get0mat<S>());
+            // cout << "s1";
+            // printSparseNonZeros(dkbb.get0mat<S>());
+            // cout << "s2";
+            // printSparseNonZeros(dkbb.get0mat<S>());
         }
         
 	MPI_Finalize();
