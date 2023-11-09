@@ -23,6 +23,7 @@
 #define max(a,b) ((a)>(b)?(a):(b))
 
 #include "csr.h"
+#include "../src/tictoc.h"
 
 // from spnrbasis.cpp
 int ik(int i) {
@@ -50,8 +51,8 @@ int main(int argc, char *argv[])
 
     char fname[256];
     FILE *fd;
-    sparse_csr_t Hall;
-    sparse_csr_t *g;
+    sparse_csr_t Hall, Hfull;
+    sparse_csr_t *g, *gt;
     sparse_csr_t *H;
     int lmax = atoi(argv[1]);
     int cnt;
@@ -71,8 +72,8 @@ int main(int argc, char *argv[])
         snprintf(fname, 255, "H1l%d.csr", l);
         csr_read(fname, H+cnt);
         cnt++;
-    }    
-    
+    }
+
     // load the base g matrices
     // 4 matrices: g0, g1, g2, g3
     // alpha 0:6-1
@@ -89,49 +90,144 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("all matrices read correctly\n");
-    
-    {
-        csr_index_t row, col, colp;
-
-        // each submatrix will have the same non-zero structure as the base g matrices
-        sparse_csr_t submatrix;
-        csr_copy(&submatrix, g);
-
-        // for all rows
-        for(row = 0; row < Hall.dim; row++){
-            // for non-zeros in each row
-            for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
-                col = Hall.Ai[colp];
-
-                // apply node renumbering - if available
-                csr_index_t mrow = row;
-                csr_index_t mcol = col;
-                if(Hall.map) {
-                    mrow = Hall.map[row];
-                    mcol = Hall.map[col];
-                }
-
-                // calculate kappa and mu parameters from row/col indices
-                // see spnrbasis::bdpalphsigmaXmat
-                int ki = (int)ik(row); // k'
-                int kj = (int)ik(col); // k
-
-                double mui = imu(row); // mu'
-                double muj = imu(col); // mu
-
-                csr_zero(&submatrix);
-                for(int a=0; a<6; a++){
-                    for(int l=0; l<lmax; l++){
-                    }
-                }
+    // compute conjugate transpose of all g matrices
+    gt = malloc(sizeof(sparse_csr_t)*6*lmax*4);
+    cnt = 0;
+    for(int a=0; a<6; a++){
+        for(int l=0; l<lmax; l++){
+            for(int gi=0; gi<4; gi++){
+                csr_copy(gt+cnt, g+cnt);
+                csr_conj_transpose(gt+cnt, g+cnt);
+                cnt++;
             }
         }
     }
 
-    // compose the full sparse matrix
+    printf("All matrices read correctly. System info:\n");
+    printf(" - H dim: %d\n", H[0].dim);
+    printf(" - Hall dim: %d\n", Hall.dim);
+    printf(" - Hall nnz: %d\n", Hall.nnz);
+    printf(" - Hfull dim: %d\n", Hall.dim*g[0].dim);
+    printf(" - Hfull nnz: %d\n", Hall.nnz*g[0].nnz);
 
-    // compose the matrix row by row
+    // create the full matrix blocked structure
+    // same Ai as Hall
+    // Ap modified by the number of nnz in each block (g.nnz)
+    // Ax modified to store sub-matrices (g.nnz)
+    csr_copy(&Hfull, &Hall);
+    csr_block_update(&Hfull, g[0].dim, g[0].nnz);
 
-    // compose the individual sub-matrices separately for each non-zero
+
+    {
+        csr_index_t row, col, colp;
+        csr_data_t tmp;
+        // each submatrix will have the same non-zero structure as the base g matrices
+        sparse_csr_t submatrix;
+        csr_copy(&submatrix, g);
+
+        tic();
+        // for all rows
+        for(row = 0; row < Hall.dim; row++){
+
+            // for non-zeros in each row
+            for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
+
+                // NOTE: rows and cols in Hall are remapped wrt. the original numbering in H
+                col = Hall.Ai[colp];
+
+                // apply node renumbering - if available
+                csr_index_t orig_row = row;
+                csr_index_t orig_col = col;
+                if(Hall.map) {
+                    orig_row = Hall.map[row];
+                    orig_col = Hall.map[col];
+                }
+
+                // calculate kappa and mu parameters from row/col indices
+                // see spnrbasis::bdpalphsigmaXmat
+                int ki = (int)ik(orig_row); // k'
+                int kj = (int)ik(orig_col); // k
+
+                double mui = imu(orig_row); // mu'
+                double muj = imu(orig_col); // mu
+
+                sparse_csr_t *pg0, *pg1, *pg2, *pg3;
+                sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
+                csr_data_t H0[lmax], H1[lmax];
+                csr_data_t ft[6];
+
+                // get the time-dependent f(a,t)
+                for(int a=0; a<6; a++){
+                    ft[a] = CMPLX(1,0);
+                }
+
+                // get the Hamiltonian values H0(l) and H1(l)
+                for(int l=0; l<lmax; l++){
+                    H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
+                    H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
+                }
+
+                csr_zero(&submatrix);
+                for(int l=0; l<lmax; l++){
+
+                    if(H0[l] != CMPLX(0,0)){
+
+                        for(int a=0; a<6; a++){
+
+                            pg0 = g + a*4*lmax + l*4;
+                            pg1 = pg0 + 1;
+                            pg2 = pg0 + 2;
+                            pg3 = pg0 + 3;
+
+                            // g matrices all have the same nnz pattern,
+                            // so we can operate directly on the internal storage Ax
+                            for(csr_index_t i=0; i<submatrix.nnz; i++){
+                                submatrix.Ax[i] +=
+                                    ft[a]*H0[l]*(pg0->Ax[i]        +
+                                                 pg1->Ax[i]*ki     +
+                                                 pg2->Ax[i]*kj     +
+                                                 pg3->Ax[i]*ki*kj) ;
+                            }
+                        }
+                    }
+                }
+
+                for(int l=0; l<lmax; l++){
+                    if(H1[l] != CMPLX(0,0)){
+
+                        for(int a=0; a<6; a++){
+                            // get the time-dependent f(a,t)
+
+                            pgt0 = gt + a*4*lmax + l*4;
+                            pgt1 = pgt0 + 1;
+                            pgt2 = pgt0 + 2;
+                            pgt3 = pgt0 + 3;
+
+                            // g matrices all have the same nnz pattern,
+                            // so we can operate directly on the internal storage Ax
+                            for(csr_index_t i=0; i<submatrix.nnz; i++){
+                                submatrix.Ax[i] -=
+                                    ft[a]*H1[l]*(pgt0->Ax[i]       +
+                                                 pgt1->Ax[i]*ki    +
+                                                 pgt2->Ax[i]*kj    +
+                                                 pgt3->Ax[i]*ki*kj);
+                            }
+                        }
+                    }
+                }
+
+                // store the submatrix in the global Hfull
+                csr_block_insert(&Hfull, row, col, submatrix.Ax);
+            }
+        }
+        toc();
+
+        // The Hfull matrix contains all computed submatrices.
+        // The submatrices are stored as a sub-block in the csr storage
+        // meaning that the relevant Ax parts can be used directly
+        // as Ax arrays in a template submatrix csr structure, e.g.
+        // csr_block_link(&submatrix, &Hfull, row, col);
+
+        // submatrix now points 
+    }
 }
