@@ -1,0 +1,50 @@
+NOTE: sparse matrices are stored using the CSR (also known as CRS) storage,
+e.g., https://en.wikipedia.org/wiki/Sparse_matrix
+
+To use the matrix_tool one has to make some preparations:
+
+ - edit the input_example.json file and set the desired options
+   some important ones are
+    "Nsplines": 50  // dimension of the submatrices / g matrices
+    "Nkappa": 10    // dimension of the matrix
+    "Nmu" : 5       // fill of the matrix
+    "Nl": 5,        // fiii of the matrix, number of basic G and H matrices
+
+ - create the base G and H matrices by running dumpCouplings code:
+
+   # H matrices
+   build/src/dumpCouplings input_example.json
+
+   # G matrices
+   build/src/dumpCouplings -g input_example.json
+
+ - create the 'full' H matrix structure. The individual H matrices have
+   a differet non-zero pattern. The complete H matrix structure will have
+   a non-zero entry when at least one of the basic H matrices has a non-zero entry.
+   Hence, main.py computes the H matrix structure as a sum of all basic H matrices
+
+   python3 main.p
+
+   The above core removes empty rows/cols from H (such happens) and writes the H.csr matrix.
+   It also computes the metis partitioning of the H matrix for future MPI parallelization.
+
+ - finally, you can run the matrix_tool giving it the l value as argument (needed to
+   import correct number of basic G and H matrices):
+
+   matrix_tool 5
+
+The matrix_tool program does the following:
+ - read H[01]* and G matrices from .csr files
+ - compute conjugate transpose of G and store them in memory
+ - allocate the Hfull matrix, which explicitly stores all submatrices,
+   each submatrix being the size of G:
+ 
+    Hfull.dim = H.dim*G.dim
+    Hfull.nnz = H.nnz*G.nnz
+ 
+ - for each non-zero in the complete Hall matrix compute the submatrix
+   according to eq. 29 in the manuscript
+ - store the submatrix as a block inside the Hfull matrix.
+ - once all of Hfull is completed, iterate through the non-zero entries
+   (blocks), link the block storage to a G-like submatrix structure,
+   and multiply the submatrix by the appropriate vector entries
