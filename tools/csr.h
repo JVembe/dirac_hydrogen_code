@@ -33,6 +33,19 @@ void csr_print(const sparse_csr_t *sp)
     }
 }
 
+void csr_allocate(sparse_csr_t *out, csr_index_t dim, csr_index_t nnz)
+{
+    out->dim = dim;
+    out->nnz = nnz;
+    out->blk_nnz = 1;
+    out->blk_dim = 1;
+    out->is_link = 0;
+    out->map = NULL;
+    out->Ap = (csr_index_t*)calloc((out->dim+1), sizeof(csr_index_t));
+    out->Ai = (csr_index_t*)calloc(out->nnz, sizeof(csr_index_t));
+    out->Ax = (csr_data_t*)calloc(out->nnz*out->blk_nnz, sizeof(csr_data_t));
+}
+
 void csr_free(sparse_csr_t *sp)
 {
     free(sp->map);

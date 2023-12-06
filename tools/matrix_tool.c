@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
     }
 
     char fname[256];
-    sparse_csr_t Hall, Hfull;
+    sparse_csr_t Hall, Hfull, Hfull_blk;
     sparse_csr_t *g, *gt;
     sparse_csr_t *H;
     int lmax = atoi(argv[1]);
@@ -107,21 +107,74 @@ int main(int argc, char *argv[])
     // same Ap and Ai as Hall
     // Ax modified to store sub-matrices (g.nnz)
     int blkdim = csr_dim(&g[0]);
-    csr_copy(&Hfull, &Hall);
-    csr_block_update(&Hfull, blkdim, csr_nnz(&g[0]));
+    csr_copy(&Hfull_blk, &Hall);
+    csr_block_update(&Hfull_blk, blkdim, csr_nnz(&g[0]));
+
+    // create the non-blocked Hfull matrix structure
+    //  - each non-zero is converted to blkdim x blkdim submatrix
+    //  - each row has row_nnz(Hall)*row_nnz(G) non-zero entries
+    //  - create Hfull.Ap and Hfull.Ai accordingly
+    // Dimensions of Hfull and Hfull_blk are the same, and they have
+    // the same number of non-zeros. However, their Ap and Ai differ:
+    // Hfull_blk inherits Ap and Ai directly from Hall - one non-zero
+    // per entire submatrix.
+    // Hfull stores all non-zeros independently in a native, non-blocked csr storage
+    csr_allocate(&Hfull, csr_dim(&Hfull_blk), csr_nnz(&Hfull_blk));
+    {
+        // iterators over Hall
+        csr_index_t row, col, colp;
+
+        // iterators over G (block submatrices)
+        csr_index_t row_blk, colp_blk;
+
+        // iterators over non-blocked Hfull
+        csr_index_t col_dst, rowp_dst;
+        rowp_dst = 1;
+
+        // for all rows
+        for(row = 0; row < csr_dim(&Hall); row++){
+
+            // each row and each column are expanded into submatrices of size blkdim
+            for(row_blk=0; row_blk<blkdim; row_blk++){
+
+                // row in the expanded matrix
+                // row_dst = row*blkdim + row_blk;
+
+                // for non-zeros in each Hall row - fill the expanded row
+                for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
+                    col = Hall.Ai[colp];
+
+                    for(colp_blk=g[0].Ap[row_blk]; colp_blk<g[0].Ap[row_blk+1]; colp_blk++){
+
+                        // column in the expanded matrix
+                        col_dst = col*blkdim + g[0].Ai[colp_blk];
+
+                        // update Hfull.Ai and Hfull.Ap
+                        Hfull.Ai[Hfull.Ap[rowp_dst]] = col_dst;
+                        Hfull.Ap[rowp_dst]++;
+                    }
+                }
+
+                // next Hfull row - start where the last one ends
+                Hfull.Ap[rowp_dst+1] = Hfull.Ap[rowp_dst];
+                rowp_dst++;
+            }
+        }
+    }
 
     printf("All matrices read correctly. System info:\n");
     printf(" - H dim: %d\n", csr_dim(&H[0]));
     printf(" - Hall dim: %d\n", csr_dim(&Hall));
     printf(" - Hall nnz: %d\n", csr_nnz(&Hall));
-    printf(" - Hfull dim: %d\n", csr_dim(&Hfull));
-    printf(" - Hfull nnz: %d\n", csr_nnz(&Hfull));
+    printf(" - Hfull_blk dim: %d\n", csr_dim(&Hfull_blk));
+    printf(" - Hfull_blk nnz: %d\n", csr_nnz(&Hfull_blk));
 
     // allocate x and y vectors for SpMV
-    csr_data_t *x, *y;
-    x = (csr_data_t *)calloc(csr_dim(&Hfull), sizeof(csr_data_t));
-    y = (csr_data_t *)calloc(csr_dim(&Hfull), sizeof(csr_data_t));
-    
+    csr_data_t *x, *yblk, *yfull;
+    x = (csr_data_t *)calloc(csr_dim(&Hfull_blk), sizeof(csr_data_t));
+    yblk = (csr_data_t *)calloc(csr_dim(&Hfull_blk), sizeof(csr_data_t));
+    yfull = (csr_data_t *)calloc(csr_dim(&Hfull_blk), sizeof(csr_data_t));
+
     {
         csr_index_t row, col, colp;
 
@@ -218,38 +271,71 @@ int main(int argc, char *argv[])
                     }
                 }
 
-                // store the submatrix in the global Hfull
-                csr_block_insert(&Hfull, row, col, submatrix.Ax);
+                // store the submatrix in the global Hfull_blk
+                csr_block_insert(&Hfull_blk, row, col, submatrix.Ax);
             }
         }
         toc();
 
-        // The Hfull matrix contains all computed submatrices.
+        // convert blocked Hfull_blk to non-blocked Hfull
+        // could be done immediately above, but we do it here for timing purposes
+        tic();
+        // for all rows
+        for(row = 0; row < csr_dim(&Hall); row++){
+
+            // for non-zeros in each row
+            for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
+
+                // NOTE: rows and cols in Hall are remapped wrt. the original numbering in H
+                col = Hall.Ai[colp];
+
+                csr_block_link(&submatrix, &Hfull_blk, row, col);
+                
+                // insert into non-blocked Hfull matrix
+                csr_index_t row_blk, col_blk, colp_blk;
+                csr_index_t row_dst, col_dst;
+                csr_index_t valp = 0;
+                for(row_blk=0; row_blk<blkdim; row_blk++){
+
+                    row_dst = row*blkdim + row_blk;
+                    for(colp_blk=submatrix.Ap[row_blk]; colp_blk<submatrix.Ap[row_blk+1]; colp_blk++){
+                        col_blk = submatrix.Ai[colp_blk];
+                        col_dst = col*blkdim + col_blk;
+
+                        csr_set_value(&Hfull, row_dst, col_dst, submatrix.Ax[valp]);
+                        valp++;
+                    }
+                }
+            }
+        }
+        toc();
+        
+        // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
         // as Ax arrays in a template submatrix csr structure, e.g.
-        // csr_block_link(&submatrix, &Hfull, row, col);
+        // csr_block_link(&submatrix, &Hfull_blk, row, col);
 
         // initialize input vector
-        for(int i=0; i<csr_dim(&Hfull); i++) x[i] = CMPLX(1,0);
+        for(int i=0; i<csr_dim(&Hfull_blk); i++) x[i] = CMPLX(1,0);
 
         // DEBUG set all matrix nnz values to 1
-        // for(csr_index_t i=0; i<csr_nnz(&Hfull); i++) Hfull.Ax[i] = CMPLX(1,0);
-        
+        // for(csr_index_t i=0; i<csr_nnz(&Hfull_blk); i++) Hfull_blk.Ax[i] = CMPLX(1,0);
+
         tic();
         // for all block rows
-        for(row = 0; row < Hfull.dim; row++){
+        for(row = 0; row < Hfull_blk.dim; row++){
 
             // for non-zero blocks in each row
-            for(colp = Hfull.Ap[row]; colp < Hfull.Ap[row+1]; colp++){
+            for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
 
                 // NOTE: rows and cols in Hall are remapped wrt. the original numbering in H
-                col = Hfull.Ai[colp];
+                col = Hfull_blk.Ai[colp];
 
                 csr_data_t *xin, *yout;
-                csr_block_link(&submatrix, &Hfull, row, col);
+                csr_block_link(&submatrix, &Hfull_blk, row, col);
                 xin  = x + col*blkdim;
-                yout = y + row*blkdim;
+                yout = yblk + row*blkdim;
 
                 // perform spmv
                 spmv_crs_f(0, csr_dim(&submatrix), &submatrix, xin, yout);
@@ -259,6 +345,15 @@ int main(int argc, char *argv[])
         }
         toc();
 
-        // for(int i=0; i<csr_dim(&Hfull); i++) printf("%lf ", cimag(y[i]));
+        // perform spmv for the non-blocked Hfull matrix (native CSR storage)
+        tic();
+        spmv_crs_f(0, csr_dim(&Hfull), &Hfull, x, yfull);
+        toc();
+
+        // validate - compare yblk and yfull results
+        for(int i=0; i<csr_dim(&Hfull); i++) {
+            if(fabs(cimag(yfull[i]-yblk[i]))>1e-10) printf("%e *i\n", cimag(yfull[i]) - cimag(yblk[i]));
+            if(fabs(creal(yfull[i]-yblk[i]))>1e-10) printf("%e\n", creal(yfull[i]) - cimag(yblk[i]));
+        }
     }
 }
