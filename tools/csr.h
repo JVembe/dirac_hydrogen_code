@@ -5,6 +5,10 @@
 #include <complex.h>
 #include <strings.h>
 
+#ifdef USE_PREFETCHING
+#include <xmmintrin.h>
+#endif
+
 #define ERROR(...)                                                    \
     {                                                                 \
         fprintf(stderr,  __VA_ARGS__);                                \
