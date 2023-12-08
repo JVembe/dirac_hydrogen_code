@@ -25,6 +25,29 @@
 #include "csr.h"
 #include "../src/tictoc.h"
 
+#ifdef USE_CUDA
+#include <cuda_runtime_api.h>
+#include <cusparse.h>
+
+#define CHECK_CUDA(func) {						\
+    cudaError_t status = (func);					\
+    if (status != cudaSuccess) {					\
+      printf("CUDA API failed at line %d error: %s\n", __LINE__,	\
+	     cudaGetErrorString(status));				\
+      exit(1);								\
+    }									\
+  }
+
+#define CHECK_CUSPARSE(func) {						\
+    cusparseStatus_t status = (func);					\
+    if (status != CUSPARSE_STATUS_SUCCESS) {				\
+      printf("CUSPARSE API failed at line %d error %d.\n", __LINE__,	\
+	     status);							\
+      exit(1);								\
+    }									\
+  }
+#endif
+
 // from spnrbasis.cpp
 int ik(int i) {
     int ii = i/4;
@@ -36,11 +59,96 @@ int ik(int i) {
 }
 
 double imu(int i) {
-    int abskappa = abs(ik(i));
-    int kmod = max(2,2*abskappa);
-    double mu = i%kmod - abskappa + 0.5;
-    return mu;
+  int abskappa = abs(ik(i));
+  int kmod = max(2,2*abskappa);
+  double mu = i%kmod - abskappa + 0.5;
+  return mu;
 }
+
+void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
+{
+  // validate - compare yblk and yfull results
+  for(int i=0; i<dim; i++) {
+    if(fabs(cimag(v1[i]-v2[i]))>1e-10) printf("%e *i\n", cimag(v1[i]) - cimag(v2[i]));
+    if(fabs(creal(v1[i]-v2[i]))>1e-10) printf("%e\n", creal(v1[i]) - cimag(v2[i]));
+  }
+}
+
+#ifdef USE_CUDA
+void cuda_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull)
+{
+  int num_gpus;
+  CHECK_CUDA(cudaGetDeviceCount(&num_gpus));
+  printf("CUDA: found %d gpus\n", num_gpus);
+  CHECK_CUDA(cudaSetDevice(0));
+
+  cusparseHandle_t cuhandle;
+  CHECK_CUSPARSE(cusparseCreate(&cuhandle));
+
+  csr_index_t *dAp, *dAi;
+  csr_data_t  *dAx, *dpx, *dpyfull;
+
+  printf("CUDA allocate \t\t\t\t");
+  tic();
+  CHECK_CUDA(cudaMalloc((void**) &dAp, (1+csr_dim(&Hfull))*sizeof(csr_index_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dAi, csr_nnz(&Hfull)*sizeof(csr_index_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dAx, csr_nnz(&Hfull)*sizeof(csr_data_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dpx, csr_dim(&Hfull)*sizeof(csr_data_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dpyfull, csr_dim(&Hfull)*sizeof(csr_data_t)));
+  toc();
+
+  printf("CUDA copy to device \t\t\t");
+  tic();
+  CHECK_CUDA(cudaMemcpy (dAp, Hfull.Ap, (1+csr_dim(&Hfull))*sizeof(csr_index_t), cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMemcpy (dAi, Hfull.Ai, csr_nnz(&Hfull)*sizeof(csr_index_t), cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMemcpy (dAx, Hfull.Ax, csr_nnz(&Hfull)*sizeof(csr_data_t),  cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMemcpy (dpx, x, csr_dim(&Hfull)*sizeof(csr_data_t),  cudaMemcpyHostToDevice));
+  toc();
+
+  printf("CUDA create CSR matrix and vectors \t");
+  tic();
+  cusparseSpMatDescr_t dHfull;
+  CHECK_CUSPARSE(cusparseCreateCsr(&dHfull, csr_dim(&Hfull), csr_dim(&Hfull), csr_nnz(&Hfull),
+				   dAp, dAi, dAx,
+				   CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_C_64F));
+
+  cusparseDnVecDescr_t dx, dyfull;
+  CHECK_CUSPARSE(cusparseCreateDnVec(&dx, csr_dim(&Hfull), dpx, CUDA_C_64F));
+  CHECK_CUSPARSE(cusparseCreateDnVec(&dyfull, csr_dim(&Hfull), dpyfull, CUDA_C_64F));
+  toc();
+
+  csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
+  size_t bufferSize;
+
+  printf("CUDA analyze matrix \t\t\t");
+  tic();
+  CHECK_CUSPARSE(cusparseSpMV_bufferSize(cuhandle,
+					 CUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, dHfull, dx,
+					 (const void*)&beta, dyfull,
+					 CUDA_C_64F, CUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize));
+  toc();
+
+  csr_data_t *dbuffer;
+  CHECK_CUDA(cudaMalloc((void**) &dbuffer, bufferSize*sizeof(csr_data_t)));
+
+  printf("CUDA spmv \t\t\t\t");
+  tic();
+  CHECK_CUSPARSE(cusparseSpMV(cuhandle,
+			      CUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, dHfull, dx,
+			      (const void*)&beta, dyfull,
+			      CUDA_C_64F, CUSPARSE_SPMV_CSR_ALG1, dbuffer));
+  toc();
+
+  csr_data_t *gpu_result;
+  gpu_result = (csr_data_t *)calloc(csr_dim(&Hfull), sizeof(csr_data_t));
+  CHECK_CUDA(cudaMemcpy (gpu_result, dpyfull, csr_dim(&Hfull)*sizeof(csr_data_t),  cudaMemcpyDeviceToHost));
+
+  // validate - compare yfull and gpu results
+  compare_vectors(yfull, gpu_result, csr_dim(&Hfull));
+
+  CHECK_CUSPARSE(cusparseDestroy(cuhandle));
+}
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -290,7 +398,7 @@ int main(int argc, char *argv[])
                 col = Hall.Ai[colp];
 
                 csr_block_link(&submatrix, &Hfull_blk, row, col);
-                
+
                 // insert into non-blocked Hfull matrix
                 csr_index_t row_blk, col_blk, colp_blk;
                 csr_index_t row_dst, col_dst;
@@ -309,7 +417,7 @@ int main(int argc, char *argv[])
             }
         }
         toc();
-        
+
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
@@ -351,9 +459,10 @@ int main(int argc, char *argv[])
         toc();
 
         // validate - compare yblk and yfull results
-        for(int i=0; i<csr_dim(&Hfull); i++) {
-            if(fabs(cimag(yfull[i]-yblk[i]))>1e-10) printf("%e *i\n", cimag(yfull[i]) - cimag(yblk[i]));
-            if(fabs(creal(yfull[i]-yblk[i]))>1e-10) printf("%e\n", creal(yfull[i]) - cimag(yblk[i]));
-        }
+	compare_vectors(yfull, yblk, csr_dim(&Hfull));
     }
+
+#ifdef USE_CUDA
+    cuda_spmv_test(Hfull, x, yfull);
+#endif
 }

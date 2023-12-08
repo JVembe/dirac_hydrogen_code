@@ -3,7 +3,7 @@ import ctypes
 import numpy as npy
 from scipy import sparse
 from matplotlib import pyplot
-import metis
+#import metis
 
 def csr_read(fname):
     with open(fname, 'r') as f:
@@ -51,6 +51,8 @@ with open('H.csr', 'w+') as f:
     res.data.tofile(f)
     # write the map of new to original row/col indices
     nzc.tofile(f)
+
+exit(0)
     
 pyplot.spy(res, marker='.', markersize=1)
 pyplot.show()

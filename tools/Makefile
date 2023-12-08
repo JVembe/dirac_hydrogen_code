@@ -1,2 +1,2 @@
 all:
-	gcc -Wall -O3 -march=native matrix_tool.c -o matrix_tool -lm
+	nvcc -O3 matrix_tool.c -o matrix_tool -lm -DUSE_CUDA -lcusparse

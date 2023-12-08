@@ -17,7 +17,7 @@ void toc()
     gettimeofday(&te, NULL);
     s=te.tv_sec-tb.tv_sec;
     u=te.tv_usec-tb.tv_usec;
-    printf("time:                  %li.%.6lis\n", (s*1000000+u)/1000000, (s*1000000+u)%1000000);
+    printf("time:\t\t%li.%.6lis\n", (s*1000000+u)/1000000, (s*1000000+u)%1000000);
     fflush(stdout);
 }
 
