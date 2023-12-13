@@ -20,6 +20,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
+
 #define max(a,b) ((a)>(b)?(a):(b))
 
 #include "csr.h"
@@ -158,7 +162,7 @@ int main(int argc, char *argv[])
     }
 
     char fname[256];
-    sparse_csr_t Hall, Hfull, Hfull_blk;
+    sparse_csr_t Hall, Hfull, Hfull_blk, Hpart;
     sparse_csr_t *g, *gt;
     sparse_csr_t *H;
     int lmax = atoi(argv[1]);
@@ -169,6 +173,18 @@ int main(int argc, char *argv[])
     snprintf(fname, 255, "H.csr");
     csr_read(fname, &Hall);
 
+    int rank = 0, nranks = 1;
+#ifdef USE_MPI
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nranks);
+    if(Hall.npart != nranks) ERROR("There are %d MPI ranks, but the matrix is partition for %d ranks.\n", nranks, Hall.npart);
+#endif
+    
+    csr_get_partition(&Hpart, &Hall, rank, Hall.npart);
+    snprintf(fname, 255, "H_part%d.csr", rank);
+    csr_write(fname, &Hpart);
+    
     // read the individual Hamiltonian matrices H0 and H1
     // 2 matrices for each value of 0:lmax-1
     H = malloc(sizeof(sparse_csr_t)*lmax*2);
@@ -464,5 +480,9 @@ int main(int argc, char *argv[])
 
 #ifdef USE_CUDA
     cuda_spmv_test(Hfull, x, yfull);
+#endif
+
+#ifdef USE_MPI
+    MPI_Finalize();
 #endif
 }
