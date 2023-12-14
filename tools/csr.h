@@ -9,10 +9,10 @@
 #include "sorted_list.h"
 
 typedef struct {
-    csr_index_t dim, nnz, local_dim;
+    csr_index_t nrows, ncols, nnz;    
     csr_index_t blk_dim, blk_nnz;
-    csr_index_t npart, row_beg, row_end;
-    csr_index_t *map, *row_cpu_dist;
+    csr_index_t npart, row_beg, row_end, local_offset;
+    csr_index_t *perm, *row_cpu_dist;
     csr_index_t **comm_pattern, *comm_pattern_size, *n_comm_entries;
     csr_data_t  **recv_ptr;
     csr_index_t *Ap;
@@ -22,12 +22,13 @@ typedef struct {
 } sparse_csr_t;
 
 void csr_print(const sparse_csr_t *sp);
-void csr_allocate(sparse_csr_t *out, csr_index_t dim, csr_index_t nnz);
+void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_index_t nnz);
 void csr_free(sparse_csr_t *sp);
 void csr_copy(sparse_csr_t *out, const sparse_csr_t *in);
 void csr_zero(sparse_csr_t *sp);
-csr_index_t csr_dim(sparse_csr_t *sp_blk);
-csr_index_t csr_nnz(sparse_csr_t *sp_blk);
+csr_index_t csr_nnz(const sparse_csr_t *sp_blk);
+csr_index_t csr_nrows(const sparse_csr_t *sp_blk);
+csr_index_t csr_ncols(const sparse_csr_t *sp_blk);
 
 void csr_read(const char *fname, sparse_csr_t *sp);
 void csr_write(const char *fname, const sparse_csr_t *sp);

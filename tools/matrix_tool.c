@@ -94,34 +94,34 @@ void cuda_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull)
 
   printf("CUDA allocate \t\t\t\t");
   tic();
-  CHECK_CUDA(cudaMalloc((void**) &dAp, (1+csr_dim(&Hfull))*sizeof(csr_index_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dAp, (1+csr_nrows(&Hfull))*sizeof(csr_index_t)));
   CHECK_CUDA(cudaMalloc((void**) &dAi, csr_nnz(&Hfull)*sizeof(csr_index_t)));
   CHECK_CUDA(cudaMalloc((void**) &dAx, csr_nnz(&Hfull)*sizeof(csr_data_t)));
-  CHECK_CUDA(cudaMalloc((void**) &dpx, csr_dim(&Hfull)*sizeof(csr_data_t)));
-  CHECK_CUDA(cudaMalloc((void**) &dpyfull, csr_dim(&Hfull)*sizeof(csr_data_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dpx, csr_ncols(&Hfull)*sizeof(csr_data_t)));
+  CHECK_CUDA(cudaMalloc((void**) &dpyfull, csr_nrows(&Hfull)*sizeof(csr_data_t)));
   toc();
 
   printf("CUDA copy to device \t\t\t");
   tic();
-  CHECK_CUDA(cudaMemcpy (dAp, Hfull.Ap, (1+csr_dim(&Hfull))*sizeof(csr_index_t), cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMemcpy (dAp, Hfull.Ap, (1+csr_nrows(&Hfull))*sizeof(csr_index_t), cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy (dAi, Hfull.Ai, csr_nnz(&Hfull)*sizeof(csr_index_t), cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy (dAx, Hfull.Ax, csr_nnz(&Hfull)*sizeof(csr_data_t),  cudaMemcpyHostToDevice));
-  CHECK_CUDA(cudaMemcpy (dpx, x, csr_dim(&Hfull)*sizeof(csr_data_t),  cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMemcpy (dpx, x, csr_ncols(&Hfull)*sizeof(csr_data_t),  cudaMemcpyHostToDevice));
   toc();
 
   printf("CUDA create CSR matrix and vectors \t");
   tic();
   cusparseSpMatDescr_t dHfull;
-  CHECK_CUSPARSE(cusparseCreateCsr(&dHfull, csr_dim(&Hfull), csr_dim(&Hfull), csr_nnz(&Hfull),
+  CHECK_CUSPARSE(cusparseCreateCsr(&dHfull, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_nnz(&Hfull),
 				   dAp, dAi, dAx,
 				   CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_C_64F));
 
   cusparseDnVecDescr_t dx, dyfull;
-  CHECK_CUSPARSE(cusparseCreateDnVec(&dx, csr_dim(&Hfull), dpx, CUDA_C_64F));
-  CHECK_CUSPARSE(cusparseCreateDnVec(&dyfull, csr_dim(&Hfull), dpyfull, CUDA_C_64F));
+  CHECK_CUSPARSE(cusparseCreateDnVec(&dx, csr_ncols(&Hfull), dpx, CUDA_C_64F));
+  CHECK_CUSPARSE(cusparseCreateDnVec(&dyfull, csr_nrows(&Hfull), dpyfull, CUDA_C_64F));
   toc();
 
-  csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
+  csr_data_t alpha = CMPLX(1,0), beta = CMPLX(0,0);
   size_t bufferSize;
 
   printf("CUDA analyze matrix \t\t\t");
@@ -144,11 +144,11 @@ void cuda_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull)
   toc();
 
   csr_data_t *gpu_result;
-  gpu_result = (csr_data_t *)calloc(csr_dim(&Hfull), sizeof(csr_data_t));
-  CHECK_CUDA(cudaMemcpy (gpu_result, dpyfull, csr_dim(&Hfull)*sizeof(csr_data_t),  cudaMemcpyDeviceToHost));
+  gpu_result = (csr_data_t *)calloc(csr_nrows(&Hfull), sizeof(csr_data_t));
+  CHECK_CUDA(cudaMemcpy (gpu_result, dpyfull, csr_nrows(&Hfull)*sizeof(csr_data_t),  cudaMemcpyDeviceToHost));
 
   // validate - compare yfull and gpu results
-  compare_vectors(yfull, gpu_result, csr_dim(&Hfull));
+  compare_vectors(yfull, gpu_result, csr_nrows(&Hfull));
 
   CHECK_CUSPARSE(cusparseDestroy(cuhandle));
 }
@@ -178,15 +178,22 @@ int main(int argc, char *argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
-    if(Hall.npart != nranks) ERROR("There are %d MPI ranks, but the matrix is partition for %d ranks.\n", nranks, Hall.npart);
+    if(nranks>1 && Hall.npart != nranks)
+        ERROR("There are %d MPI ranks, but the matrix is partition for %d ranks.\n", nranks, Hall.npart);
 #endif
-    
-    csr_get_partition(&Hpart, &Hall, rank, Hall.npart);
-    snprintf(fname, 255, "H_part%d.csr", rank);
-    csr_write(fname, &Hpart);
+
+    // get local partition of the global H matrix
+    if(nranks>1){
+        csr_get_partition(&Hpart, &Hall, rank, Hall.npart);
+        snprintf(fname, 255, "H_part%d.csr", rank);
+        csr_write(fname, &Hpart);
+    } else {
+        Hpart = Hall;
+    }
     
     // read the individual Hamiltonian matrices H0 and H1
     // 2 matrices for each value of 0:lmax-1
+    // Note: these are global, with original node indices - no partitioning
     H = malloc(sizeof(sparse_csr_t)*lmax*2);
     cnt = 0;
     for(int l=0; l<lmax; l++){
@@ -227,14 +234,14 @@ int main(int argc, char *argv[])
         }
     }
 
-    // create the full matrix blocked structure
-    // same Ap and Ai as Hall
+    // create the full rank-local matrix blocked structure
+    // same Ap and Ai as Hpart
     // Ax modified to store sub-matrices (g.nnz)
-    int blkdim = csr_dim(&g[0]);
-    csr_copy(&Hfull_blk, &Hall);
+    int blkdim = csr_nrows(&g[0]);
+    csr_copy(&Hfull_blk, &Hpart);
     csr_block_update(&Hfull_blk, blkdim, csr_nnz(&g[0]));
-
-    // create the non-blocked Hfull matrix structure
+    
+    // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
     //  - each row has row_nnz(Hall)*row_nnz(G) non-zero entries
     //  - create Hfull.Ap and Hfull.Ai accordingly
@@ -243,7 +250,7 @@ int main(int argc, char *argv[])
     // Hfull_blk inherits Ap and Ai directly from Hall - one non-zero
     // per entire submatrix.
     // Hfull stores all non-zeros independently in a native, non-blocked csr storage
-    csr_allocate(&Hfull, csr_dim(&Hfull_blk), csr_nnz(&Hfull_blk));
+    csr_allocate(&Hfull, csr_nrows(&Hfull_blk), csr_ncols(&Hfull_blk), csr_nnz(&Hfull_blk));
     {
         // iterators over Hall
         csr_index_t row, col, colp;
@@ -256,7 +263,7 @@ int main(int argc, char *argv[])
         rowp_dst = 1;
 
         // for all rows
-        for(row = 0; row < csr_dim(&Hall); row++){
+        for(row = 0; row < csr_nrows(&Hpart); row++){
 
             // each row and each column are expanded into submatrices of size blkdim
             for(row_blk=0; row_blk<blkdim; row_blk++){
@@ -264,9 +271,9 @@ int main(int argc, char *argv[])
                 // row in the expanded matrix
                 // row_dst = row*blkdim + row_blk;
 
-                // for non-zeros in each Hall row - fill the expanded row
-                for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
-                    col = Hall.Ai[colp];
+                // for non-zeros in each Hpart row - fill the expanded row
+                for(colp = Hpart.Ap[row]; colp < Hpart.Ap[row+1]; colp++){
+                    col = Hpart.Ai[colp];
 
                     for(colp_blk=g[0].Ap[row_blk]; colp_blk<g[0].Ap[row_blk+1]; colp_blk++){
 
@@ -286,18 +293,25 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("All matrices read correctly. System info:\n");
-    printf(" - H dim: %d\n", csr_dim(&H[0]));
-    printf(" - Hall dim: %d\n", csr_dim(&Hall));
-    printf(" - Hall nnz: %d\n", csr_nnz(&Hall));
-    printf(" - Hfull_blk dim: %d\n", csr_dim(&Hfull_blk));
-    printf(" - Hfull_blk nnz: %d\n", csr_nnz(&Hfull_blk));
+    for(int r=0; r<nranks; r++){
+        if(rank == r){
+            printf("%d: All matrices read correctly. System info:\n", rank);
+            printf(" - H dim:         %d x %d\n", csr_nrows(&H[0]), csr_ncols(&H[0]));
+            printf(" - Hall dim:      %d x %d\n", csr_nrows(&Hall), csr_ncols(&Hall));
+            printf(" - Hall nnz:      %d\n", csr_nnz(&Hall));
+            printf(" - Hpart dim:     %d x %d\n", csr_nrows(&Hpart), csr_ncols(&Hpart));
+            printf(" - Hpart nnz:     %d\n", csr_nnz(&Hpart));
+            printf(" - Hfull dim:     %d x %d\n", csr_nrows(&Hfull_blk), csr_ncols(&Hfull_blk));
+            printf(" - Hfull nnz:     %d\n", csr_nnz(&Hfull_blk));
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
 
-    // allocate x and y vectors for SpMV
+    // allocate x and y vectors for SpMV: y = spA*x
     csr_data_t *x, *yblk, *yfull;
-    x = (csr_data_t *)calloc(csr_dim(&Hfull_blk), sizeof(csr_data_t));
-    yblk = (csr_data_t *)calloc(csr_dim(&Hfull_blk), sizeof(csr_data_t));
-    yfull = (csr_data_t *)calloc(csr_dim(&Hfull_blk), sizeof(csr_data_t));
+    x     = (csr_data_t *)calloc(csr_ncols(&Hfull_blk), sizeof(csr_data_t));
+    yblk  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
+    yfull = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
 
     {
         csr_index_t row, col, colp;
@@ -308,20 +322,20 @@ int main(int argc, char *argv[])
 
         tic();
         // for all rows
-        for(row = 0; row < csr_dim(&Hall); row++){
+        for(row = 0; row < csr_nrows(&Hpart); row++){
 
             // for non-zeros in each row
-            for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
+            for(colp = Hpart.Ap[row]; colp < Hpart.Ap[row+1]; colp++){
 
-                // NOTE: rows and cols in Hall are remapped wrt. the original numbering in H
-                col = Hall.Ai[colp];
+                // NOTE: rows and cols in Hpart are remapped wrt. the original numbering in H
+                col = Hpart.Ai[colp];
 
                 // apply node renumbering - if available
                 csr_index_t orig_row = row;
                 csr_index_t orig_col = col;
-                if(Hall.map) {
-                    orig_row = Hall.map[row];
-                    orig_col = Hall.map[col];
+                if(Hpart.perm) {
+                    orig_row = Hpart.perm[row + Hpart.local_offset];
+                    orig_col = Hpart.perm[col];
                 }
 
                 // calculate kappa and mu parameters from row/col indices
@@ -405,13 +419,13 @@ int main(int argc, char *argv[])
         // could be done immediately above, but we do it here for timing purposes
         tic();
         // for all rows
-        for(row = 0; row < csr_dim(&Hall); row++){
+        for(row = 0; row < Hfull_blk.nrows; row++){
 
             // for non-zeros in each row
-            for(colp = Hall.Ap[row]; colp < Hall.Ap[row+1]; colp++){
+            for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
 
-                // NOTE: rows and cols in Hall are remapped wrt. the original numbering in H
-                col = Hall.Ai[colp];
+                // NOTE: rows and cols are remapped wrt. the original numbering in H
+                col = Hfull_blk.Ai[colp];
 
                 csr_block_link(&submatrix, &Hfull_blk, row, col);
 
@@ -441,28 +455,29 @@ int main(int argc, char *argv[])
         // csr_block_link(&submatrix, &Hfull_blk, row, col);
 
         // initialize input vector
-        for(int i=0; i<csr_dim(&Hfull_blk); i++) x[i] = CMPLX(1,0);
+        for(int i=0; i<csr_ncols(&Hfull_blk); i++) x[i] = CMPLX(1,0);
 
         // DEBUG set all matrix nnz values to 1
         // for(csr_index_t i=0; i<csr_nnz(&Hfull_blk); i++) Hfull_blk.Ax[i] = CMPLX(1,0);
 
         tic();
         // for all block rows
-        for(row = 0; row < Hfull_blk.dim; row++){
+        for(row = 0; row < Hfull_blk.nrows; row++){
 
             // for non-zero blocks in each row
             for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
 
-                // NOTE: rows and cols in Hall are remapped wrt. the original numbering in H
+                // NOTE: rows and cols are remapped wrt. the original numbering in H
                 col = Hfull_blk.Ai[colp];
 
-                csr_data_t *xin, *yout;
                 csr_block_link(&submatrix, &Hfull_blk, row, col);
+                
+                csr_data_t *xin, *yout;
                 xin  = x + col*blkdim;
                 yout = yblk + row*blkdim;
 
                 // perform spmv
-                spmv_crs_f(0, csr_dim(&submatrix), &submatrix, xin, yout);
+                spmv_crs_f(0, csr_nrows(&submatrix), &submatrix, xin, yout);
 
                 // remember that at this stage xin and yout are renumbered wrt. the original node numbering
             }
@@ -471,11 +486,22 @@ int main(int argc, char *argv[])
 
         // perform spmv for the non-blocked Hfull matrix (native CSR storage)
         tic();
-        spmv_crs_f(0, csr_dim(&Hfull), &Hfull, x, yfull);
+        spmv_crs_f(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
 
         // validate - compare yblk and yfull results
-	compare_vectors(yfull, yblk, csr_dim(&Hfull));
+	compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+
+        // DEBUG: write out the result vectors for comparison with single-rank result
+        for(int r=0; r<nranks; r++){
+            if(rank == r){
+                for(row = 0; row < csr_nrows(&Hfull_blk); row++) fprintf(stderr, "%e %e\n", creal(yblk[row]), cimag(yblk[row]));
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Finalize();
+        exit(0);
     }
 
 #ifdef USE_CUDA
@@ -483,6 +509,7 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 #endif
 }

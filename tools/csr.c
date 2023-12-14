@@ -1,67 +1,73 @@
 #include "csr.h"
-
+#include <mpi.h>
 #ifdef USE_PREFETCHING
 #include <xmmintrin.h>
 #endif
 
 void csr_print(const sparse_csr_t *sp)
 {
-    for(csr_index_t row = 0; row < sp->dim; row++){
+    for(csr_index_t row = 0; row < sp->nrows; row++){
         for(csr_index_t cp = sp->Ap[row]; cp < sp->Ap[row+1]; cp++){
             printf("%d %d %lf + %lfi\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
         }
     }
 }
 
-void csr_allocate(sparse_csr_t *out, csr_index_t dim, csr_index_t nnz)
+void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_index_t nnz)
 {
-    out->dim = dim;
     out->nnz = nnz;
+    out->nrows = nrows;
+    out->ncols = ncols;
     out->blk_nnz = 1;
     out->blk_dim = 1;
     out->is_link = 0;
-    out->map = NULL;
-    out->Ap = (csr_index_t*)calloc((out->dim+1), sizeof(csr_index_t));
+    out->local_offset = 0;
+    out->perm = NULL;
+    out->Ap = (csr_index_t*)calloc((out->nrows+1), sizeof(csr_index_t));
     out->Ai = (csr_index_t*)calloc(out->nnz, sizeof(csr_index_t));
     out->Ax = (csr_data_t*)calloc(out->nnz*out->blk_nnz, sizeof(csr_data_t));
 }
 
 void csr_free(sparse_csr_t *sp)
 {
-    free(sp->map);
-    sp->map = NULL;
+    free(sp->perm);
+    sp->perm = NULL;
     free(sp->Ap);
     sp->Ap  = NULL;
     free(sp->Ai);
     sp->Ai  = NULL;
     if(!sp->is_link) free(sp->Ax);
     sp->Ax = NULL;
-    sp->dim = 0;
     sp->nnz = 0;
+    sp->nrows = 0; 
+    sp->ncols = 0;
     sp->blk_nnz = 1;
     sp->blk_dim = 1;
     sp->is_link = 0;
+    sp->local_offset = 0;
 }
 
 void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
 {
-    out->dim = in->dim;
+    out->nrows = in->nrows;
+    out->ncols = in->ncols;
     out->nnz = in->nnz;
     out->blk_nnz = in->blk_nnz;
     out->blk_dim = in->blk_dim;
     out->is_link = 0;
-    out->map = NULL;
+    out->perm = NULL;
+    out->local_offset = in->local_offset;
 
-    out->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(out->dim+1));
-    memcpy(out->Ap, in->Ap, sizeof(csr_index_t)*(out->dim+1));
+    out->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(out->nrows+1));
+    memcpy(out->Ap, in->Ap, sizeof(csr_index_t)*(out->nrows+1));
     out->Ai = (csr_index_t*)malloc(sizeof(csr_index_t)*out->nnz);
     memcpy(out->Ai, in->Ai, sizeof(csr_index_t)*out->nnz);
     out->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*out->nnz*out->blk_nnz);
     memcpy(out->Ax, in->Ax, sizeof(csr_data_t)*out->nnz*out->blk_nnz);
 
-    if(in->map){
-        out->map = (csr_index_t*)malloc(sizeof(csr_index_t)*out->dim);
-        memcpy(out->map, in->map, sizeof(csr_index_t)*out->dim);
+    if(in->perm){
+        out->perm = (csr_index_t*)malloc(sizeof(csr_index_t)*out->ncols);
+        memcpy(out->perm, in->perm, sizeof(csr_index_t)*out->ncols);
     }
 }
 
@@ -81,9 +87,7 @@ void csr_block_update(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz
 void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t *blk_ptr)
 {
     csr_index_t cp;
-    for(cp = sp->Ap[row]; cp < sp->Ap[row+1]; cp++){
-        if(sp->Ai[cp]>=col) break;
-    }
+    cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
     if(sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
     memcpy(sp->Ax + cp*sp->blk_nnz, blk_ptr, sizeof(csr_data_t)*sp->blk_nnz);
 }
@@ -91,22 +95,26 @@ void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_da
 void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr_index_t col)
 {
     csr_index_t cp;
-    for(cp = sp->Ap[row]; cp < sp->Ap[row+1]; cp++){
-        if(sp->Ai[cp]>=col) break;
-    }
+    cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
     if(sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
     sp_blk->is_link = 1;
     sp_blk->Ax = sp->Ax + cp*sp->blk_nnz;
-    sp_blk->dim = sp->blk_dim;
+    sp_blk->nrows = sp->blk_dim;
+    sp_blk->ncols = sp->blk_dim;
     sp_blk->nnz = sp->blk_nnz;
 }
 
-csr_index_t csr_dim(sparse_csr_t *sp_blk)
+csr_index_t csr_ncols(const sparse_csr_t *sp_blk)
 {
-    return sp_blk->dim*sp_blk->blk_dim;
+    return sp_blk->ncols*sp_blk->blk_dim;
 }
 
-csr_index_t csr_nnz(sparse_csr_t *sp_blk)
+csr_index_t csr_nrows(const sparse_csr_t *sp_blk)
+{
+    return sp_blk->nrows*sp_blk->blk_dim;
+}
+
+csr_index_t csr_nnz(const sparse_csr_t *sp_blk)
 {
     return sp_blk->nnz*sp_blk->blk_nnz;
 }
@@ -128,20 +136,22 @@ void csr_read(const char *fname, sparse_csr_t *sp)
     sp->blk_nnz = 1;
 
     // storage format: dim, nnz, Ap, Ai, Ax
-    nread = fread(&sp->dim, sizeof(csr_index_t), 1, fd);
+    nread = fread(&sp->nrows, sizeof(csr_index_t), 1, fd);
+    // TODO: change this to account for generalmatrices
+    sp->ncols = sp->nrows;
     nread = fread(&sp->nnz, sizeof(csr_index_t), 1, fd);
 
     // assume 1 partition
     sp->npart = 1;
     sp->row_beg = 0;
-    sp->row_end = sp->dim;
-    sp->local_dim = sp->dim;
+    sp->row_end = sp->nrows;
+    sp->local_offset = 0;
 
-    sp->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(sp->dim+1));
-    nread = fread(sp->Ap, sizeof(csr_index_t), (sp->dim+1), fd);
-    if(nread!=(sp->dim+1)) ERROR("wrong file format in %s\n", fname);
-    if(sp->Ap[sp->dim] != sp->nnz) ERROR("wrong file format (nnz) in %s: dim %d nnz %d Ap %d\n",
-                                         fname, sp->dim, sp->nnz, sp->Ap[sp->dim]);
+    sp->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(sp->nrows+1));
+    nread = fread(sp->Ap, sizeof(csr_index_t), (sp->nrows+1), fd);
+    if(nread!=(sp->nrows+1)) ERROR("wrong file format in %s\n", fname);
+    if(sp->Ap[sp->nrows] != sp->nnz) ERROR("wrong file format (nnz) in %s: nrows %d nnz %d Ap %d\n",
+                                         fname, sp->nrows, sp->nnz, sp->Ap[sp->nrows]);
 
     sp->Ai = (csr_index_t*)malloc(sizeof(csr_index_t)*sp->nnz);
     nread = fread(sp->Ai, sizeof(csr_index_t), sp->nnz, fd);
@@ -151,12 +161,12 @@ void csr_read(const char *fname, sparse_csr_t *sp)
     nread = fread(sp->Ax, sizeof(csr_data_t), sp->nnz, fd);
     if(nread!=sp->nnz) ERROR("wrong file format in %s\n", fname);
 
-    // check if we have node number maps
-    sp->map = (csr_index_t*)malloc(sizeof(csr_index_t)*sp->dim);
-    nread = fread(sp->map, sizeof(csr_index_t), sp->dim, fd);
-    if(nread!=sp->dim){
-        free(sp->map);
-        sp->map = NULL;
+    // check if we have node number perms
+    sp->perm = (csr_index_t*)malloc(sizeof(csr_index_t)*sp->ncols);
+    nread = fread(sp->perm, sizeof(csr_index_t), sp->ncols, fd);
+    if(nread!=sp->ncols){
+        free(sp->perm);
+        sp->perm = NULL;
     } else {
 
         // we need the partitioning
@@ -166,10 +176,6 @@ void csr_read(const char *fname, sparse_csr_t *sp)
         sp->row_cpu_dist = (csr_index_t*)malloc(sizeof(csr_index_t)*(sp->npart+1));
         nread = fread(sp->row_cpu_dist, sizeof(csr_index_t), sp->npart+1, fd);
         if(nread!=(sp->npart+1)) ERROR("wrong file format in %s: partitioning info inconsistent\n", fname);
-
-        // matrix requires repartitioning
-        sp->row_beg = -1;
-        sp->row_end = -1;
     }
 
     fclose(fd);
@@ -183,11 +189,12 @@ void csr_write(const char *fname, const sparse_csr_t *sp)
     if(!fd) ERROR("cant open %s\n", fname);
 
     // storage format: dim, nnz, Ap, Ai, Ax
-    nwrite = fwrite(&sp->local_dim, sizeof(csr_index_t), 1, fd);
+    // TODO: change this to account for generalmatrices
+    nwrite = fwrite(&sp->nrows, sizeof(csr_index_t), 1, fd);
     nwrite = fwrite(&sp->nnz, sizeof(csr_index_t), 1, fd);
 
-    nwrite = fwrite(sp->Ap, sizeof(csr_index_t), (sp->local_dim+1), fd);
-    if(nwrite!=(sp->local_dim+1)) ERROR("cant write file %s\n", fname);
+    nwrite = fwrite(sp->Ap, sizeof(csr_index_t), csr_nrows(sp)+1, fd);
+    if(nwrite!=csr_nrows(sp)+1) ERROR("cant write file %s\n", fname);
 
     nwrite = fwrite(sp->Ai, sizeof(csr_index_t), sp->nnz, fd);
     if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
@@ -247,10 +254,10 @@ void csr_analyze_communication(sparse_csr_t *sp, int rank, int nranks)
     }
 }
 
-void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks)
+void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks, csr_index_t *perm)
 {
     csr_index_t n_lower = 0, n_upper = 0;
-    csr_index_t col, newcol;
+    csr_index_t col, new_col, orig_col;
     csr_index_t iter = 0;
     csr_index_t *Ap = sp->Ap;
     csr_index_t *Ai = sp->Ai;
@@ -266,14 +273,20 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks)
     for(irank=rank+1; irank<nranks; irank++)
         n_upper += sp->n_comm_entries[rank*nranks+irank];
 
-    /* Remap the column indices using communication maps. */
+    /* re-map the permutation vector */
+    sp->ncols = row_end-row_beg+n_lower+n_upper;
+    sp->local_offset = n_lower;
+    sp->perm = (csr_index_t*)malloc(sizeof(csr_index_t)*sp->ncols);
+
+    /* Remap the column indices using communication perms. */
     /* Ai entries that access non-local vector parts are changed */
     /* so that they references vector entries corresponding to the position */
-    /* of the original column id in the communication map */
+    /* of the original column id in the communication perm */
     for(csr_index_t i=0; i<row_end-row_beg; i++){
         for(csr_index_t j=Ap[i]; j<Ap[i+1]; j++){
 
             col = Ai[j];
+            orig_col = perm[col];
 
             /* all local columns are assumed to be non-empty: we do not remove them */
             if(col>=row_beg && col<row_end) {
@@ -281,11 +294,11 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks)
             } else {
 
                 if(col<row_beg) {
-                    newcol = 0;
+                    new_col = 0;
                     irank    = 0;
                     irank_end= rank;
                 } else {
-                    newcol = n_lower+row_end-row_beg;
+                    new_col = n_lower+row_end-row_beg;
                     irank    = rank+1;
                     irank_end= nranks;
                 }
@@ -294,22 +307,25 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks)
                 for(; irank<irank_end; irank++){
                     if(col>=sp->row_cpu_dist[irank+1])
                         /* next irank, so increase by all comm entries for this irank */
-                        newcol += sp->n_comm_entries[rank*nranks+irank];
+                        new_col += sp->n_comm_entries[rank*nranks+irank];
                     else {
                         /* this is the irank - locate the cold id in the communication list */
-                        newcol += sorted_list_locate(sp->comm_pattern[rank*nranks+irank],
+                        new_col += sorted_list_locate(sp->comm_pattern[rank*nranks+irank],
                                                      sp->n_comm_entries[rank*nranks+irank], col);
                         break;
                     }
                 }
-                col = newcol;
-
-                /* update the entry in the communication pattern */
+                col = new_col;
             }
+
+            /* remap the row indices */
             Ai[j] = col;
+
+            /* remap the permutation */
+            sp->perm[col] = orig_col;
         }
     }
-
+    
     /*
       Remap communication pattern accordingly
       comm_pattern and comm_pattern_ext still use
@@ -326,16 +342,16 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks)
         /* } */
 
         /* remap communication entries that access external vector entries */
-        /* newcol = 0; */
+        /* new_col = 0; */
         /* for(irank=0; irank<nranks; irank++){ */
         /*     for(csr_index_t i=0; i<sp->n_comm_entries[rank*nranks+irank]; i++){ */
         /*         csr_index_t temp = sp->comm_pattern[rank*nranks+irank][i]; */
-        /*         sp->comm_pattern[rank*nranks+irank][i] = newcol + i; */
+        /*         sp->comm_pattern[rank*nranks+irank][i] = new_col + i; */
         /*         if(temp>=row_end){ */
         /*             sp->comm_pattern[rank*nranks+irank][i] += row_end-row_beg; */
         /*         } */
         /*     } */
-        /*     newcol += sp->n_comm_entries[rank*nranks+irank]; */
+        /*     new_col += sp->n_comm_entries[rank*nranks+irank]; */
         /* } */
     /* } */
 
@@ -346,16 +362,13 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks)
 
 void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int nranks)
 {
-    out->dim = sp->dim;
-    out->row_cpu_dist = sp->row_cpu_dist;
-    out->row_beg = sp->row_cpu_dist[rank];
-    out->row_end = sp->row_cpu_dist[rank+1];
-    out->local_dim = out->row_end - out->row_beg;
-    out->nnz = sp->Ap[out->row_end] - sp->Ap[out->row_beg];
+    csr_index_t row_beg = sp->row_cpu_dist[rank];
+    csr_index_t row_end = sp->row_cpu_dist[rank+1];
+    csr_allocate(out, row_end-row_beg, csr_ncols(sp), sp->Ap[row_end]-sp->Ap[row_beg]);
 
-    out->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(sp->local_dim+1));
-    out->Ai = (csr_index_t*)malloc(sizeof(csr_index_t)*sp->nnz);
-    out->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*sp->nnz);
+    out->row_cpu_dist = sp->row_cpu_dist;
+    out->row_beg = row_beg;
+    out->row_end = row_end;
 
     // initialize communication data structures
     out->comm_pattern  = (csr_index_t**)calloc(nranks*nranks, sizeof(csr_index_t*));
@@ -375,7 +388,7 @@ void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int 
     }
 
     csr_analyze_communication(out, rank, nranks);
-    csr_remove_empty_columns(out, rank, nranks);
+    csr_remove_empty_columns(out, rank, nranks, sp->perm);
 }
 
 void csr_init_communication(sparse_csr_t *sp, csr_data_t *recv_vector, int rank, int nranks)
@@ -424,7 +437,7 @@ void csr_conj_transpose(sparse_csr_t *out, const sparse_csr_t *in)
 {
     // NOTE: this only works for non-blocked matrices
 
-    for(csr_index_t row = 0; row < in->dim; row++){
+    for(csr_index_t row = 0; row < in->nrows; row++){
         for(csr_index_t cp = in->Ap[row]; cp < in->Ap[row+1]; cp++){
             csr_set_value(out, in->Ai[cp], row, conj(in->Ax[cp]));
         }
