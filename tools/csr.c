@@ -39,7 +39,7 @@ void csr_free(sparse_csr_t *sp)
     if(!sp->is_link) free(sp->Ax);
     sp->Ax = NULL;
     sp->nnz = 0;
-    sp->nrows = 0; 
+    sp->nrows = 0;
     sp->ncols = 0;
     sp->blk_nnz = 1;
     sp->blk_dim = 1;
@@ -325,7 +325,7 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks, csr_index_
             sp->perm[col] = orig_col;
         }
     }
-    
+
     /*
       Remap communication pattern accordingly
       comm_pattern and comm_pattern_ext still use

@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
     } else {
         Hpart = Hall;
     }
-    
+
     // read the individual Hamiltonian matrices H0 and H1
     // 2 matrices for each value of 0:lmax-1
     // Note: these are global, with original node indices - no partitioning
@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
     int blkdim = csr_nrows(&g[0]);
     csr_copy(&Hfull_blk, &Hpart);
     csr_block_update(&Hfull_blk, blkdim, csr_nnz(&g[0]));
-    
+
     // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
     //  - each row has row_nnz(Hall)*row_nnz(G) non-zero entries
@@ -471,7 +471,7 @@ int main(int argc, char *argv[])
                 col = Hfull_blk.Ai[colp];
 
                 csr_block_link(&submatrix, &Hfull_blk, row, col);
-                
+
                 csr_data_t *xin, *yout;
                 xin  = x + col*blkdim;
                 yout = yblk + row*blkdim;
