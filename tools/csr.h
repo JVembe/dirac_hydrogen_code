@@ -14,7 +14,7 @@ typedef struct {
     csr_index_t npart, row_beg, row_end, local_offset;
     csr_index_t *perm, *row_cpu_dist;
     csr_index_t **comm_pattern, *comm_pattern_size, *n_comm_entries;
-    csr_data_t  **recv_ptr;
+    csr_data_t  **recv_ptr, **send_ptr;
     csr_index_t *Ap;
     csr_index_t *Ai;
     csr_data_t  *Ax;
@@ -38,7 +38,8 @@ void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_da
 void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr_index_t col);
 
 void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int nranks);
-void csr_init_communication(sparse_csr_t *sp, csr_data_t *recv_vector, int rank, int nranks);
+void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, int nranks);
+void csr_init_communication(const sparse_csr_t *sp, csr_data_t *px, int rank, int nranks);
 
 csr_data_t csr_get_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col);
 void csr_set_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t val);

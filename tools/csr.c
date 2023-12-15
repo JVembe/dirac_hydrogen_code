@@ -1,4 +1,5 @@
 #include "csr.h"
+#include <unistd.h>
 
 #ifdef USE_MPI
 #include <mpi.h>
@@ -25,42 +26,57 @@ void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_i
     out->blk_nnz = 1;
     out->blk_dim = 1;
     out->is_link = 0;
-    out->local_offset = 0;
     out->perm = NULL;
     out->Ap = (csr_index_t*)calloc((out->nrows+1), sizeof(csr_index_t));
     out->Ai = (csr_index_t*)calloc(out->nnz, sizeof(csr_index_t));
     out->Ax = (csr_data_t*)calloc(out->nnz*out->blk_nnz, sizeof(csr_data_t));
+    
+    out->row_cpu_dist       = NULL;
+    out->comm_pattern       = NULL;
+    out->comm_pattern_size  = NULL;
+    out->n_comm_entries     = NULL;
+    out->recv_ptr           = NULL;
+    out->send_ptr           = NULL;
+    out->npart              = 1;
+    out->row_beg            = 0;
+    out->row_end            = 0;
+    out->local_offset       = 0;
 }
 
 void csr_free(sparse_csr_t *sp)
 {
-    free(sp->perm);
-    sp->perm = NULL;
-    free(sp->Ap);
-    sp->Ap  = NULL;
-    free(sp->Ai);
-    sp->Ai  = NULL;
-    if(!sp->is_link) free(sp->Ax);
-    sp->Ax = NULL;
+    free(sp->perm);    sp->perm = NULL;
+    free(sp->Ap);      sp->Ap  = NULL;
+    free(sp->Ai);      sp->Ai  = NULL;
+    if(!sp->is_link) free(sp->Ax);  sp->Ax = NULL;
     sp->nnz = 0;
     sp->nrows = 0;
     sp->ncols = 0;
     sp->blk_nnz = 1;
     sp->blk_dim = 1;
     sp->is_link = 0;
-    sp->local_offset = 0;
+
+    /* TODO: free */
+    sp->row_cpu_dist       = NULL;
+    sp->comm_pattern       = NULL;
+    sp->comm_pattern_size  = NULL;
+    sp->n_comm_entries     = NULL;
+    sp->recv_ptr           = NULL;
+    sp->send_ptr           = NULL;
+    sp->npart              = 1;
+    sp->row_beg            = 0;
+    sp->row_end            = 0;
+    sp->local_offset       = 0;
 }
 
 void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
 {
+    out->nnz = in->nnz;
     out->nrows = in->nrows;
     out->ncols = in->ncols;
-    out->nnz = in->nnz;
     out->blk_nnz = in->blk_nnz;
     out->blk_dim = in->blk_dim;
     out->is_link = 0;
-    out->perm = NULL;
-    out->local_offset = in->local_offset;
 
     out->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(out->nrows+1));
     memcpy(out->Ap, in->Ap, sizeof(csr_index_t)*(out->nrows+1));
@@ -69,10 +85,22 @@ void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
     out->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*out->nnz*out->blk_nnz);
     memcpy(out->Ax, in->Ax, sizeof(csr_data_t)*out->nnz*out->blk_nnz);
 
+    out->perm = NULL;
     if(in->perm){
         out->perm = (csr_index_t*)malloc(sizeof(csr_index_t)*out->ncols);
         memcpy(out->perm, in->perm, sizeof(csr_index_t)*out->ncols);
     }
+
+    /* TODO: reallocate and copy */
+    out->row_cpu_dist       = in->row_cpu_dist;
+    out->comm_pattern       = in->comm_pattern;
+    out->comm_pattern_size  = in->comm_pattern_size;
+    out->n_comm_entries     = in->n_comm_entries;
+    out->recv_ptr           = in->recv_ptr;
+    out->send_ptr           = in->send_ptr;
+    out->row_beg            = in->row_beg;
+    out->row_end            = in->row_end;
+    out->local_offset       = in->local_offset;
 }
 
 void csr_block_update(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz)
@@ -269,13 +297,13 @@ void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
     /* now exchange the actual column indices */
     /* first come recv requests, then send requests */
     MPI_Request comm_requests[2*nranks];
-
+    
     /* pre-post recv requests for all ranks that will send to us */
     for(int irank=0; irank<nranks; irank++){
         csr_index_t nent = sp->n_comm_entries[irank*nranks + rank];
         comm_requests[irank] = MPI_REQUEST_NULL;
         if(0 != nent){
-
+            
             /* allocate index buffer */
             sp->comm_pattern[irank*nranks + rank] = (csr_index_t*)calloc(nent, sizeof(csr_index_t));
             sp->n_comm_entries[irank*nranks + rank] = nent;
@@ -286,6 +314,7 @@ void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
         }
     }
 
+    
     /* send column indices to the ranks that should receive them */
     for(int irank=0; irank<nranks; irank++){
         csr_index_t nent = sp->n_comm_entries[rank*nranks + irank];
@@ -302,6 +331,10 @@ void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
     CHECK_MPI(MPI_Waitall(2*nranks, comm_requests, MPI_STATUSES_IGNORE));
 
 #endif
+}
+
+void csr_comm(sparse_csr_t *sp, int rank, int nranks)
+{
 }
 
 void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks, csr_index_t *perm)
@@ -430,6 +463,7 @@ void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int 
     csr_allocate(out, row_end-row_beg, csr_ncols(sp), sp->Ap[row_end]-sp->Ap[row_beg]);
 
     /* keep the row distribution info in each partition - needed for communication */
+    /* TODO: copy / reallocate row_cpu_dist */
     out->row_cpu_dist = sp->row_cpu_dist;
     out->row_beg = row_beg;
     out->row_end = row_end;
@@ -439,6 +473,7 @@ void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int 
     out->comm_pattern_size  = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
     out->n_comm_entries     = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
     out->recv_ptr           = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
+    out->send_ptr           = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
 
     /* localize row pointers */
     for(csr_index_t row = row_beg, local_row = 0; row <= row_end; row++, local_row++){
@@ -465,23 +500,119 @@ void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int 
     csr_remove_empty_columns(out, rank, nranks, sp->perm);
 }
 
-void csr_init_communication(sparse_csr_t *sp, csr_data_t *recv_vector, int rank, int nranks)
+/* spell out blocked communication data structures */
+/* to explicit, non-blockes indices used by a non-blocked matrix */
+void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, int nranks)
 {
-    csr_data_t *recv_location = recv_vector;
+    /* initialize communication data structures */
+    out->row_cpu_dist = (csr_index_t*)calloc(nranks+1, sizeof(csr_index_t));
+    for(csr_index_t i=0; i<nranks+1; i++)
+        out->row_cpu_dist[i] = in->row_cpu_dist[i]*in->blk_dim;
+    out->row_beg = out->row_cpu_dist[rank];
+    out->row_end = out->row_cpu_dist[rank+1];
+
+    out->n_comm_entries     = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
+    for(int i=0; i<nranks*nranks; i++)
+        out->n_comm_entries[i] = in->n_comm_entries[i]*in->blk_dim;
+
+    out->comm_pattern       = (csr_index_t**)calloc(nranks*nranks, sizeof(csr_index_t*));
+    out->comm_pattern_size  = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
+    for(int irank=0; irank<nranks; irank++){
+        csr_index_t comm_iter;
+        csr_index_t nent;
+        int comm_idx;
+
+        comm_idx = irank*nranks + rank;
+        nent = out->n_comm_entries[comm_idx];
+        if(nent){
+            out->comm_pattern_size[comm_idx] = nent;
+            out->comm_pattern[comm_idx] = (csr_index_t*)calloc(nent, sizeof(csr_index_t));
+            comm_iter = 0;
+            for(csr_index_t j=0; j<in->n_comm_entries[comm_idx]; j++){
+                for(csr_index_t jj=0; jj<in->blk_dim; jj++){
+                    out->comm_pattern[comm_idx][comm_iter++] = in->comm_pattern[comm_idx][j]*in->blk_dim + jj;
+                }
+            }
+        }
+        
+        comm_idx = rank*nranks + irank;
+        nent = out->n_comm_entries[rank*nranks + irank];
+        if(nent){
+            out->comm_pattern_size[comm_idx] = nent;
+            out->comm_pattern[comm_idx] = (csr_index_t*)calloc(nent, sizeof(csr_index_t));
+            comm_iter = 0;
+            for(csr_index_t j=0; j<in->n_comm_entries[comm_idx]; j++){
+                for(csr_index_t jj=0; jj<in->blk_dim; jj++){
+                    out->comm_pattern[comm_idx][comm_iter++] = in->comm_pattern[comm_idx][j]*in->blk_dim + jj;
+                }
+            }
+        }
+    }
+    
+    /* details filled in init_communication */
+    out->recv_ptr           = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
+    out->send_ptr           = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
+
+    out->npart              = nranks;
+    out->local_offset       = 0;
+
+    /* // DEBUG: write out the result vectors for comparison with single-rank result */
+    /* for(int r=0; r<nranks; r++){ */
+    /*     if(rank == r){ */
+    /*         // for(int i = 0; i < nranks*nranks; i++) fprintf(stdout, "%d ", out->n_comm_entries[i]); fprintf(stdout, "\n"); */
+    /*         for(int irank = 0; irank < nranks; irank++) { */
+    /*             csr_index_t nent = out->n_comm_entries[irank*nranks + rank]; */
+    /*             printf("%d: send to %d: %d\n", rank, irank, nent); */
+    /*             if(nent){ */
+    /*                 for(int i=0; i<nent; i++) printf("%d ", out->comm_pattern[irank*nranks + rank][i]); printf("\n"); */
+    /*             } */
+    /*         } */
+    /*     } */
+    /*     MPI_Barrier(MPI_COMM_WORLD); */
+    /* } */
+    /* MPI_Barrier(MPI_COMM_WORLD); */
+    /* if(rank==0) printf("-------------------------\n"); */
+
+    /* for(int r=0; r<nranks; r++){ */
+    /*     if(rank == r){ */
+    /*         // for(int i = 0; i < nranks*nranks; i++) fprintf(stdout, "%d ", out->n_comm_entries[i]); fprintf(stdout, "\n"); */
+    /*         for(int irank = 0; irank < nranks; irank++) { */
+    /*             csr_index_t nent = out->n_comm_entries[rank*nranks + irank]; */
+    /*             printf("%d: recv from %d: %d\n", rank, irank, nent); */
+    /*             if(nent){ */
+    /*                 for(int i=0; i<nent; i++) printf("%d ", out->comm_pattern[rank*nranks + irank][i]); printf("\n"); */
+    /*             } */
+    /*         } */
+    /*     } */
+    /*     MPI_Barrier(MPI_COMM_WORLD); */
+    /* } */
+    /* MPI_Barrier(MPI_COMM_WORLD); */
+    
+}
+
+void csr_init_communication(const sparse_csr_t *sp, csr_data_t *px, int rank, int nranks)
+{
+    csr_data_t *recv_location = px;
 
     /* setup pointers to recv buffers */
     for(int irank=0; irank<nranks; irank++){
         if(irank == rank) {
             /* update by local vector entries */
-            recv_location += sp->row_end-sp->row_beg;
+            recv_location += (sp->row_end-sp->row_beg)*sp->blk_dim;
             continue;
         }
 
-        /* here is our recv address */
-        sp->recv_ptr[irank] = recv_location;
+        /* setup the recv address */
+        if(sp->n_comm_entries[rank*nranks+irank]){
+            sp->recv_ptr[irank] = recv_location;
+        }
+        recv_location += sp->n_comm_entries[rank*nranks+irank]*sp->blk_dim;
 
-        /* proceed to next irank */
-        recv_location += sp->n_comm_entries[rank*nranks+irank];
+        /* setup the send buffer */
+        if(sp->n_comm_entries[irank*nranks+rank]){
+            csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
+            sp->send_ptr[irank] = (csr_data_t*)calloc(nent, sizeof(csr_data_t));
+        }
     }
 }
 

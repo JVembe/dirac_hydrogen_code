@@ -292,6 +292,14 @@ int main(int argc, char *argv[])
                 rowp_dst++;
             }
         }
+
+        // Hfull_blk has the comm info copied from Hpart,
+        // but Hfull doesnt - it has to be modified by the block size.
+        // At this point there is no comm info in Hfull - so copy it.
+        csr_unblock_comm_info(&Hfull, &Hfull_blk, rank, nranks);
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Finalize();
+    exit(0);
     }
 
     for(int r=0; r<nranks; r++){
@@ -449,6 +457,9 @@ int main(int argc, char *argv[])
         }
         toc();
 
+        csr_init_communication(&Hfull_blk, x, rank, nranks);
+
+        
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
