@@ -3,3 +3,5 @@ matrix_tool_hip
 matrix_tool_cuda
 requirements.txt
 build
+*.sbatch
+*.out
