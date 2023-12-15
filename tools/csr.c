@@ -1,5 +1,9 @@
 #include "csr.h"
+
+#ifdef USE_MPI
 #include <mpi.h>
+#endif
+
 #ifdef USE_PREFETCHING
 #include <xmmintrin.h>
 #endif
@@ -151,7 +155,7 @@ void csr_read(const char *fname, sparse_csr_t *sp)
     nread = fread(sp->Ap, sizeof(csr_index_t), (sp->nrows+1), fd);
     if(nread!=(sp->nrows+1)) ERROR("wrong file format in %s\n", fname);
     if(sp->Ap[sp->nrows] != sp->nnz) ERROR("wrong file format (nnz) in %s: nrows %d nnz %d Ap %d\n",
-                                         fname, sp->nrows, sp->nnz, sp->Ap[sp->nrows]);
+                                           fname, sp->nrows, sp->nnz, sp->Ap[sp->nrows]);
 
     sp->Ai = (csr_index_t*)malloc(sizeof(csr_index_t)*sp->nnz);
     nread = fread(sp->Ai, sizeof(csr_index_t), sp->nnz, fd);
@@ -206,7 +210,7 @@ void csr_write(const char *fname, const sparse_csr_t *sp)
 }
 
 /* walk through Ai and save communication (non-local) columns */
-void csr_analyze_communication(sparse_csr_t *sp, int rank, int nranks)
+void csr_analyze_comm(sparse_csr_t *sp, int rank, int nranks)
 {
 
     /* allocate communication lists */
@@ -252,6 +256,52 @@ void csr_analyze_communication(sparse_csr_t *sp, int rank, int nranks)
             }
         }
     }
+}
+
+void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
+{
+#ifdef USE_MPI
+
+    /* first exchange the number of communication entries between all ranks */
+    CHECK_MPI(MPI_Allgather(sp->n_comm_entries+rank*nranks, nranks, MPI_CSR_INDEX_T,
+                            sp->n_comm_entries, nranks, MPI_CSR_INDEX_T, MPI_COMM_WORLD));
+
+    /* now exchange the actual column indices */
+    /* first come recv requests, then send requests */
+    MPI_Request comm_requests[2*nranks];
+
+    /* pre-post recv requests for all ranks that will send to us */
+    for(int irank=0; irank<nranks; irank++){
+        csr_index_t nent = sp->n_comm_entries[irank*nranks + rank];
+        comm_requests[irank] = MPI_REQUEST_NULL;
+        if(0 != nent){
+
+            /* allocate index buffer */
+            sp->comm_pattern[irank*nranks + rank] = (csr_index_t*)calloc(nent, sizeof(csr_index_t));
+            sp->n_comm_entries[irank*nranks + rank] = nent;
+
+            /* submit a recv */
+            CHECK_MPI(MPI_Irecv(sp->comm_pattern[irank*nranks + rank], nent, MPI_CSR_INDEX_T, irank, 0,
+                                MPI_COMM_WORLD, comm_requests+irank));
+        }
+    }
+
+    /* send column indices to the ranks that should receive them */
+    for(int irank=0; irank<nranks; irank++){
+        csr_index_t nent = sp->n_comm_entries[rank*nranks + irank];
+        comm_requests[nranks + irank] = MPI_REQUEST_NULL;
+        if(0 != nent){
+
+            /* submit a send */
+            CHECK_MPI(MPI_Isend(sp->comm_pattern[rank*nranks + irank], nent, MPI_CSR_INDEX_T, irank, 0,
+                                MPI_COMM_WORLD, comm_requests+nranks+irank));
+        }
+    }
+
+    /* progress the communication */
+    CHECK_MPI(MPI_Waitall(2*nranks, comm_requests, MPI_STATUSES_IGNORE));
+
+#endif
 }
 
 void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks, csr_index_t *perm)
@@ -311,7 +361,7 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks, csr_index_
                     else {
                         /* this is the irank - locate the cold id in the communication list */
                         new_col += sorted_list_locate(sp->comm_pattern[rank*nranks+irank],
-                                                     sp->n_comm_entries[rank*nranks+irank], col);
+                                                      sp->n_comm_entries[rank*nranks+irank], col);
                         break;
                     }
                 }
@@ -327,37 +377,50 @@ void csr_remove_empty_columns(sparse_csr_t *sp, int rank, int nranks, csr_index_
     }
 
     /*
-      Remap communication pattern accordingly
-      comm_pattern and comm_pattern_ext still use
-      global indices. Change them so that they reflect
-      the changes we made to the Ai matrix
+      Remap communication pattern accordingly. comm_pattern still uses global indices.
+      Change it so that it reflects the changes we made to the Ai matrix.
     */
-    /* { */
 
-        /* remap communication entries that access local irankead vector part */
-        /* for(irank=0; irank<nranks; irank++){ */
-        /*     for(csr_index_t i=0; i<sp->n_comm_entries[irank*nranks+rank]; i++){ */
-        /*         sp->comm_pattern_ext[irank*nranks+rank][i] += n_lower - row_beg; */
-        /*     } */
-        /* } */
+    /* remap communication entries that access local irankead vector part */
+    for(irank=0; irank<nranks; irank++){
+        for(csr_index_t i=0; i<sp->n_comm_entries[irank*nranks+rank]; i++){
+            sp->comm_pattern[irank*nranks+rank][i] += n_lower - row_beg;
+        }
+    }
 
-        /* remap communication entries that access external vector entries */
-        /* new_col = 0; */
-        /* for(irank=0; irank<nranks; irank++){ */
-        /*     for(csr_index_t i=0; i<sp->n_comm_entries[rank*nranks+irank]; i++){ */
-        /*         csr_index_t temp = sp->comm_pattern[rank*nranks+irank][i]; */
-        /*         sp->comm_pattern[rank*nranks+irank][i] = new_col + i; */
-        /*         if(temp>=row_end){ */
-        /*             sp->comm_pattern[rank*nranks+irank][i] += row_end-row_beg; */
-        /*         } */
-        /*     } */
-        /*     new_col += sp->n_comm_entries[rank*nranks+irank]; */
-        /* } */
-    /* } */
+    /*
+    // DEBUG: write out the result vectors for comparison with single-rank result
+    for(int r=0; r<nranks; r++){
+        if(rank == r){
+            // for(int i = 0; i < nranks*nranks; i++) fprintf(stdout, "%d ", sp->n_comm_entries[i]); fprintf(stdout, "\n");
+            for(int irank = 0; irank < nranks; irank++) {
+                csr_index_t nent = sp->n_comm_entries[irank*nranks + rank];
+                printf("%d: send to %d: %d\n", rank, irank, nent);
+                if(nent){
+                    for(int i=0; i<nent; i++) printf("%d ", sp->comm_pattern[irank*nranks + rank][i]); printf("\n");
+                }
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(rank==0) printf("-------------------------\n");
 
-    /* sp->local_offset = n_lower; */
-    /* sp->maxcol = n_lower+row_end-row_beg+n_upper-1; */
-    /* sp->mincol = 0; */
+    for(int r=0; r<nranks; r++){
+        if(rank == r){
+            // for(int i = 0; i < nranks*nranks; i++) fprintf(stdout, "%d ", sp->n_comm_entries[i]); fprintf(stdout, "\n");
+            for(int irank = 0; irank < nranks; irank++) {
+                csr_index_t nent = sp->n_comm_entries[rank*nranks + irank];
+                printf("%d: recv from %d: %d\n", rank, irank, nent);
+                if(nent){
+                    for(int i=0; i<nent; i++) printf("%d ", sp->comm_pattern[rank*nranks + irank][i]); printf("\n");
+                }
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    */
 }
 
 void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int nranks)
@@ -366,28 +429,39 @@ void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int 
     csr_index_t row_end = sp->row_cpu_dist[rank+1];
     csr_allocate(out, row_end-row_beg, csr_ncols(sp), sp->Ap[row_end]-sp->Ap[row_beg]);
 
+    /* keep the row distribution info in each partition - needed for communication */
     out->row_cpu_dist = sp->row_cpu_dist;
     out->row_beg = row_beg;
     out->row_end = row_end;
 
-    // initialize communication data structures
-    out->comm_pattern  = (csr_index_t**)calloc(nranks*nranks, sizeof(csr_index_t*));
+    /* initialize communication data structures */
+    out->comm_pattern       = (csr_index_t**)calloc(nranks*nranks, sizeof(csr_index_t*));
     out->comm_pattern_size  = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
-    out->n_comm_entries = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
-    out->recv_ptr = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
+    out->n_comm_entries     = (csr_index_t*)calloc(nranks*nranks, sizeof(csr_index_t));
+    out->recv_ptr           = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
 
-    // local row pointers
-    for(csr_index_t row = out->row_beg, local_row = 0; row <= out->row_end; row++, local_row++){
-        out->Ap[local_row] = sp->Ap[row] - sp->Ap[out->row_beg];
+    /* localize row pointers */
+    for(csr_index_t row = row_beg, local_row = 0; row <= row_end; row++, local_row++){
+        out->Ap[local_row] = sp->Ap[row] - sp->Ap[row_beg];
     }
 
-    // local rows
-    for(csr_index_t nz = sp->Ap[out->row_beg], local_nz = 0; local_nz < out->nnz; nz++, local_nz++){
+    /* copy local matrix values and column indices */
+    for(csr_index_t nz = sp->Ap[row_beg], local_nz = 0; local_nz < out->nnz; nz++, local_nz++){
         out->Ai[local_nz] = sp->Ai[nz];
         out->Ax[local_nz] = sp->Ax[nz];
     }
 
-    csr_analyze_communication(out, rank, nranks);
+    /* prepare communication: */
+    /*  - analyze local matrix part, identify non-local column access */
+    /*  - exchange communication info with neighbors */
+    csr_analyze_comm(out, rank, nranks);
+    csr_exchange_comm_info(out, rank, nranks);
+
+    /* Remap the matrices for local indexing. */
+    /* This essentially means that all local Ai indices */
+    /* access columns from 0 to number of local columns, and not the entire vector length. */
+    /* This is a must for scalability, otherwise each rank would have to allocate O(n) vectors */
+    /* instead of O(n/nranks) vectors */
     csr_remove_empty_columns(out, rank, nranks, sp->perm);
 }
 

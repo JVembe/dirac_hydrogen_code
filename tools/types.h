@@ -11,4 +11,10 @@ typedef double complex csr_data_t;
 typedef csr_index_t dimType;
 typedef csr_index_t indexType;
 
+#ifdef USE_MPI
+#include <mpi.h>
+#define MPI_CSR_INDEX_T MPI_INT
+#define MPI_CSR_DATA_T  MPI_DOUBLE
+#endif
+
 #endif

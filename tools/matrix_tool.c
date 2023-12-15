@@ -185,8 +185,9 @@ int main(int argc, char *argv[])
     // get local partition of the global H matrix
     if(nranks>1){
         csr_get_partition(&Hpart, &Hall, rank, Hall.npart);
-        snprintf(fname, 255, "H_part%d.csr", rank);
-        csr_write(fname, &Hpart);
+        /* DEBUG */
+        /* snprintf(fname, 255, "H_part%d.csr", rank); */
+        /* csr_write(fname, &Hpart); */
     } else {
         Hpart = Hall;
     }
@@ -492,6 +493,7 @@ int main(int argc, char *argv[])
         // validate - compare yblk and yfull results
 	compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
+        /*
         // DEBUG: write out the result vectors for comparison with single-rank result
         for(int r=0; r<nranks; r++){
             if(rank == r){
@@ -502,6 +504,7 @@ int main(int argc, char *argv[])
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Finalize();
         exit(0);
+        */
     }
 
 #ifdef USE_CUDA
