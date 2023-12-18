@@ -149,6 +149,11 @@ csr_index_t csr_nrows(const sparse_csr_t *sp_blk)
     return sp_blk->nrows*sp_blk->blk_dim;
 }
 
+csr_index_t csr_local_offset(const sparse_csr_t *sp_blk)
+{
+    return sp_blk->local_offset*sp_blk->blk_dim;
+}
+
 csr_index_t csr_nnz(const sparse_csr_t *sp_blk)
 {
     return sp_blk->nnz*sp_blk->blk_nnz;
@@ -499,6 +504,52 @@ void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int 
     csr_remove_empty_columns(out, rank, nranks, sp->perm);
 }
 
+void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_csr_t *sp_blk)
+{
+    // iterators over Hall
+    csr_index_t row, col, colp;
+
+    // iterators over G (block submatrices)
+    csr_index_t row_blk, colp_blk;
+
+    // iterators over non-blocked Hfull
+    csr_index_t col_dst, rowp_dst;
+    rowp_dst = 1;
+
+    // allocate memory for the unblocked matrix
+    csr_allocate(out, csr_nrows(in), csr_ncols(in), csr_nnz(in));
+
+    // for all rows
+    for(row = 0; row < in->nrows; row++){
+
+        // each row and each column are expanded into submatrices of size in->blk_dim
+        for(row_blk=0; row_blk<in->blk_dim; row_blk++){
+
+            // row in the expanded matrix
+            // row_dst = row*in->blk_dim + row_blk;
+
+            // for non-zeros in each Hpart row - fill the expanded row
+            for(colp = in->Ap[row]; colp < in->Ap[row+1]; colp++){
+                col = in->Ai[colp];
+
+                for(colp_blk=sp_blk->Ap[row_blk]; colp_blk<sp_blk->Ap[row_blk+1]; colp_blk++){
+
+                    // column in the expanded matrix
+                    col_dst = col*in->blk_dim + sp_blk->Ai[colp_blk];
+
+                    // update out->Ai and out->Ap
+                    out->Ai[out->Ap[rowp_dst]] = col_dst;
+                    out->Ap[rowp_dst]++;
+                }
+            }
+
+            // next Hfull row - start where the last one ends
+            out->Ap[rowp_dst+1] = out->Ap[rowp_dst];
+            rowp_dst++;
+        }
+    }
+}
+
 /* spell out blocked communication data structures */
 /* to explicit, non-blockes indices used by a non-blocked matrix */
 void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, int nranks)
@@ -621,7 +672,7 @@ void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nran
 void csr_comm(const sparse_csr_t *sp, int rank, int nranks)
 {
 #ifdef USE_MPI
-    
+
     MPI_Request comm_requests[2*nranks];
 
     /* pre-post recv requests */
@@ -692,7 +743,7 @@ void csr_conj_transpose(sparse_csr_t *out, const sparse_csr_t *in)
 }
 
 
-void spmv_crs_f(csr_index_t row_beg, csr_index_t row_end, sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result)
+void csr_spmv(csr_index_t row_beg, csr_index_t row_end, sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result)
 {
     csr_data_t  *Ax = sp->Ax;
     csr_index_t *Ap = sp->Ap;

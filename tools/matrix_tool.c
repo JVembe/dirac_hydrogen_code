@@ -248,60 +248,18 @@ int main(int argc, char *argv[])
 
     // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
-    //  - each row has row_nnz(Hall)*row_nnz(G) non-zero entries
+    //  - each row has row_nnz(Hpart)*row_nnz(G) non-zero entries
     //  - create Hfull.Ap and Hfull.Ai accordingly
     // Dimensions of Hfull and Hfull_blk are the same, and they have
     // the same number of non-zeros. However, their Ap and Ai differ:
-    // Hfull_blk inherits Ap and Ai directly from Hall - one non-zero
-    // per entire submatrix.
+    // Hfull_blk inherits Ap and Ai directly from Hpart - one non-zero per entire submatrix.
     // Hfull stores all non-zeros independently in a native, non-blocked csr storage
-    csr_allocate(&Hfull, csr_nrows(&Hfull_blk), csr_ncols(&Hfull_blk), csr_nnz(&Hfull_blk));
-    {
-        // iterators over Hall
-        csr_index_t row, col, colp;
+    csr_unblock_matrix(&Hfull, &Hfull_blk, g);
 
-        // iterators over G (block submatrices)
-        csr_index_t row_blk, colp_blk;
-
-        // iterators over non-blocked Hfull
-        csr_index_t col_dst, rowp_dst;
-        rowp_dst = 1;
-
-        // for all rows
-        for(row = 0; row < csr_nrows(&Hpart); row++){
-
-            // each row and each column are expanded into submatrices of size blkdim
-            for(row_blk=0; row_blk<blkdim; row_blk++){
-
-                // row in the expanded matrix
-                // row_dst = row*blkdim + row_blk;
-
-                // for non-zeros in each Hpart row - fill the expanded row
-                for(colp = Hpart.Ap[row]; colp < Hpart.Ap[row+1]; colp++){
-                    col = Hpart.Ai[colp];
-
-                    for(colp_blk=g[0].Ap[row_blk]; colp_blk<g[0].Ap[row_blk+1]; colp_blk++){
-
-                        // column in the expanded matrix
-                        col_dst = col*blkdim + g[0].Ai[colp_blk];
-
-                        // update Hfull.Ai and Hfull.Ap
-                        Hfull.Ai[Hfull.Ap[rowp_dst]] = col_dst;
-                        Hfull.Ap[rowp_dst]++;
-                    }
-                }
-
-                // next Hfull row - start where the last one ends
-                Hfull.Ap[rowp_dst+1] = Hfull.Ap[rowp_dst];
-                rowp_dst++;
-            }
-        }
-
-        // Hfull_blk has the comm info copied from Hpart,
-        // but Hfull doesnt - it has to be modified by the block size.
-        // At this point there is no comm info in Hfull - so copy it.
-        csr_unblock_comm_info(&Hfull, &Hfull_blk, rank, nranks);
-    }
+    // Hfull_blk has the comm info copied from Hpart,
+    // but Hfull doesnt - it has to be modified by the block size.
+    // At this point there is no comm info in Hfull - so copy it.
+    csr_unblock_comm_info(&Hfull, &Hfull_blk, rank, nranks);
 
     for(int r=0; r<nranks; r++){
         if(rank == r){
@@ -344,7 +302,7 @@ int main(int argc, char *argv[])
                 csr_index_t orig_row = row;
                 csr_index_t orig_col = col;
                 if(Hpart.perm) {
-                    orig_row = Hpart.perm[row + Hpart.local_offset];
+                    orig_row = Hpart.perm[csr_local_offset(&Hpart) + row];
                     orig_col = Hpart.perm[col];
                 }
 
@@ -428,7 +386,6 @@ int main(int argc, char *argv[])
         // convert blocked Hfull_blk to non-blocked Hfull
         // could be done immediately above, but we do it here for timing purposes
         tic();
-        // for all rows
         for(row = 0; row < Hfull_blk.nrows; row++){
 
             // for non-zeros in each row
@@ -458,6 +415,7 @@ int main(int argc, char *argv[])
         }
         toc();
 
+        // set up communication buffers
         csr_init_communication(&Hfull_blk, x, rank, nranks);
         csr_init_communication(&Hfull, x, rank, nranks);
 
@@ -470,11 +428,9 @@ int main(int argc, char *argv[])
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull_blk); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<(Hfull_blk.row_end - Hfull_blk.row_beg)*Hfull_blk.blk_dim; i++)
-            x[Hfull_blk.local_offset*Hfull_blk.blk_dim + i] = CMPLX(rank,rank);
+        for(int i=0; i<csr_nrows(&Hfull_blk); i++) x[csr_local_offset(&Hfull_blk) + i] = CMPLX(rank,rank);
 
         tic();
-        // for all block rows
         csr_comm(&Hfull_blk, rank, nranks);
         for(row = 0; row < Hfull_blk.nrows; row++){
 
@@ -491,7 +447,7 @@ int main(int argc, char *argv[])
                 yout = yblk + row*blkdim;
 
                 // perform spmv
-                spmv_crs_f(0, csr_nrows(&submatrix), &submatrix, xin, yout);
+                csr_spmv(0, csr_nrows(&submatrix), &submatrix, xin, yout);
 
                 // remember that at this stage xin and yout are renumbered wrt. the original node numbering
             }
@@ -501,13 +457,12 @@ int main(int argc, char *argv[])
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<Hfull.row_end - Hfull.row_beg; i++)
-            x[Hfull.local_offset + i] = CMPLX(rank,rank);
+        for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_offset(&Hfull) + i] = CMPLX(rank,rank);
 
         // perform spmv for the non-blocked Hfull matrix (native CSR storage)
         tic();
         csr_comm(&Hfull, rank, nranks);
-        spmv_crs_f(0, csr_nrows(&Hfull), &Hfull, x, yfull);
+        csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
 
         // validate - compare yblk and yfull results
