@@ -2,7 +2,7 @@ OBJS=sorted_list.o \
 	csr.o \
 	matrix_tool.o
 
-CFLAGS_COMMON = -O3 -lm -DUSE_MPI
+CFLAGS = -O3 -lm -DUSE_MPI
 CFLAGS_CUDA = -DUSE_CUDA -lcusparse
 CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
 
