@@ -244,7 +244,7 @@ int main(int argc, char *argv[])
     // Ax modified to store sub-matrices (g.nnz)
     int blkdim = csr_nrows(&g[0]);
     csr_copy(&Hfull_blk, &Hpart);
-    csr_block_update(&Hfull_blk, blkdim, csr_nnz(&g[0]));
+    csr_block_params(&Hfull_blk, blkdim, csr_nnz(&g[0]));
 
     // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
@@ -281,6 +281,7 @@ int main(int argc, char *argv[])
     yblk  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
     yfull = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
 
+    // matrix assembly into the blocked Hfull_blk
     {
         csr_index_t row, col, colp;
 
@@ -428,7 +429,8 @@ int main(int argc, char *argv[])
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull_blk); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull_blk); i++) x[csr_local_offset(&Hfull_blk) + i] = CMPLX(rank,rank);
+        for(int i=0; i<csr_nrows(&Hfull_blk); i++)
+            x[csr_local_offset(&Hfull_blk) + i] = CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
 
         tic();
         csr_comm(&Hfull_blk, rank, nranks);
@@ -457,7 +459,8 @@ int main(int argc, char *argv[])
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_offset(&Hfull) + i] = CMPLX(rank,rank);
+        for(int i=0; i<csr_nrows(&Hfull); i++)
+            x[csr_local_offset(&Hfull) + i] = CMPLX(Hfull.row_beg + i, Hfull.row_beg + i);
 
         // perform spmv for the non-blocked Hfull matrix (native CSR storage)
         tic();
@@ -468,17 +471,15 @@ int main(int argc, char *argv[])
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
-        /*
         // DEBUG: write out the result vectors for comparison with single-rank result
+        /*
         for(int r=0; r<nranks; r++){
-        if(rank == r){
-        for(row = 0; row < csr_nrows(&Hfull_blk); row++) fprintf(stderr, "%e %e\n", creal(yblk[row]), cimag(yblk[row]));
+            if(rank == r){
+                for(row = 0; row < csr_nrows(&Hfull_blk); row++) fprintf(stderr, "%e %e\n", creal(yblk[row]), cimag(yblk[row]));
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
         }
         MPI_Barrier(MPI_COMM_WORLD);
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-        MPI_Finalize();
-        exit(0);
         */
     }
 

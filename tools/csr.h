@@ -34,7 +34,7 @@ csr_index_t csr_local_offset(const sparse_csr_t *sp_blk);
 void csr_read(const char *fname, sparse_csr_t *sp);
 void csr_write(const char *fname, const sparse_csr_t *sp);
 
-void csr_block_update(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz);
+void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz);
 void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t *blk_ptr);
 void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr_index_t col);
 

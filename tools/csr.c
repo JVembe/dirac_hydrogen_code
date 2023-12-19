@@ -106,15 +106,16 @@ void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
     out->local_offset       = in->local_offset;
 }
 
-void csr_block_update(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz)
+void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz)
 {
     sp->blk_dim = blk_dim;
     sp->blk_nnz = blk_nnz;
 
     // update Ax storage
-    free(sp->Ax);
+    if(!sp->is_link) free(sp->Ax);  sp->Ax = NULL;
     sp->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
     bzero(sp->Ax, sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
+    sp->is_link = 0;
 
     // do NOT update Ap pointers - need them for Ai
 }
@@ -297,6 +298,8 @@ void csr_analyze_comm(sparse_csr_t *sp, int rank, int nranks)
 void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
 {
 #ifdef USE_MPI
+
+    if(nranks==1) return;   
 
     /* first exchange the number of communication entries between all ranks */
     CHECK_MPI(MPI_Allgather(sp->n_comm_entries+rank*nranks, nranks, MPI_CSR_INDEX_T,
@@ -554,6 +557,8 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
 /* to explicit, non-blockes indices used by a non-blocked matrix */
 void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, int nranks)
 {
+    if(nranks==1) return;
+    
     /* initialize communication data structures */
     out->row_cpu_dist = (csr_index_t*)calloc(nranks+1, sizeof(csr_index_t));
     for(csr_index_t i=0; i<nranks+1; i++)
@@ -644,6 +649,8 @@ void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nran
 {
     csr_data_t *recv_location = px;
 
+    if(nranks==1) return;
+
     /* store the vector pointer for sending data */
     sp->send_vec = px;
 
@@ -672,6 +679,8 @@ void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nran
 void csr_comm(const sparse_csr_t *sp, int rank, int nranks)
 {
 #ifdef USE_MPI
+
+    if(nranks==1) return;
 
     MPI_Request comm_requests[2*nranks];
 
@@ -711,22 +720,18 @@ void csr_comm(const sparse_csr_t *sp, int rank, int nranks)
 
 csr_data_t csr_get_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col)
 {
-    csr_index_t cp;
-
     // NOTE: this only works for non-blocked matrices
 
-    cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
+    csr_index_t  cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
     if(sp->Ai[cp]!=col) return CMPLX(0,0);
     return sp->Ax[cp];
 }
 
 void csr_set_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t val)
 {
-    csr_index_t cp;
-
     // NOTE: this only works for non-blocked matrices
 
-    cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
+    csr_index_t cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
     if(sp->Ai[cp]!=col) ERROR("cant set matrix value: (%d,%d) not present in CSR.", row, col);
     sp->Ax[cp] = val;
 }
