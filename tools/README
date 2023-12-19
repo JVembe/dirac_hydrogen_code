@@ -1,3 +1,22 @@
+## Compilation
+
+The provided `Makefile` supports compilation for both **CUDA** and **HIP** platforms.
+To compile the code, follow the instructions for your target platform below:
+
+### CUDA
+
+```bash
+make cuda
+```
+generates the executable `matrix_tool_cuda`.
+
+### HIP
+
+```bash
+make hip
+```
+generates the executable `matrix_tool_hip`.
+
 NOTE: sparse matrices are stored using the CSR (also known as CRS) storage,
 e.g., https://en.wikipedia.org/wiki/Sparse_matrix
 
@@ -38,10 +57,10 @@ The matrix_tool program does the following:
  - compute conjugate transpose of G and store them in memory
  - allocate the Hfull matrix, which explicitly stores all submatrices,
    each submatrix being the size of G:
- 
+
     Hfull.dim = H.dim*G.dim
     Hfull.nnz = H.nnz*G.nnz
- 
+
  - for each non-zero in the complete Hall matrix compute the submatrix
    according to eq. 29 in the manuscript
  - store the submatrix as a block inside the Hfull matrix.
