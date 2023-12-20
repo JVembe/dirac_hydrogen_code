@@ -3,11 +3,14 @@ OBJS=sorted_list.o \
 	gpu_sparse.o \
 	matrix_tool.o
 
-CFLAGS = -O3 -lm -DUSE_MPI
 CFLAGS_CUDA = -DUSE_CUDA -lcusparse
 CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
+CFLAGS = -O3 -lm -DUSE_MPI ${CFLAGS_CUDA}
 
-CC=/home/angainor/work/institution/usit/prace_6ip/software/openmpi/bin/mpicc
+LDFLAGS_CUDA = -lcusparse -lcudart
+LDFLAGS = $(LDFLAGS_CUDA)
+
+CC=mpicc
 CC_CUDA = nvcc
 CC_HIP = hipcc
 
@@ -15,13 +18,13 @@ CC_HIP = hipcc
 	$(CC) -O3 -c $(CFLAGS) $< -o $@
 
 all: $(OBJS)
-	$(CC) -O3 $(OBJS) -o matrix_tool -lm
+	$(CC) -O3 $(OBJS) -o matrix_tool -lm $(LDFLAGS)
 
 clean:
 	rm *.o
 
 cuda:
-	nvcc -O3 matrix_tool.c -o matrix_tool -lm -DUSE_CUDA -lcusparse
+	nvcc -O3 $(OBJS) -o matrix_tool -lm -DUSE_CUDA -lcusparse
 
 
 #matrix_tool_cuda.o: matrix_tool.c

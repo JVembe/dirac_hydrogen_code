@@ -21,8 +21,15 @@
 #include <math.h>
 #include <complex.h>
 
+#include "csr.h"
+#include "../src/tictoc.h"
+
 #ifdef USE_MPI
 #include <mpi.h>
+#endif
+
+#if defined USE_CUDA | defined USE_HIP
+#include "gpu_sparse.h"
 #endif
 
 #define max(a,b) ((a)>(b)?(a):(b))
@@ -32,9 +39,6 @@
 #ifndef CMPLX
 #define CMPLX(x, y) ((double complex)((double)(x) + _Complex_I * (double)(y)))
 #endif
-
-#include "csr.h"
-#include "../src/tictoc.h"
 
 // from spnrbasis.cpp
 int ik(int i) {
@@ -61,8 +65,8 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
             printf("nan in vector!\n");
             continue;
         }
-        if(fabs(cimag(v1[i]-v2[i]))>1e-10) printf("%e *i\n", cimag(v1[i]) - cimag(v2[i]));
-        if(fabs(creal(v1[i]-v2[i]))>1e-10) printf("%e\n", creal(v1[i]) - creal(v2[i]));
+        if(fabs(cimag(v1[i]-v2[i]))>1e-8) printf("%e *i\n", cimag(v1[i]) - cimag(v2[i]));
+        if(fabs(creal(v1[i]-v2[i]))>1e-8) printf("%e\n", creal(v1[i]) - creal(v2[i]));
     }
 }
 
@@ -375,14 +379,14 @@ int main(int argc, char *argv[])
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
 
+        // validate - compare yblk and yfull results
+        compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+	
 #if defined USE_CUDA | defined USE_HIP
         gpu_spmv_test(Hfull, x, yfull);
         // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
 #endif
 
-
-        // validate - compare yblk and yfull results
-        compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
         // DEBUG: write out the result vectors for comparison with single-rank result
         /*

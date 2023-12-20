@@ -1,31 +1,45 @@
 #include "gpu_sparse.h"
 
+void tic();
+void toc();
+void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim);
+
 #if defined USE_CUDA | defined USE_HIP
 
 // Function for performing sparse matrix-vector multiplication on GPU.
 void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y) {
     gpusparseHandle_t gpuhandle;
+
+    printf("create device sprase handle..."); fflush(stdout);
     CHECK_GPUSPARSE(gpusparseCreate(&gpuhandle));
+    toc();
 
     // Allocate device memory for CSR matrix and vectors
     csr_index_t *dAp, *dAi;
     csr_data_t  *dAx, *dpx, *dpy;
 
+    printf("allocate device memory..."); fflush(stdout);
+    tic();
     CHECK_GPU(gpuMalloc((void**) &dAp, (1+csr_nrows(&Hfull))*sizeof(csr_index_t)));
     CHECK_GPU(gpuMalloc((void**) &dAi, csr_nnz(&Hfull)*sizeof(csr_index_t)));
     CHECK_GPU(gpuMalloc((void**) &dAx, csr_nnz(&Hfull)*sizeof(csr_data_t)));
     CHECK_GPU(gpuMalloc((void**) &dpx, csr_ncols(&Hfull)*sizeof(csr_data_t)));
     CHECK_GPU(gpuMalloc((void**) &dpy, csr_nrows(&Hfull)*sizeof(csr_data_t)));
-    CHECK_GPU(gpuMemcpy(dpy, y, csr_dim(&Hfull)*sizeof(csr_data_t), gpuMemcpyHostToDevice));
-
+    CHECK_GPU(gpuMemcpy(dpy, y, csr_nrows(&Hfull)*sizeof(csr_data_t), gpuMemcpyHostToDevice));
+    toc();
 
     // Copy the CSR matrix and vectors from host to device
+    printf("Copy data from host to device..."); fflush(stdout);
+    tic();
     CHECK_GPU(gpuMemcpy(dAp, Hfull.Ap, (1+csr_nrows(&Hfull))*sizeof(csr_index_t), gpuMemcpyHostToDevice));
     CHECK_GPU(gpuMemcpy(dAi, Hfull.Ai, csr_nnz(&Hfull)*sizeof(csr_index_t), gpuMemcpyHostToDevice));
     CHECK_GPU(gpuMemcpy(dAx, Hfull.Ax, csr_nnz(&Hfull)*sizeof(csr_data_t),  gpuMemcpyHostToDevice));
     CHECK_GPU(gpuMemcpy(dpx, x, csr_ncols(&Hfull)*sizeof(csr_data_t),  gpuMemcpyHostToDevice));
+    toc();
 
     // Create CSR matrix and vectors
+    printf("Initialize device sparse structures..."); fflush(stdout);
+    tic();
     gpusparseSpMatDescr_t dHfull;
     CHECK_GPUSPARSE(gpusparseCreateCsr(&dHfull, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_nnz(&Hfull),
                                        dAp, dAi, dAx,
@@ -47,15 +61,22 @@ void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y) {
     // Allocate buffer for the SpMV operation
     csr_data_t *dbuffer;
     CHECK_GPU(gpuMalloc((void**) &dbuffer, bufferSize*sizeof(csr_data_t)));
+    toc();
 
     // Perform the SpMV operation
+    printf("device spmv..."); fflush(stdout);
+    tic();
     CHECK_GPUSPARSE(gpusparseSpMV(gpuhandle,
                                   GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, dHfull, dx,
                                   (const void*)&beta, dy,
                                   GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, dbuffer));
+    toc();
 
     // Copy the result back to the host
+    printf("copy result from device to host..."); fflush(stdout);
+    tic();
     CHECK_GPU(gpuMemcpy(y, dpy, csr_nrows(&Hfull)*sizeof(csr_data_t), gpuMemcpyDeviceToHost));
+    toc();
 
     // Clean up device resources
     CHECK_GPU(gpuFree(dAp));
@@ -79,7 +100,7 @@ void gpu_spmv_block(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *y, sparse_csr
 
     csr_index_t row, col, colp;
 
-    for(row = 0; row < H_blk.dim; row++){
+    for(row = 0; row < csr_nrows(&H_blk); row++){
         // for non-zero blocks in each row
         for(colp = H_blk.Ap[row]; colp < H_blk.Ap[row+1]; colp++){
 
@@ -122,7 +143,6 @@ void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull) {
     int deviceCount;
     CHECK_GPU(gpuGetDeviceCount(&deviceCount));
     printf("Device count: %d\n", deviceCount);
-
 
     // Allocate vector for GPU SpMV result
     csr_data_t *gpu_result;

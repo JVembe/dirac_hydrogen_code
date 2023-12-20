@@ -1,6 +1,8 @@
 #ifndef GPU_SPARSE_H
 #define GPU_SPARSE_H
 
+#include "csr.h"
+
 #if defined USE_CUDA
 #include <cuda_runtime_api.h>
 #include <cusparse.h>

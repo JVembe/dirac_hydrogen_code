@@ -2,7 +2,7 @@ import glob
 import ctypes
 import numpy as npy
 from scipy import sparse
-from matplotlib import pyplot
+# from matplotlib import pyplot
 import metis
 
 idxtype = 'int32'
@@ -75,8 +75,8 @@ if nparts > 1:
     # pyplot.show()
 
 res = res_orig[nzc[:, None], nzc]
-pyplot.spy(res, marker='.', markersize=1)
-pyplot.show()
+#pyplot.spy(res, marker='.', markersize=1)
+#pyplot.show()
 
 with open('H.csr', 'w+') as f:
     nnz = npy.array(res.count_nonzero(), idxtype)
