@@ -1,5 +1,6 @@
 OBJS=sorted_list.o \
 	csr.o \
+	gpu_sparse.o \
 	matrix_tool.o
 
 CFLAGS = -O3 -lm -DUSE_MPI

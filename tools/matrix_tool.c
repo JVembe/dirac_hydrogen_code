@@ -36,152 +36,6 @@
 #include "csr.h"
 #include "../src/tictoc.h"
 
-
-#if defined USE_CUDA
-#include <cuda_runtime_api.h>
-#include <cusparse.h>
-
-// Error types and constants
-#define gpuError_t                                cudaError_t
-#define gpuSuccess                                cudaSuccess
-
-// Device management
-#define gpuGetDeviceCount                         cudaGetDeviceCount
-#define gpuSetDevice                              cudaSetDevice
-#define gpuDeviceSynchronize                      cudaDeviceSynchronize
-
-// Memory management
-#define gpuMalloc                                 cudaMalloc
-#define gpuFree                                   cudaFree
-#define gpuMemcpy                                 cudaMemcpy
-#define gpuMemcpyHostToDevice                     cudaMemcpyHostToDevice
-#define gpuMemcpyDeviceToHost                     cudaMemcpyDeviceToHost
-
-// Error handling
-#define gpuGetLastError                           cudaGetLastError
-#define gpuGetErrorString                         cudaGetErrorString
-
-// Stream management
-#define gpuStream_t                               cudaStream_t
-#define gpuStreamCreate                           cudaStreamCreate
-#define gpuStreamDestroy                          cudaStreamDestroy
-#define gpuStreamSynchronize                      cudaStreamSynchronize
-
-// Sparse library handles and operations
-#define gpusparseHandle_t                         cusparseHandle_t
-#define gpusparseCreateHandle                     cusparseCreateHandle
-#define gpusparseDestroy                          cusparseDestroy
-#define gpusparseCreate                           cusparseCreate
-
-// Sparse matrix-vector (SpMV) specific
-#define gpusparseSpMatDescr_t                     cusparseSpMatDescr_t
-#define gpusparseDnVecDescr_t                     cusparseDnVecDescr_t
-#define gpusparseCreateCsr                        cusparseCreateCsr
-#define gpusparseCreateDnVec                      cusparseCreateDnVec
-#define gpusparseSpMV_bufferSize                  cusparseSpMV_bufferSize
-#define gpusparseSpMV                             cusparseSpMV
-
-// Sparse library constants
-#define GPUSPARSE_INDEX_32I                       CUSPARSE_INDEX_32I
-#define GPUSPARSE_INDEX_BASE_ZERO                 CUSPARSE_INDEX_BASE_ZERO
-#define GPU_C_64F                                 CUDA_C_64F
-#define GPUSPARSE_OPERATION_NON_TRANSPOSE         CUSPARSE_OPERATION_NON_TRANSPOSE
-#define GPUSPARSE_SPMV_CSR_ALG1                   CUSPARSE_SPMV_CSR_ALG1
-
-#define CHECK_GPU(func) {						\
-    cudaError_t status = (func);					\
-    if (status != cudaSuccess) {					\
-      printf("CUDA API failed at line %d error: %s\n", __LINE__,	\
-	     cudaGetErrorString(status));				\
-      exit(1);								\
-    }									\
-  }
-
-#define CHECK_GPUSPARSE(func) {						\
-    cusparseStatus_t status = (func);					\
-    if (status != CUSPARSE_STATUS_SUCCESS) {				\
-      printf("CUSPARSE API failed at line %d error %d.\n", __LINE__,	\
-	     status);							\
-      exit(1);								\
-    }									\
-  }
-
-#elif defined(USE_HIP)
-
-#include <hip/hip_runtime.h>
-#include <hip/hip_runtime_api.h>
-#include <hipsparse.h>
-#include <hip/hip_complex.h>
-
-// Error types and constants
-#define gpuError_t                                hipError_t
-#define gpuSuccess                                hipSuccess
-
-// Device management
-#define gpuGetDeviceCount                         hipGetDeviceCount
-#define gpuSetDevice                              hipSetDevice
-#define gpuDeviceSynchronize                      hipDeviceSynchronize
-
-// Memory management
-#define gpuMalloc                                 hipMalloc
-#define gpuFree                                   hipFree
-#define gpuMemcpy                                 hipMemcpy
-#define gpuMemset                                 hipMemset
-#define gpuMemcpyHostToDevice                     hipMemcpyHostToDevice
-#define gpuMemcpyDeviceToHost                     hipMemcpyDeviceToHost
-
-// Error handling
-#define gpuGetLastError                           hipGetLastError
-#define gpuGetErrorString                         hipGetErrorString
-
-// Stream management
-#define gpuStream_t                               hipStream_t
-#define gpuStreamCreate                           hipStreamCreate
-#define gpuStreamDestroy                          hipStreamDestroy
-#define gpuStreamSynchronize                      hipStreamSynchronize
-
-// Sparse library handles and operations
-#define gpusparseHandle_t                         hipsparseHandle_t
-#define gpusparseCreateHandle                     hipsparseCreateHandle
-#define gpusparseDestroy                          hipsparseDestroy
-#define gpusparseCreate                           hipsparseCreate
-
-// Sparse matrix-vector (SpMV) specific
-#define gpusparseSpMatDescr_t                     hipsparseSpMatDescr_t
-#define gpusparseDnVecDescr_t                     hipsparseDnVecDescr_t
-#define gpusparseCreateCsr                        hipsparseCreateCsr
-#define gpusparseCreateDnVec                      hipsparseCreateDnVec
-#define gpusparseSpMV_bufferSize                  hipsparseSpMV_bufferSize
-#define gpusparseSpMV                             hipsparseSpMV
-
-// Sparse library constants
-#define GPUSPARSE_INDEX_32I                       HIPSPARSE_INDEX_32I
-#define GPUSPARSE_INDEX_BASE_ZERO                 HIPSPARSE_INDEX_BASE_ZERO
-#define GPU_C_64F                                 HIP_C_64F
-#define GPUSPARSE_OPERATION_NON_TRANSPOSE         HIPSPARSE_OPERATION_NON_TRANSPOSE
-#define GPUSPARSE_SPMV_CSR_ALG1                   HIPSPARSE_SPMV_CSR_ALG1
-
-#define CHECK_GPU(func) {						\
-    hipError_t status = (func);					\
-    if (status != hipSuccess) {					\
-      printf("HIP API failed at line %d error: %s\n", __LINE__,	\
-	     hipGetErrorString(status));				\
-      exit(1);								\
-    }									\
-  }
-
-#define CHECK_GPUSPARSE(func) {						\
-    hipsparseStatus_t status = (func);					\
-    if (status != HIPSPARSE_STATUS_SUCCESS) {				\
-      printf("HIPSPARSE API failed at line %d error %d.\n", __LINE__,	\
-	     status);							\
-      exit(1);								\
-        }									\
-  }
-
-#endif
-
-
 // from spnrbasis.cpp
 int ik(int i) {
     int ii = i/4;
@@ -211,149 +65,6 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
         if(fabs(creal(v1[i]-v2[i]))>1e-10) printf("%e\n", creal(v1[i]) - creal(v2[i]));
     }
 }
-
-#if defined USE_CUDA | defined USE_HIP
-
-// Function for performing sparse matrix-vector multiplication on GPU.
-void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y) {
-  gpusparseHandle_t gpuhandle;
-  CHECK_GPUSPARSE(gpusparseCreate(&gpuhandle));
-
-  // Allocate device memory for CSR matrix and vectors
-  csr_index_t *dAp, *dAi;
-  csr_data_t  *dAx, *dpx, *dpy;
-
-  CHECK_GPU(gpuMalloc((void**) &dAp, (1+csr_nrows(&Hfull))*sizeof(csr_index_t)));
-  CHECK_GPU(gpuMalloc((void**) &dAi, csr_nnz(&Hfull)*sizeof(csr_index_t)));
-  CHECK_GPU(gpuMalloc((void**) &dAx, csr_nnz(&Hfull)*sizeof(csr_data_t)));
-  CHECK_GPU(gpuMalloc((void**) &dpx, csr_ncols(&Hfull)*sizeof(csr_data_t)));
-  CHECK_GPU(gpuMalloc((void**) &dpy, csr_nrows(&Hfull)*sizeof(csr_data_t)));
-  CHECK_GPU(gpuMemcpy(dpy, y, csr_dim(&Hfull)*sizeof(csr_data_t), gpuMemcpyHostToDevice));
-
-
-  // Copy the CSR matrix and vectors from host to device
-  CHECK_GPU(gpuMemcpy(dAp, Hfull.Ap, (1+csr_nrows(&Hfull))*sizeof(csr_index_t), gpuMemcpyHostToDevice));
-  CHECK_GPU(gpuMemcpy(dAi, Hfull.Ai, csr_nnz(&Hfull)*sizeof(csr_index_t), gpuMemcpyHostToDevice));
-  CHECK_GPU(gpuMemcpy(dAx, Hfull.Ax, csr_nnz(&Hfull)*sizeof(csr_data_t),  gpuMemcpyHostToDevice));
-  CHECK_GPU(gpuMemcpy(dpx, x, csr_ncols(&Hfull)*sizeof(csr_data_t),  gpuMemcpyHostToDevice));
-
-  // Create CSR matrix and vectors
-  gpusparseSpMatDescr_t dHfull;
-  CHECK_GPUSPARSE(gpusparseCreateCsr(&dHfull, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_nnz(&Hfull),
-                                     dAp, dAi, dAx,
-                                     GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_BASE_ZERO, GPU_C_64F));
-
-  gpusparseDnVecDescr_t dx, dy;
-  CHECK_GPUSPARSE(gpusparseCreateDnVec(&dx, csr_ncols(&Hfull), dpx, GPU_C_64F));
-  CHECK_GPUSPARSE(gpusparseCreateDnVec(&dy, csr_nrows(&Hfull), dpy, GPU_C_64F));
-
-    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(0,0);
-    size_t bufferSize;
-
-  // Analyze matrix and calculate buffer size for the SpMV operation
-  CHECK_GPUSPARSE(gpusparseSpMV_bufferSize(gpuhandle,
-                                           GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, dHfull, dx,
-                                           (const void*)&beta, dy,
-                                           GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize));
-
-  // Allocate buffer for the SpMV operation
-  csr_data_t *dbuffer;
-  CHECK_GPU(gpuMalloc((void**) &dbuffer, bufferSize*sizeof(csr_data_t)));
-
-  // Perform the SpMV operation
-  CHECK_GPUSPARSE(gpusparseSpMV(gpuhandle,
-                                GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, dHfull, dx,
-                                (const void*)&beta, dy,
-                                GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, dbuffer));
-
-  // Copy the result back to the host
-  CHECK_GPU(gpuMemcpy(y, dpy, csr_nrows(&Hfull)*sizeof(csr_data_t), gpuMemcpyDeviceToHost));
-
-  // Clean up device resources
-  CHECK_GPU(gpuFree(dAp));
-  CHECK_GPU(gpuFree(dAi));
-  CHECK_GPU(gpuFree(dAx));
-  CHECK_GPU(gpuFree(dpx));
-  CHECK_GPU(gpuFree(dpy));
-  CHECK_GPU(gpuFree(dbuffer));
-  CHECK_GPUSPARSE(gpusparseDestroy(gpuhandle));
-
-  // Not sure if needed but keeping for debugging purposes.
-//   gpuDeviceSynchronize();
-}
-
-
-void gpu_spmv_block(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *y, sparse_csr_t *g) {
-
-    sparse_csr_t submatrix;
-    csr_copy(&submatrix, g);
-
-    int blkdim = csr_nrows(&g[0]);
-
-    csr_index_t row, col, colp;
-
-    for(row = 0; row < H_blk.dim; row++){
-        // for non-zero blocks in each row
-        for(colp = H_blk.Ap[row]; colp < H_blk.Ap[row+1]; colp++){
-
-            col = H_blk.Ai[colp];
-            csr_block_link(&submatrix, &H_blk, row, col);
-            csr_data_t *xin;
-            xin  = x + col*blkdim;
-            csr_data_t *yout_gpu;
-            yout_gpu = y + row*blkdim;
-
-            gpu_spmv(submatrix, xin, yout_gpu);
-
-            // remember that at this stage xin and yout are renumbered wrt. the original node numbering
-        }
-    }
-
-}
-
-void gpu_spmb_block_test(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *yfull, sparse_csr_t *g) {
-
-    // allocate y vector for GPU SpMV
-    csr_data_t *y_gpu;
-    y_gpu = (csr_data_t *)calloc(csr_nrows(&H_blk), sizeof(csr_data_t));
-
-    // printf(" - H dim: %d\n", csr_dim(&H[0]));
-    // printf(" - Hall dim: %d\n", csr_dim(&Hall));
-    // printf(" - Hall nnz: %d\n", csr_nnz(&Hall));
-    // printf(" - Hfull_blk dim: %d\n", csr_dim(&Hfull_blk));
-    // printf(" - Hfull_blk nnz: %d\n", csr_nnz(&Hfull_blk));
-
-    gpu_spmv_block(H_blk, x, y_gpu, g);
-
-    compare_vectors(yfull, y_gpu, csr_nrows(&H_blk));
-}
-
-
-
-// Function for testing the result of the sparse matrix-vector multiplication.
-void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull) {
-
-  // Print device info
-  int deviceCount;
-  CHECK_GPU(gpuGetDeviceCount(&deviceCount));
-  printf("Device count: %d\n", deviceCount);
-
-
-  // Allocate vector for GPU SpMV result
-  csr_data_t *gpu_result;
-  gpu_result = (csr_data_t *)calloc(csr_nrows(&Hfull), sizeof(csr_data_t));
-
-  // Perform the matrix-vector multiplication on the GPU
-  gpu_spmv(Hfull, x, gpu_result);
-
-  // Validate - compare yfull and gpu results
-  compare_vectors(yfull, gpu_result, csr_nrows(&Hfull));
-
-  // Clean up host resources
-  free(gpu_result);
-}
-
-#endif
 
 int main(int argc, char *argv[])
 {
@@ -477,10 +188,6 @@ int main(int argc, char *argv[])
     x     = (csr_data_t *)calloc(csr_ncols(&Hfull_blk), sizeof(csr_data_t));
     yblk  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
     yfull = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
-
-    // allocate y vector for GPU SpMV
-    csr_data_t *yblk_gpu;
-    yblk_gpu = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
 
     { // Compute
         csr_index_t row, col, colp;
@@ -648,9 +355,6 @@ int main(int argc, char *argv[])
                 xin  = x + col*blkdim;
                 yout = yblk + row*blkdim;
 
-                csr_data_t *yout_gpu;
-                yout_gpu = yblk_gpu + row*blkdim;
-
                 // perform spmv
                 csr_spmv(0, csr_nrows(&submatrix), &submatrix, xin, yout);
 
@@ -671,6 +375,12 @@ int main(int argc, char *argv[])
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
 
+#if defined USE_CUDA | defined USE_HIP
+        gpu_spmv_test(Hfull, x, yfull);
+        // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
+#endif
+
+
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
@@ -685,11 +395,6 @@ int main(int argc, char *argv[])
         MPI_Barrier(MPI_COMM_WORLD);
         */
     }
-
-#if defined USE_CUDA | defined USE_HIP
-    gpu_spmv_test(Hfull, x, yfull);
-    gpu_spmb_block_test(Hfull_blk, x, yfull, g);
-#endif
 
 #ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
