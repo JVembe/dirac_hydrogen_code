@@ -299,10 +299,10 @@ void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
 {
 #ifdef USE_MPI
 
-    if(nranks==1) return;   
-
+    if(nranks==1) return;
+    
     /* first exchange the number of communication entries between all ranks */
-    CHECK_MPI(MPI_Allgather(sp->n_comm_entries+rank*nranks, nranks, MPI_CSR_INDEX_T,
+    CHECK_MPI(MPI_Allgather(MPI_IN_PLACE /* sp->n_comm_entries+rank*nranks */, nranks, MPI_CSR_INDEX_T,
                             sp->n_comm_entries, nranks, MPI_CSR_INDEX_T, MPI_COMM_WORLD));
 
     /* now exchange the actual column indices */
