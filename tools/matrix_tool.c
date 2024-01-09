@@ -35,11 +35,6 @@
 #define max(a,b) ((a)>(b)?(a):(b))
 
 
-// Define the CMPLX macro manually if it's not already defined
-#ifndef CMPLX
-#define CMPLX(x, y) ((double complex)((double)(x) + _Complex_I * (double)(y)))
-#endif
-
 // from spnrbasis.cpp
 int ik(int i) {
     int ii = i/4;

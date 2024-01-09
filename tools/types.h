@@ -17,4 +17,9 @@ typedef csr_index_t indexType;
 // #define MPI_CSR_DATA_T  MPI_DOUBLE
 #endif
 
+// Define the CMPLX macro manually if it's not already defined
+#ifndef CMPLX
+#define CMPLX(x, y) ((double complex)((double)(x) + _Complex_I * (double)(y)))
+#endif
+
 #endif
