@@ -49,7 +49,7 @@ void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y) {
     CHECK_GPUSPARSE(gpusparseCreateDnVec(&dx, csr_ncols(&Hfull), dpx, GPU_C_64F));
     CHECK_GPUSPARSE(gpusparseCreateDnVec(&dy, csr_nrows(&Hfull), dpy, GPU_C_64F));
 
-    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(0,0);
+    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
     size_t bufferSize;
 
     // Analyze matrix and calculate buffer size for the SpMV operation
