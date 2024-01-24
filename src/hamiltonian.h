@@ -1107,6 +1107,33 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		return evecpd.reshaped(this->bs->radqN() * (lNth - lth0),1);
 	}
+	
+	cmat getevecs(int kappa, double mu) {
+		int i = -1;
+		for(int j = 0; j < kappas.size(); j++) {
+			if(kappas[j] == kappa) i = j;
+		}
+		
+		int lth0, lNth, ll0,lNl;
+		
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		cmat evecs;
+		
+		if(i != -1) evecs = kappaevecs[i];
+		
+		//Pad evec
+		
+		// cmat evecpd = cmat::Zero(this->bs->radqN(), lNth - lth0);
+		
+		cout << "kappa, mu = " << kappa << ", " << mu << endl;
+		
+		// int colid = this->bs->indexQn(kappa,mu);
+		
+		// if(i != -1) evecpd.col(colid) = evec;
+		
+		return evecs;
+	}
 };
 
 template <typename basistype>

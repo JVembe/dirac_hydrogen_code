@@ -613,24 +613,24 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			// cout << "ul: " << ul << std::endl;
 			
-			// cout << "dpalph0  dims: (" << dpalph0 .rows() << ", " << dpalph0 .cols() << ")\n";
-			// cout << "dpalph0k dims: (" << dpalph0k.rows() << ", " << dpalph0k.cols() << ")\n";
-			// cout << "dpalphk0 dims: (" << dpalphk0.rows() << ", " << dpalphk0.cols() << ")\n";
-			// cout << "dpalphkk dims: (" << dpalphkk.rows() << ", " << dpalphkk.cols() << ")\n";
+			cout << "dpalph0  dims: (" << dpalph0 .rows() << ", " << dpalph0 .cols() << ")\n";
+			cout << "dpalph0k dims: (" << dpalph0k.rows() << ", " << dpalph0k.cols() << ")\n";
+			cout << "dpalphk0 dims: (" << dpalphk0.rows() << ", " << dpalphk0.cols() << ")\n";
+			cout << "dpalphkk dims: (" << dpalphkk.rows() << ", " << dpalphkk.cols() << ")\n";
 			
-			// cout << "m dims: (" << m.rows() << ", " << m.cols() << ")\n";
-			// cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
-			// cout << "kappasmat dims: (" << kappasmat.rows() << ", " << kappasmat.cols() << ")\n";
-			// cout << "localKappasmat dims: (" << localKappasmat.rows() << ", " << localKappasmat.cols() << ")\n";
+			cout << "m dims: (" << m.rows() << ", " << m.cols() << ")\n";
+			cout << "w dims: (" << w.rows() << ", " << w.cols() << ")\n";
+			cout << "kappasmat dims: (" << kappasmat.rows() << ", " << kappasmat.cols() << ")\n";
+			cout << "localKappasmat dims: (" << localKappasmat.rows() << ", " << localKappasmat.cols() << ")\n";
 			
 			// cout << "thmat dims: (" << thmat.rows() << ", " << thmat.cols() << ")\n";
 			
 			// cout << std::endl;
 			
-			// // cout << "dpalph0 :\n" << dpalph0  << std::endl;
-			// // cout << "dpalph0k:\n" << dpalph0k << std::endl;
-			// // cout << "dpalphk0:\n" << dpalphk0 << std::endl;
-			// // cout << "dpalphkk:\n" << dpalphkk << std::endl;
+			// cout << "dpalph0 :\n" << dpalph0  << std::endl;
+			// cout << "dpalph0k:\n" << dpalph0k << std::endl;
+			// cout << "dpalphk0:\n" << dpalphk0 << std::endl;
+			// cout << "dpalphkk:\n" << dpalphkk << std::endl;
 			
 			
 			

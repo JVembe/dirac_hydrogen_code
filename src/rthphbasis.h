@@ -1955,7 +1955,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			
 			// cout << "wsize: " << wsize <<", wrank: " << wrank << ", bdplmax: " <<  Nl << ", Nth: " << Nth << endl; 
 			
-			// cout << "Local th0: " << localth0 << "\n Local Nth: " << localNth << "\n local l0: " << locall0 << "\n local Nl: " << localNl << endl;
+			cout << "Local th0: " << localth0 << "\n Local Nth: " << localNth << "\n local l0: " << locall0 << "\n local Nl: " << localNl << endl;
 			
 			if(!isCached(angidmat)) {
 				angidmat = csmat(dpthU.rows(),ilist.rows());
