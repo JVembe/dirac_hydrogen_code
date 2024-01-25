@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
         sparse_csr_t submatrix;
         csr_copy(&submatrix, g);
 
-        tic();
+        tic(); printf("matrix assembly ");
         // for all rows
         for(row = 0; row < csr_nrows(&Hpart); row++){
 
@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
 
         // convert blocked Hfull_blk to non-blocked Hfull
         // could be done immediately above, but we do it here for timing purposes
-        tic();
+        tic(); printf("convert to non-blocked matrix ");
         for(row = 0; row < Hfull_blk.nrows; row++){
 
             // for non-zeros in each row
@@ -338,7 +338,7 @@ int main(int argc, char *argv[])
         for(int i=0; i<csr_nrows(&Hfull_blk); i++)
             x[csr_local_offset(&Hfull_blk) + i] = CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
 
-        tic();
+        tic(); printf("    blocked spmv ");
         csr_comm(&Hfull_blk, rank, nranks);
         for(row = 0; row < Hfull_blk.nrows; row++){
 
@@ -369,7 +369,7 @@ int main(int argc, char *argv[])
             x[csr_local_offset(&Hfull) + i] = CMPLX(Hfull.row_beg + i, Hfull.row_beg + i);
 
         // perform spmv for the non-blocked Hfull matrix (native CSR storage)
-        tic();
+        tic(); printf("non-blocked spmv ");
         csr_comm(&Hfull, rank, nranks);
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();

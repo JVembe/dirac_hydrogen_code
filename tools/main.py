@@ -2,7 +2,7 @@ import glob
 import ctypes
 import numpy as npy
 from scipy import sparse
-# from matplotlib import pyplot
+from matplotlib import pyplot
 import metis
 
 idxtype = 'int32'
@@ -71,8 +71,8 @@ if nparts > 1:
     part_count = part_count.astype(idxtype)
     part_Ap = npy.cumsum(npy.concatenate((0, part_count), axis=None), dtype=idxtype)
 
-    # pyplot.spy(res, marker='.', markersize=1)
-    # pyplot.show()
+    pyplot.spy(res, marker='.', markersize=1)
+    pyplot.show()
 
 res = res_orig[nzc[:, None], nzc]
 #pyplot.spy(res, marker='.', markersize=1)
