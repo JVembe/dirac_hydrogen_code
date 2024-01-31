@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <strings.h>
 
+typedef double complex cdouble_t;
+
 typedef int csr_index_t;
 typedef double complex csr_data_t;
 

@@ -20,6 +20,7 @@
 #include <string.h>
 #include <math.h>
 #include <complex.h>
+#include <unistd.h>
 
 #include "csr.h"
 #include "../src/tictoc.h"
@@ -52,6 +53,37 @@ double imu(int i) {
     return mu;
 }
 
+
+// simple C-fied beyondDipolePulse implementation
+typedef struct
+{
+    double E0;
+    double omega;
+    double T;
+} beyondDipolePulse_t;
+
+void beyondDipolePulse_init(beyondDipolePulse_t *this, double E0, double omega, double N)
+{
+    this->E0 = E0;
+    this->omega = omega;
+    this->T = (double)N*2*M_PI / omega;
+}
+
+void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t *out)
+{
+    cdouble_t phi = CMPLX(-M_PI/2, 0);
+    double E0 = this->E0;
+    double omega = this->omega;
+    double T = this->T;
+    out[0] = ( -E0/(4*omega) * cos( phi + t * (2 * M_PI / T + omega)));
+    out[1] = ( -E0/(4*omega) * sin( phi + t * (2 * M_PI / T + omega)));
+    out[2] = ( -E0/(4*omega) * cos(-phi + t * (2 * M_PI / T - omega)));
+    out[3] = (  E0/(4*omega) * sin(-phi + t * (2 * M_PI / T - omega)));
+    out[4] = (  E0/(2*omega) * cos( phi + t * omega));
+    out[5] = (  E0/(2*omega) * sin( phi + t * omega));
+}
+
+
 void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
 {
     // validate - compare yblk and yfull results
@@ -67,18 +99,42 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
 
 int main(int argc, char *argv[])
 {
-    if(argc<2){
-        printf("Usage: matrix_tool <lmax>\n");
-        return 0;
-    }
-
     char fname[256];
     sparse_csr_t Hall, Hfull, Hfull_blk, Hpart;
     sparse_csr_t *g, *gt;
     sparse_csr_t *H;
-    int lmax = atoi(argv[1]);
+    int opt;
+    int lmax;
+    double intensity, omega, cycles;
     int cnt;
 
+    if(argc<5){
+        fprintf(stderr, "Usage: %s -l lmax -i intensity -o omega -c cycles\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    
+    while ((opt = getopt(argc, argv, "l:i:o:c:")) != -1) {
+        switch (opt) {
+        case 'l': lmax = atoi(optarg); break;
+        case 'i': intensity = atof(optarg); break;
+        case 'o': omega = atof(optarg); break;
+        case 'c': cycles = atof(optarg); break;
+        default:
+            fprintf(stderr, "Usage: %s [-lioc]\n", argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    printf("Parameters:\n");
+    printf(" - lmax      %d\n", lmax);
+    printf(" - intensity %lf\n", intensity);
+    printf(" - omega     %lf\n", omega);
+    printf(" - cycles    %lf\n", cycles);
+    
+    // time-dependent part
+    beyondDipolePulse_t bdpp;
+    beyondDipolePulse_init(&bdpp, intensity, omega, cycles);
+    
     // read the full couplings matrix structure
     // each non-zero value denotes a submatrix of dimensions same as the G matrices
     snprintf(fname, 255, "H.csr");
@@ -179,7 +235,9 @@ int main(int argc, char *argv[])
             printf(" - Hfull dim:     %d x %d\n", csr_nrows(&Hfull_blk), csr_ncols(&Hfull_blk));
             printf(" - Hfull nnz:     %d\n", csr_nnz(&Hfull_blk));
         }
+#ifdef USE_MPI
         MPI_Barrier(MPI_COMM_WORLD);
+#endif
     }
 
     // allocate x and y vectors for SpMV: y = spA*x
@@ -226,10 +284,9 @@ int main(int argc, char *argv[])
                 csr_data_t H0[lmax], H1[lmax];
                 csr_data_t ft[6];
 
-                // TODO get the time-dependent f(a,t)
-                for(int a=0; a<6; a++){
-                    ft[a] = CMPLX(1,0);
-                }
+                // TODO get the time to compute time-dependent f(a,t)
+                double t = 1;
+                beoyndDipolePulse_axialPart(&bdpp, t, ft);
 
                 // prefetch the Hamiltonian values H0(l) and H1(l)
                 for(int l=0; l<lmax; l++){
