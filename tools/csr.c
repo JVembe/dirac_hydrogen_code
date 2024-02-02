@@ -124,7 +124,7 @@ void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_da
 {
     csr_index_t cp;
     cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
-    if(sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
+    if(cp==sp->Ap[row+1] || sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
     memcpy(sp->Ax + cp*sp->blk_nnz, blk_ptr, sizeof(csr_data_t)*sp->blk_nnz);
 }
 
@@ -132,7 +132,7 @@ void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr
 {
     csr_index_t cp;
     cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
-    if(sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
+    if(cp==sp->Ap[row+1] || sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
     sp_blk->is_link = 1;
     sp_blk->Ax = sp->Ax + cp*sp->blk_nnz;
     sp_blk->nrows = sp->blk_dim;
@@ -723,7 +723,7 @@ csr_data_t csr_get_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t co
     // NOTE: this only works for non-blocked matrices
 
     csr_index_t  cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
-    if(sp->Ai[cp]!=col) return CMPLX(0,0);
+    if(cp==sp->Ap[row+1] || sp->Ai[cp]!=col) return CMPLX(0,0);
     return sp->Ax[cp];
 }
 
@@ -732,7 +732,7 @@ void csr_set_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr
     // NOTE: this only works for non-blocked matrices
 
     csr_index_t cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
-    if(sp->Ai[cp]!=col) ERROR("cant set matrix value: (%d,%d) not present in CSR.", row, col);
+    if(cp==sp->Ap[row+1] || sp->Ai[cp]!=col) ERROR("cant set matrix value: (%d,%d) not present in CSR.", row, col);
     sp->Ax[cp] = val;
 }
 
