@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
 
 	//This is for verifying that things work before starting the simulation
 	double dt = (0.6*PI)/Ntime;
-	double T = 1.75;
+	double T = 1.00;
 	bdpp.setTime(T);
 
 	//Construct basis for Hamiltonian

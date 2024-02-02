@@ -3,24 +3,19 @@ OBJS=sorted_list.o \
 	gpu_sparse.o \
 	matrix_tool.o \
 
-CFLAGS_CUDA = 
+CFLAGS_CUDA = -DUSE_CUDA -lcusparse
 CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
 CFLAGS = -O3 -lm -DUSE_MPI ${CFLAGS_CUDA}
-CXXFLAGS = -O3 -lm -DUSE_MPI
 
-LDFLAGS_CUDA = 
+LDFLAGS_CUDA = -lcusparse -lcudart
 LDFLAGS = $(LDFLAGS_CUDA)
 
 CC=mpicc
-CXX=mpic++
 CC_CUDA = nvcc
 CC_HIP = hipcc
 
 %.o : %.c
 	$(CC) -O3 -c $(CFLAGS) $< -o $@
-
-%.o : %.cpp
-	$(CXX) -O3 -c $(CXXFLAGS) $< -o $@
 
 all: $(OBJS)
 	$(CC) -O3 $(OBJS) -o matrix_tool -lm $(LDFLAGS)

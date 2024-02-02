@@ -442,7 +442,7 @@ int main(int argc, char *argv[])
 
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
-		csr_write("Hfull.csr",&Hfull);
+		// csr_write("Hfull.csr",&Hfull);
 		
 	
 #if defined USE_CUDA | defined USE_HIP

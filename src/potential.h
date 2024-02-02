@@ -365,12 +365,12 @@ class beyondDipolePulse:public Potential<beyondDipolePulse> {
 			// out(5,0) = 0;
 			
 			
-			out(0,0) = 1;//((Scalar) -E0/(4*omega) * cos( phi + t * (Scalar) (2 * PI / T + omega)));
-			out(1,0) = 1;//((Scalar) -E0/(4*omega) * sin( phi + t * (Scalar) (2 * PI / T + omega)));
-			out(2,0) = 1;//((Scalar) -E0/(4*omega) * cos(-phi + t * (Scalar) (2 * PI / T - omega)));
-			out(3,0) = 1;//((Scalar)  E0/(4*omega) * sin(-phi + t * (Scalar) (2 * PI / T - omega)));
-			out(4,0) = 1;//((Scalar)  E0/(2*omega) * cos( phi + t * (Scalar) omega));
-			out(5,0) = 1;//((Scalar)  E0/(2*omega) * sin( phi + t * (Scalar) omega));
+			out(0,0) = ((Scalar) -E0/(4*omega) * cos( phi + t * (Scalar) (2 * PI / T + omega)));
+			out(1,0) = ((Scalar) -E0/(4*omega) * sin( phi + t * (Scalar) (2 * PI / T + omega)));
+			out(2,0) = ((Scalar) -E0/(4*omega) * cos(-phi + t * (Scalar) (2 * PI / T - omega)));
+			out(3,0) = ((Scalar)  E0/(4*omega) * sin(-phi + t * (Scalar) (2 * PI / T - omega)));
+			out(4,0) = ((Scalar)  E0/(2*omega) * cos( phi + t * (Scalar) omega));
+			out(5,0) = ((Scalar)  E0/(2*omega) * sin( phi + t * (Scalar) omega));
 			
 			return out;
 		}

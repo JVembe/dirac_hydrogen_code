@@ -721,7 +721,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 					for(int pp = 0; pp < dkbpart::Npts; pp++) {
 						for(int alpha = 0; alpha < 6; alpha++) {
 							if(ll%2 != alpha%2) {
-								cout << "ll: " << ll << ", alpha: " << alpha << endl;
+								// cout << "ll: " << ll << ", alpha: " << alpha << endl;
 								
 								csmat& dpalph = getbdpmat(pp,ll,alpha);
 								
