@@ -195,7 +195,13 @@ int main(int argc, char* argv[]) {
                 dkbb.bdpam(1,1,1,l,bdpp);
                 dkbb.bdpam(1,1,-1,l,bdpp);
             }
-
+			
+			bdpft ft = bdpp.template axialPart<axis::t>(1.75); // habitually using 1.75 for testing
+			cout << "f(t):\n";
+			for(int i = 0; i < 6; i++) {
+				cout << ft(i,0) << "\n";
+			}
+			
             // for efficiency of assembly we want the g matrices to have the same non-zero pattern,
             // even at the expense of storing some zero entries
             int init = 0;
@@ -222,29 +228,27 @@ int main(int argc, char* argv[]) {
             }
             
             // //Bear with me here, the scheme for assembling the h-matrices is a bit silly
-            // dirbs rthphb(dkbb,spnrb);
-            // vec angInit = vec::Zero(rthphb.angqN());
-            // angInit[0] = 1.0;
-            // rthphb.pruneUncoupled(angInit,true);
-            // using Htype = DiracBDP<dirbs>;
-            // Htype H(rthphb,bdpp);
-            // H.Vfunc = &coloumb<Z>;
-            // H.prepeigsLowMem(Nsplines,Nsplines/2, true);
-            // H.H0radprep();
+            dirbs rthphb(dkbb,spnrb);
+            vec angInit = vec::Zero(rthphb.angqN());
+            angInit[0] = 1.0;
+            rthphb.pruneUncoupled(angInit,true);
+            using Htype = DiracBDP<dirbs>;
+            Htype H(rthphb,bdpp);
+            H.Vfunc = &coloumb<Z>;
+            H.prepeigsLowMem(Nsplines,Nsplines/2, true);
+            H.H0radprep();
 	
-            // for(int n = 0; n < 3; n++) {
-            //     cout << "h" << n << "";
-            //     printSparseNonZeros(dkbb.getH0mat(n));
-            // }
+            for(int n = 0; n < 3; n++) {
+				char fname[256];
+				snprintf(fname,255,"h0%d.csr",n);
+                csr_write(fname,dkbb.getH0mat(n));
+            }
 	
-            // //And finally the overlap matrix blocks as well, s0...s2
+            //And finally the overlap matrix blocks as well, s0...s2
 	
-            // cout << "s0";
-            // printSparseNonZeros(dkbb.get0mat<S>());
-            // cout << "s1";
-            // printSparseNonZeros(dkbb.get0mat<S>());
-            // cout << "s2";
-            // printSparseNonZeros(dkbb.get0mat<S>());
+            csr_write("s0",dkbb.get0mat<S>());
+            csr_write("s1",dkbb.getkmat<S>());
+            csr_write("s2",dkbb.getkkmat<S>());
         }
         
 	MPI_Finalize();

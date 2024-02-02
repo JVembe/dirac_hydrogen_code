@@ -24,6 +24,7 @@
 
 #include "csr.h"
 #include "../src/tictoc.h"
+//#include "../src/potential.h"
 
 #ifdef USE_MPI
 #include <mpi.h>
@@ -139,6 +140,10 @@ int main(int argc, char *argv[])
     // each non-zero value denotes a submatrix of dimensions same as the G matrices
     snprintf(fname, 255, "H.csr");
     csr_read(fname, &Hall);
+
+	
+	// beyondDipolePulse bdpp(100,50,15);
+	// float time = 1.75; //Arbitrarily chosen number I've been using for tests out of habit - Johanne
 
     int rank = 0, nranks = 1;
 #ifdef USE_MPI
@@ -290,8 +295,10 @@ int main(int argc, char *argv[])
 
                 // prefetch the Hamiltonian values H0(l) and H1(l)
                 for(int l=0; l<lmax; l++){
-                    H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
-                    H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
+					
+					H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
+					H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
+					
                 }
 
                 csr_zero(&submatrix);
@@ -299,21 +306,22 @@ int main(int argc, char *argv[])
                     if(H0[l] != CMPLX(0,0)){
 
                         for(int a=0; a<6; a++){
+							if((a%2!=l%2)) { //Skip redundant matrices 
+								pg0 = g + a*4*lmax + l*4;
+								pg1 = pg0 + 1;
+								pg2 = pg0 + 2;
+								pg3 = pg0 + 3;
 
-                            pg0 = g + a*4*lmax + l*4;
-                            pg1 = pg0 + 1;
-                            pg2 = pg0 + 2;
-                            pg3 = pg0 + 3;
-
-                            // g matrices all have the same nnz pattern,
-                            // so we can operate directly on the internal storage Ax
-                            for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
-                                submatrix.Ax[i] +=
-                                    ft[a]*H0[l]*(pg0->Ax[i]        +
-                                                 pg1->Ax[i]*ki     +
-                                                 pg2->Ax[i]*kj     +
-                                                 pg3->Ax[i]*ki*kj) ;
-                            }
+								// g matrices all have the same nnz pattern,
+								// so we can operate directly on the internal storage Ax
+								for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
+									submatrix.Ax[i] +=
+										ft[a]*H0[l]*(pg0->Ax[i]        +
+													 pg1->Ax[i]*ki     +
+													 pg2->Ax[i]*kj     +
+													 pg3->Ax[i]*ki*kj) ;
+								}
+							}
                         }
                     }
                 }
@@ -322,21 +330,22 @@ int main(int argc, char *argv[])
                     if(H1[l] != CMPLX(0,0)){
 
                         for(int a=0; a<6; a++){
+							if((a%2!=l%2)) { //Skip redundant matrices 
+								pgt0 = gt + a*4*lmax + l*4;
+								pgt1 = pgt0 + 1;
+								pgt2 = pgt0 + 2;
+								pgt3 = pgt0 + 3;
 
-                            pgt0 = gt + a*4*lmax + l*4;
-                            pgt1 = pgt0 + 1;
-                            pgt2 = pgt0 + 2;
-                            pgt3 = pgt0 + 3;
-
-                            // g matrices all have the same nnz pattern,
-                            // so we can operate directly on the internal storage Ax
-                            for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
-                                submatrix.Ax[i] -=
-                                    ft[a]*H1[l]*(pgt0->Ax[i]       +
-                                                 pgt1->Ax[i]*ki    +
-                                                 pgt2->Ax[i]*kj    +
-                                                 pgt3->Ax[i]*ki*kj);
-                            }
+								// g matrices all have the same nnz pattern,
+								// so we can operate directly on the internal storage Ax
+								for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
+									submatrix.Ax[i] += //Corrected sign error
+										ft[a]*H1[l]*(pgt0->Ax[i]       +
+													 pgt1->Ax[i]*kj    + //Swapped ki and kj
+													 pgt2->Ax[i]*ki    + //Swapped kj and ki
+													 pgt3->Ax[i]*ki*kj);
+								}
+							}
                         }
                     }
                 }
@@ -433,6 +442,8 @@ int main(int argc, char *argv[])
 
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+		csr_write("Hfull.csr",&Hfull);
+		
 	
 #if defined USE_CUDA | defined USE_HIP
         gpu_spmv_test(Hfull, x, yfull);

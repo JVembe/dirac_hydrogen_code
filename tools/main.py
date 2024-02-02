@@ -3,7 +3,7 @@ import ctypes
 import numpy as npy
 from scipy import sparse
 from matplotlib import pyplot
-import metis
+#import metis
 
 idxtype = 'int32'
 
@@ -43,7 +43,7 @@ nzc = sum(res).nonzero()[1]
 res = res[nzc[:, None], nzc]
 
 part_Ap = npy.array([0, len(nzc)], dtype=idxtype)
-nparts = 4
+nparts = 1
 if nparts > 1:
     # metis partitioning - for now only for demonstration
     # directly use the CSR storage from scipy sparse
