@@ -221,30 +221,27 @@ int main(int argc, char* argv[]) {
 		}
             }
             
-            // //Bear with me here, the scheme for assembling the h-matrices is a bit silly
-            // dirbs rthphb(dkbb,spnrb);
-            // vec angInit = vec::Zero(rthphb.angqN());
-            // angInit[0] = 1.0;
-            // rthphb.pruneUncoupled(angInit,true);
-            // using Htype = DiracBDP<dirbs>;
-            // Htype H(rthphb,bdpp);
-            // H.Vfunc = &coloumb<Z>;
-            // H.prepeigsLowMem(Nsplines,Nsplines/2, true);
-            // H.H0radprep();
+            // Bear with me here, the scheme for assembling the h-matrices is a bit silly
+            dirbs rthphb(dkbb,spnrb);
+            vec angInit = vec::Zero(rthphb.angqN());
+            angInit[0] = 1.0;
+            rthphb.pruneUncoupled(angInit,true);
+            using Htype = DiracBDP<dirbs>;
+            Htype H(rthphb,bdpp);
+            H.Vfunc = &coloumb<Z>;
+            H.prepeigsLowMem(Nsplines,Nsplines/2, true);
+            H.H0radprep();
 	
-            // for(int n = 0; n < 3; n++) {
-            //     cout << "h" << n << "";
-            //     printSparseNonZeros(dkbb.getH0mat(n));
-            // }
+            for(int n = 0; n < 3; n++) {
+				char fname[256];
+				snprintf(fname,255,"h0%d.csr",n);
+                csr_write(fname,dkbb.getH0mat(n));
+            }
 	
-            // //And finally the overlap matrix blocks as well, s0...s2
-	
-            // cout << "s0";
-            // printSparseNonZeros(dkbb.get0mat<S>());
-            // cout << "s1";
-            // printSparseNonZeros(dkbb.get0mat<S>());
-            // cout << "s2";
-            // printSparseNonZeros(dkbb.get0mat<S>());
+            // And finally the overlap matrix blocks as well, s0...s2	
+            csr_write("s0.csr",dkbb.get0mat<S>());
+            csr_write("s1.csr",dkbb.getkmat<S>());
+            csr_write("s2.csr",dkbb.getkkmat<S>());
         }
         
 	MPI_Finalize();
