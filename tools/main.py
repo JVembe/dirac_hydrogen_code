@@ -19,7 +19,7 @@ def csr_read(fname):
 
 # the following loop produces the non-zero structure of the global couplings matrix
 # individual H matrices still have to be saved in separate files to compute the submatrices
-fnames = glob.glob('H0*csr')
+fnames = glob.glob('H0l*csr')
 lmax = len(fnames)
 if lmax == 0:
     print('Did not find any H*csr files, bailing out')
@@ -35,12 +35,16 @@ for l in range(0, lmax):
     fname = 'H1l' + str(l) + '.csr'
     res = res + csr_read(fname)
 
+
 res_orig = res
 # remove empty rows and columns from the full coupling nnz pattern
 # find non-zero columns, remove empty columns and rows
 # structure is symmetric, so same rows and columns are empty
 nzc = sum(res).nonzero()[1]
 res = res[nzc[:, None], nzc]
+
+res = res + sparse.identity(res.shape[0],format="csr")
+res_orig = res_orig + sparse.identity(res_orig.shape[0],format="csr")
 
 part_Ap = npy.array([0, len(nzc)], dtype=idxtype)
 nparts = 1

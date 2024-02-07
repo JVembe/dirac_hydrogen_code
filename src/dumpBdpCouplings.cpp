@@ -238,17 +238,20 @@ int main(int argc, char* argv[]) {
             H.prepeigsLowMem(Nsplines,Nsplines/2, true);
             H.H0radprep();
 	
-            for(int n = 0; n < 3; n++) {
+            for(int n = 0; n < 4; n++) {
 				char fname[256];
 				snprintf(fname,255,"h0%d.csr",n);
-                csr_write(fname,dkbb.getH0mat(n));
+				csmat hmat = dkbb.getH0mat(n) + base_nnz_pattern;
+                csr_write(fname,hmat);
             }
 	
             //And finally the overlap matrix blocks as well, s0...s2
-	
-            csr_write("s0",dkbb.get0mat<S>());
-            csr_write("s1",dkbb.getkmat<S>());
-            csr_write("s2",dkbb.getkkmat<S>());
+			csmat s0m = dkbb.getkkmat<S>() + base_nnz_pattern;
+			csmat s1m = dkbb.getkmat<S>()  + base_nnz_pattern;
+			csmat s2m = dkbb.get0mat<S>()  + base_nnz_pattern;
+            csr_write("s0.csr",s0m);
+            csr_write("s1.csr",s1m);
+            csr_write("s2.csr",s2m);
         }
         
 	MPI_Finalize();

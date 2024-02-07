@@ -101,8 +101,10 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
 int main(int argc, char *argv[])
 {
     char fname[256];
-    sparse_csr_t Hall, Hfull, Hfull_blk, Hpart;
-    sparse_csr_t *g, *gt;
+    sparse_csr_t Hall, Hfull, Hfull_blk, Hpart,
+					H0full, H0_blk, H0part,
+					Sfull, S_blk, Spart;
+    sparse_csr_t *g, *gt, *h0, *s0;
     sparse_csr_t *H;
     int opt;
     int lmax;
@@ -141,10 +143,6 @@ int main(int argc, char *argv[])
     snprintf(fname, 255, "H.csr");
     csr_read(fname, &Hall);
 
-	
-	// beyondDipolePulse bdpp(100,50,15);
-	// float time = 1.75; //Arbitrarily chosen number I've been using for tests out of habit - Johanne
-
     int rank = 0, nranks = 1;
 #ifdef USE_MPI
     MPI_Init(&argc, &argv);
@@ -157,13 +155,19 @@ int main(int argc, char *argv[])
     // get local partition of the global H matrix
     if(nranks>1){
         csr_get_partition(&Hpart, &Hall, rank, Hall.npart);
+		//Stationary matrices' partitioning doesn't matter for their own sake, I assume, and so they can be 
+        csr_get_partition(&H0part, &Hall, rank, Hall.npart);
+        csr_get_partition(&Spart, &Hall, rank, Hall.npart);
         /* DEBUG */
         /* snprintf(fname, 255, "H_part%d.csr", rank); */
         /* csr_write(fname, &Hpart); */
     } else {
         Hpart = Hall;
+		H0part = Hall;
+		Spart = Hall;
     }
-
+	
+	
     // read the individual Hamiltonian matrices H0 and H1
     // 2 matrices for each value of 0:lmax-1
     // Note: these are global, with original node indices - no partitioning
@@ -206,14 +210,35 @@ int main(int argc, char *argv[])
             }
         }
     }
+	
+	h0 = malloc(sizeof(sparse_csr_t)*4);
+	cnt = 0;
+	for(int hi = 0; hi < 4; hi++) {
+		snprintf(fname, 255, "h0%d.csr",hi);
+		csr_read(fname,h0+cnt);
+		cnt++;
+	}
 
+	s0 = malloc(sizeof(sparse_csr_t)*4);
+	cnt = 0;
+	for(int s = 0; s < 3; s++) {
+		snprintf(fname, 255, "s%d.csr",s);
+		csr_read(fname,s0+cnt);
+		cnt++;
+	}
+	
     // create the full rank-local matrix blocked structure
     // same Ap and Ai as Hpart
     // Ax modified to store sub-matrices (g.nnz)
     int blkdim = csr_nrows(&g[0]);
     csr_copy(&Hfull_blk, &Hpart);
+    csr_copy(&H0_blk, &H0part);
+    csr_copy(&S_blk, &Spart);
+	
     csr_block_params(&Hfull_blk, blkdim, csr_nnz(&g[0]));
-
+    csr_block_params(&H0_blk, blkdim, csr_nnz(&h0[0])); //using h0 and s0 instead of g shouldn't matter
+    csr_block_params(&S_blk, blkdim, csr_nnz(&s0[0]));  //But just in case
+	
     // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
     //  - each row has row_nnz(Hpart)*row_nnz(G) non-zero entries
@@ -223,6 +248,8 @@ int main(int argc, char *argv[])
     // Hfull_blk inherits Ap and Ai directly from Hpart - one non-zero per entire submatrix.
     // Hfull stores all non-zeros independently in a native, non-blocked csr storage
     csr_unblock_matrix(&Hfull, &Hfull_blk, g);
+    csr_unblock_matrix(&H0full, &Hfull_blk, h0);
+    csr_unblock_matrix(&Sfull, &Hfull_blk, s0);
 
     // Hfull_blk has the comm info copied from Hpart,
     // but Hfull doesnt - it has to be modified by the block size.
@@ -349,16 +376,40 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
-
+				
+				
                 // store the submatrix in the global Hfull_blk
                 csr_block_insert(&Hfull_blk, row, col, submatrix.Ax);
+				
+				//H0 and S construction
+				if(orig_row==orig_col) {
+			 		csr_zero(&submatrix);
+					for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
+						submatrix.Ax[i] =
+							(h0[0].Ax[i]            +
+							 h0[1].Ax[i]*ki         +
+							 h0[2].Ax[i]*pow(ki,2)  +
+							 h0[3].Ax[i]*pow(ki,3)) ;
+			 		}
+					csr_block_insert(&H0_blk,row,col,submatrix.Ax);
+				
+					csr_zero(&submatrix);
+					for(csr_index_t i=0; i < csr_nnz(&submatrix); i++){
+						submatrix.Ax[i] =
+							(s0[0].Ax[i]            +
+							 s0[1].Ax[i]*ki         +
+							 s0[2].Ax[i]*pow(ki,2)) ;
+					}
+					csr_block_insert(&S_blk,row,col,submatrix.Ax);
+				}
+				
             }
         }
         toc();
 
         // convert blocked Hfull_blk to non-blocked Hfull
         // could be done immediately above, but we do it here for timing purposes
-        tic(); printf("convert to non-blocked matrix ");
+        tic(); printf("convert HI to non-blocked matrix ");
         for(row = 0; row < Hfull_blk.nrows; row++){
 
             // for non-zeros in each row
@@ -381,6 +432,66 @@ int main(int argc, char *argv[])
                         col_dst = col*blkdim + col_blk;
 
                         csr_set_value(&Hfull, row_dst, col_dst, submatrix.Ax[valp]);
+                        valp++;
+                    }
+                }
+            }
+        }
+        toc();
+		
+		tic(); printf("convert H0 to non-blocked matrix ");
+        for(row = 0; row < H0_blk.nrows; row++){
+
+            // for non-zeros in each row
+            for(colp = H0_blk.Ap[row]; colp < H0_blk.Ap[row+1]; colp++){
+
+                // NOTE: rows and cols are remapped wrt. the original numbering in H
+                col = H0_blk.Ai[colp];
+
+                csr_block_link(&submatrix, &H0_blk, row, col);
+
+                // insert into non-blocked Hfull matrix
+                csr_index_t row_blk, col_blk, colp_blk;
+                csr_index_t row_dst, col_dst;
+                csr_index_t valp = 0;
+                for(row_blk=0; row_blk<blkdim; row_blk++){
+
+                    row_dst = row*blkdim + row_blk;
+                    for(colp_blk=submatrix.Ap[row_blk]; colp_blk<submatrix.Ap[row_blk+1]; colp_blk++){
+                        col_blk = submatrix.Ai[colp_blk];
+                        col_dst = col*blkdim + col_blk;
+
+                        csr_set_value(&H0full, row_dst, col_dst, submatrix.Ax[valp]);
+                        valp++;
+                    }
+                }
+            }
+        }
+        toc();
+		
+		tic(); printf("convert S to non-blocked matrix ");
+        for(row = 0; row < S_blk.nrows; row++){
+
+            // for non-zeros in each row
+            for(colp = S_blk.Ap[row]; colp < S_blk.Ap[row+1]; colp++){
+
+                // NOTE: rows and cols are remapped wrt. the original numbering in H
+                col = S_blk.Ai[colp];
+
+                csr_block_link(&submatrix, &S_blk, row, col);
+
+                // insert into non-blocked Hfull matrix
+                csr_index_t row_blk, col_blk, colp_blk;
+                csr_index_t row_dst, col_dst;
+                csr_index_t valp = 0;
+                for(row_blk=0; row_blk<blkdim; row_blk++){
+
+                    row_dst = row*blkdim + row_blk;
+                    for(colp_blk=submatrix.Ap[row_blk]; colp_blk<submatrix.Ap[row_blk+1]; colp_blk++){
+                        col_blk = submatrix.Ai[colp_blk];
+                        col_dst = col*blkdim + col_blk;
+
+                        csr_set_value(&Sfull, row_dst, col_dst, submatrix.Ax[valp]);
                         valp++;
                     }
                 }
@@ -442,7 +553,9 @@ int main(int argc, char *argv[])
 
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
-		// csr_write("Hfull.csr",&Hfull);
+		csr_write("Hfull.csr",&Hfull);
+		csr_write("H0full.csr",&H0full);
+		csr_write("Sfull.csr",&Sfull);
 		
 	
 #if defined USE_CUDA | defined USE_HIP
