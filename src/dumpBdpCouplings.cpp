@@ -246,9 +246,9 @@ int main(int argc, char* argv[]) {
             }
 	
             //And finally the overlap matrix blocks as well, s0...s2
-			csmat s0m = dkbb.getkkmat<S>() + base_nnz_pattern;
+			csmat s0m = dkbb.get0mat<S>()  + base_nnz_pattern;
 			csmat s1m = dkbb.getkmat<S>()  + base_nnz_pattern;
-			csmat s2m = dkbb.get0mat<S>()  + base_nnz_pattern;
+			csmat s2m = dkbb.getkkmat<S>() + base_nnz_pattern;
             csr_write("s0.csr",s0m);
             csr_write("s1.csr",s1m);
             csr_write("s2.csr",s2m);
