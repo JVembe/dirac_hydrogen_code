@@ -1,7 +1,7 @@
 OBJS=sorted_list.o \
 	csr.o \
 	gpu_sparse.o \
-	matrix_tool.o
+	matrix_tool.o \
 
 CFLAGS_CUDA = -DUSE_CUDA -lcusparse
 CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse

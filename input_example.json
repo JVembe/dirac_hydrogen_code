@@ -5,7 +5,7 @@
   "Nmu": 5,
   "Nl": 5,
   "rBox": 30.0,
-  "Intensity": 10,
+  "Intensity": 500,
   "Omega": 50,
-  "Cycles": 1
+  "Cycles": 15
 }

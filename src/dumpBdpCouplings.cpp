@@ -195,7 +195,13 @@ int main(int argc, char* argv[]) {
                 dkbb.bdpam(1,1,1,l,bdpp);
                 dkbb.bdpam(1,1,-1,l,bdpp);
             }
-
+			
+			bdpft ft = bdpp.template axialPart<axis::t>(1.75); // habitually using 1.75 for testing
+			cout << "f(t):\n";
+			for(int i = 0; i < 6; i++) {
+				cout << ft(i,0) << "\n";
+			}
+			
             // for efficiency of assembly we want the g matrices to have the same non-zero pattern,
             // even at the expense of storing some zero entries
             int init = 0;
@@ -232,16 +238,20 @@ int main(int argc, char* argv[]) {
             H.prepeigsLowMem(Nsplines,Nsplines/2, true);
             H.H0radprep();
 	
-            for(int n = 0; n < 3; n++) {
-				char fname[256];
-				snprintf(fname,255,"h0%d.csr",n);
-                csr_write(fname,dkbb.getH0mat(n));
+            for(int n = 0; n < 4; n++) {
+                char fname[256];
+                snprintf(fname,255,"h0%d.csr",n);
+                csmat hmat = dkbb.getH0mat(n) + base_nnz_pattern;
+                csr_write(fname,hmat);
             }
 	
-            // And finally the overlap matrix blocks as well, s0...s2	
-            csr_write("s0.csr",dkbb.get0mat<S>());
-            csr_write("s1.csr",dkbb.getkmat<S>());
-            csr_write("s2.csr",dkbb.getkkmat<S>());
+            //And finally the overlap matrix blocks as well, s0...s2
+            csmat s0m = dkbb.get0mat<S>()  + base_nnz_pattern;
+            csmat s1m = dkbb.getkmat<S>()  + base_nnz_pattern;
+            csmat s2m = dkbb.getkkmat<S>() + base_nnz_pattern;
+            csr_write("s0.csr",s0m);
+            csr_write("s1.csr",s1m);
+            csr_write("s2.csr",s2m);
         }
         
 	MPI_Finalize();

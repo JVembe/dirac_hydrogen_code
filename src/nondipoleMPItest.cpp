@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
 
 	//This is for verifying that things work before starting the simulation
 	double dt = (0.6*PI)/Ntime;
-	double T = 1.75;
+	double T = 1.00;
 	bdpp.setTime(T);
 
 	//Construct basis for Hamiltonian
@@ -210,8 +210,9 @@ int main(int argc, char* argv[]) {
 
 	int Nr = rthphb.radqN();
 
-	b = H.S(psi1.coefs) - dt * cdouble(0,0.5) * H.H(T,psi1.coefs);
-
+	b = rthphb.bdpamatvecMPIblock(testvec);
+	cout << "Hvtst " << b.format(outformat);
+	return 0;
 
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
 	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
