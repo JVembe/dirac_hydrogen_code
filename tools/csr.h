@@ -26,6 +26,8 @@ void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_i
 void csr_free(sparse_csr_t *sp);
 void csr_copy(sparse_csr_t *out, const sparse_csr_t *in);
 void csr_zero(sparse_csr_t *sp);
+void csr_diag(sparse_csr_t *sp, csr_index_t dim);
+
 csr_index_t csr_nnz(const sparse_csr_t *sp_blk);
 csr_index_t csr_nrows(const sparse_csr_t *sp_blk);
 csr_index_t csr_ncols(const sparse_csr_t *sp_blk);

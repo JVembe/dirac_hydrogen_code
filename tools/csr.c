@@ -13,7 +13,7 @@ void csr_print(const sparse_csr_t *sp)
 {
     for(csr_index_t row = 0; row < sp->nrows; row++){
         for(csr_index_t cp = sp->Ap[row]; cp < sp->Ap[row+1]; cp++){
-            printf("%d %d %lf + %lfi\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
+            fprintf(stderr, "%d %d %le %le\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
         }
     }
 }
@@ -104,6 +104,18 @@ void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
     out->row_beg            = in->row_beg;
     out->row_end            = in->row_end;
     out->local_offset       = in->local_offset;
+}
+
+void csr_diag(sparse_csr_t *out, csr_index_t dim)
+{
+    csr_allocate(out, dim, dim, dim);
+
+    // fill the diagonal with non-zero entries
+    for(csr_index_t i=0; i<dim; i++) {
+        out->Ai[i] = i;
+        out->Ap[i] = i;
+    }
+    out->Ap[dim] = dim;
 }
 
 void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz)
@@ -300,7 +312,7 @@ void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
 #ifdef USE_MPI
 
     if(nranks==1) return;
-    
+
     /* first exchange the number of communication entries between all ranks */
     CHECK_MPI(MPI_Allgather(MPI_IN_PLACE /* sp->n_comm_entries+rank*nranks */, nranks, MPI_CSR_INDEX_T,
                             sp->n_comm_entries, nranks, MPI_CSR_INDEX_T, MPI_COMM_WORLD));
@@ -558,7 +570,7 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
 void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, int nranks)
 {
     if(nranks==1) return;
-    
+
     /* initialize communication data structures */
     out->row_cpu_dist = (csr_index_t*)calloc(nranks+1, sizeof(csr_index_t));
     for(csr_index_t i=0; i<nranks+1; i++)
@@ -681,7 +693,6 @@ void csr_comm(const sparse_csr_t *sp, int rank, int nranks)
 #ifdef USE_MPI
 
     if(nranks==1) return;
-
     MPI_Request comm_requests[2*nranks];
 
     /* pre-post recv requests */

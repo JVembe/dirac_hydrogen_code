@@ -3,13 +3,14 @@ import ctypes
 import numpy as npy
 from scipy import sparse
 from matplotlib import pyplot
-#import metis
+import metis
 
 idxtype = 'int32'
 
 def csr_read(fname):
     with open(fname, 'r') as f:
         dim = npy.fromfile(f, dtype=idxtype, count=1)[0]
+        print([fname, ' dim ', dim]);
         nnz = npy.fromfile(f, dtype=idxtype, count=1)[0]
         indptr = npy.fromfile(f, dtype=idxtype, count=dim + 1)
         indices = npy.fromfile(f, dtype=idxtype, count=nnz)
@@ -43,11 +44,12 @@ res_orig = res
 nzc = sum(res).nonzero()[1]
 res = res[nzc[:, None], nzc]
 
+# add diagonal entries
 res = res + sparse.identity(res.shape[0],format="csr")
 res_orig = res_orig + sparse.identity(res_orig.shape[0],format="csr")
 
 part_Ap = npy.array([0, len(nzc)], dtype=idxtype)
-nparts = 1
+nparts = 4
 if nparts > 1:
     # metis partitioning - for now only for demonstration
     # directly use the CSR storage from scipy sparse
@@ -79,8 +81,9 @@ if nparts > 1:
     pyplot.show()
 
 res = res_orig[nzc[:, None], nzc]
-#pyplot.spy(res, marker='.', markersize=1)
-#pyplot.show()
+
+pyplot.spy(res, marker='.', markersize=1)
+pyplot.show()
 
 with open('H.csr', 'w+') as f:
     nnz = npy.array(res.count_nonzero(), idxtype)

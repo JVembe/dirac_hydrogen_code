@@ -93,17 +93,15 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
             printf("nan in vector!\n");
             continue;
         }
-        if(fabs(cimag(v1[i]-v2[i]))>1e-8) printf("%e *i\n", cimag(v1[i]) - cimag(v2[i]));
-        if(fabs(creal(v1[i]-v2[i]))>1e-8) printf("%e\n", creal(v1[i]) - creal(v2[i]));
+        if(fabs(cimag(v1[i]-v2[i]))>1e-8) fprintf(stderr, "%e i\n", cimag(v1[i]) - cimag(v2[i]));
+        if(fabs(creal(v1[i]-v2[i]))>1e-8) fprintf(stderr, "%e\n", creal(v1[i]) - creal(v2[i]));
     }
 }
 
 int main(int argc, char *argv[])
 {
     char fname[256];
-    sparse_csr_t Hall, Hfull, Hfull_blk, Hpart,
-        H0full, H0_blk, H0part,
-        Sfull, S_blk, Spart;
+    sparse_csr_t Hall, Hfull, Hfull_blk, Hpart, Sdiag, S, S_blk, Spart;
     sparse_csr_t *g, *gt, *h0, *s0;
     sparse_csr_t *H;
     int opt;
@@ -143,6 +141,18 @@ int main(int argc, char *argv[])
     snprintf(fname, 255, "H.csr");
     csr_read(fname, &Hall);
 
+    // for convenience, create a diagonal matrix for the S-part
+    csr_diag(&Sdiag, csr_nrows(&Hall));
+
+    // copy partitioning from Hall
+    Sdiag.row_cpu_dist = Hall.row_cpu_dist;
+    Sdiag.row_beg = Hall.row_beg;
+    Sdiag.row_end = Hall.row_end;
+    if(Hall.perm){
+        Sdiag.perm = (csr_index_t*)malloc(sizeof(csr_index_t)*Sdiag.nrows);
+        memcpy(Sdiag.perm, Hall.perm + Hall.local_offset, sizeof(csr_index_t)*Hall.nrows);
+    }
+    
     int rank = 0, nranks = 1;
 #ifdef USE_MPI
     MPI_Init(&argc, &argv);
@@ -155,19 +165,20 @@ int main(int argc, char *argv[])
     // get local partition of the global H matrix
     if(nranks>1){
         csr_get_partition(&Hpart, &Hall, rank, Hall.npart);
-        //Stationary matrices' partitioning doesn't matter for their own sake, I assume, and so they can be 
-        csr_get_partition(&H0part, &Hall, rank, Hall.npart);
-        csr_get_partition(&Spart, &Hall, rank, Hall.npart);
+
+        // partitioning of the S-part is trivial, but still needs to be done
+        csr_get_partition(&Spart, &Sdiag, rank, Hall.npart);
+
         /* DEBUG */
         /* snprintf(fname, 255, "H_part%d.csr", rank); */
         /* csr_write(fname, &Hpart); */
     } else {
         Hpart = Hall;
-        H0part = Hall;
-        Spart = Hall;
+        Spart = Sdiag;
     }
-        
-        
+    /* MPI_Barrier(MPI_COMM_WORLD); */
+    /* MPI_Finalize(); */
+    /* exit(0); */
     // read the individual Hamiltonian matrices H0 and H1
     // 2 matrices for each value of 0:lmax-1
     // Note: these are global, with original node indices - no partitioning
@@ -210,7 +221,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-        
+
     h0 = malloc(sizeof(sparse_csr_t)*4);
     cnt = 0;
     for(int hi = 0; hi < 4; hi++) {
@@ -226,19 +237,17 @@ int main(int argc, char *argv[])
         csr_read(fname,s0+cnt);
         cnt++;
     }
-        
+
     // create the full rank-local matrix blocked structure
     // same Ap and Ai as Hpart
     // Ax modified to store sub-matrices (g.nnz)
     int blkdim = csr_nrows(&g[0]);
     csr_copy(&Hfull_blk, &Hpart);
-    csr_copy(&H0_blk, &H0part);
     csr_copy(&S_blk, &Spart);
-        
+
     csr_block_params(&Hfull_blk, blkdim, csr_nnz(&g[0]));
-    csr_block_params(&H0_blk, blkdim, csr_nnz(&h0[0])); //using h0 and s0 instead of g shouldn't matter
-    csr_block_params(&S_blk, blkdim, csr_nnz(&s0[0]));  //But just in case
-        
+    csr_block_params(&S_blk, blkdim, csr_nnz(&s0[0]));
+
     // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
     //  - each row has row_nnz(Hpart)*row_nnz(G) non-zero entries
@@ -248,13 +257,13 @@ int main(int argc, char *argv[])
     // Hfull_blk inherits Ap and Ai directly from Hpart - one non-zero per entire submatrix.
     // Hfull stores all non-zeros independently in a native, non-blocked csr storage
     csr_unblock_matrix(&Hfull, &Hfull_blk, g);
-    csr_unblock_matrix(&H0full, &Hfull_blk, h0);
-    csr_unblock_matrix(&Sfull, &Hfull_blk, s0);
+    csr_unblock_matrix(&S, &S_blk, s0);
 
     // Hfull_blk has the comm info copied from Hpart,
     // but Hfull doesnt - it has to be modified by the block size.
     // At this point there is no comm info in Hfull - so copy it.
     csr_unblock_comm_info(&Hfull, &Hfull_blk, rank, nranks);
+    csr_unblock_comm_info(&S, &S_blk, rank, nranks);
 
     for(int r=0; r<nranks; r++){
         if(rank == r){
@@ -285,7 +294,7 @@ int main(int argc, char *argv[])
         sparse_csr_t submatrix;
         csr_copy(&submatrix, g);
 
-        tic(); printf("matrix assembly ");
+        tic(); printf("matrix assembly H ");
         // for all rows
         for(row = 0; row < csr_nrows(&Hpart); row++){
 
@@ -322,13 +331,21 @@ int main(int argc, char *argv[])
 
                 // prefetch the Hamiltonian values H0(l) and H1(l)
                 for(int l=0; l<lmax; l++){
-                                        
                     H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
                     H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
-                                        
                 }
 
                 csr_zero(&submatrix);
+
+                if(orig_row==orig_col) {
+                    for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
+                        submatrix.Ax[i] =
+                            h0[0].Ax[i]         +
+                            h0[1].Ax[i]*ki      +
+                            h0[2].Ax[i]*ki*ki   +
+                            h0[3].Ax[i]*ki*ki*ki;
+                    }
+                }
 
                 for(int l=0; l<lmax; l++){
                     if(H0[l] != CMPLX(0,0)){
@@ -378,36 +395,35 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
-                                
-                                
+
                 // store the submatrix in the global Hfull_blk
                 csr_block_insert(&Hfull_blk, row, col, submatrix.Ax);
-                                
-                //H0 and S construction
-                if(orig_row==orig_col) {
-                    csr_zero(&submatrix);
-                    for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
-                        submatrix.Ax[i] =
-                            (h0[0].Ax[i]            +
-                             h0[1].Ax[i]*ki         +
-                             h0[2].Ax[i]*pow(ki,2)  +
-                             h0[3].Ax[i]*pow(ki,3)) ;
-                    }
-                    csr_block_insert(&H0_blk,row,col,submatrix.Ax);
-                                
-                    csr_zero(&submatrix);
-                    for(csr_index_t i=0; i < csr_nnz(&submatrix); i++){
-                        submatrix.Ax[i] =
-                            (s0[0].Ax[i]            +
-                             s0[1].Ax[i]*ki         +
-                             s0[2].Ax[i]*pow(ki,2)) ;
-                    }
-                    csr_block_insert(&S_blk,row,col,submatrix.Ax);
-                }                                
             }
         }
         toc();
 
+        tic(); printf("matrix assembly S ");
+        // S is block-diagonal, so row == col
+        for(row = 0; row < csr_nrows(&Spart); row++){
+            csr_index_t orig_row = row;
+            int ki = (int)ik(orig_row); // k'
+            if(Spart.perm) {
+                orig_row = Spart.perm[row];
+            }
+            csr_zero(&submatrix);
+            for(csr_index_t i=0; i < csr_nnz(&submatrix); i++){
+                submatrix.Ax[i] =
+                    s0[0].Ax[i]       +
+                    s0[1].Ax[i]*ki    +
+                    s0[2].Ax[i]*ki*ki ;
+            }
+                    
+            // store the submatrix in the global S_blk
+            csr_block_insert(&S_blk,row,row,submatrix.Ax);
+        }
+
+        toc();
+        
         // convert blocked Hfull_blk to non-blocked Hfull
         // could be done immediately above, but we do it here for timing purposes
         tic(); printf("convert HI to non-blocked matrix ");
@@ -439,37 +455,7 @@ int main(int argc, char *argv[])
             }
         }
         toc();
-                
-        tic(); printf("convert H0 to non-blocked matrix ");
-        for(row = 0; row < H0_blk.nrows; row++){
 
-            // for non-zeros in each row
-            for(colp = H0_blk.Ap[row]; colp < H0_blk.Ap[row+1]; colp++){
-
-                // NOTE: rows and cols are remapped wrt. the original numbering in H
-                col = H0_blk.Ai[colp];
-
-                csr_block_link(&submatrix, &H0_blk, row, col);
-
-                // insert into non-blocked Hfull matrix
-                csr_index_t row_blk, col_blk, colp_blk;
-                csr_index_t row_dst, col_dst;
-                csr_index_t valp = 0;
-                for(row_blk=0; row_blk<blkdim; row_blk++){
-
-                    row_dst = row*blkdim + row_blk;
-                    for(colp_blk=submatrix.Ap[row_blk]; colp_blk<submatrix.Ap[row_blk+1]; colp_blk++){
-                        col_blk = submatrix.Ai[colp_blk];
-                        col_dst = col*blkdim + col_blk;
-
-                        csr_set_value(&H0full, row_dst, col_dst, submatrix.Ax[valp]);
-                        valp++;
-                    }
-                }
-            }
-        }
-        toc();
-                
         tic(); printf("convert S to non-blocked matrix ");
         for(row = 0; row < S_blk.nrows; row++){
 
@@ -492,29 +478,29 @@ int main(int argc, char *argv[])
                         col_blk = submatrix.Ai[colp_blk];
                         col_dst = col*blkdim + col_blk;
 
-                        csr_set_value(&Sfull, row_dst, col_dst, submatrix.Ax[valp]);
+                        csr_set_value(&S, row_dst, col_dst, submatrix.Ax[valp]);
                         valp++;
                     }
                 }
             }
         }
         toc();
-
-        // set up communication buffers
-        csr_init_communication(&Hfull_blk, x, rank, nranks);
-        csr_init_communication(&Hfull, x, rank, nranks);
-
+        
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
         // as Ax arrays in a template submatrix csr structure, e.g.
         // csr_block_link(&submatrix, &Hfull_blk, row, col);
 
+        // set up communication buffers
+        csr_init_communication(&Hfull_blk, x, rank, nranks);
+        csr_init_communication(&Hfull, x, rank, nranks);
+               
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull_blk); i++) x[i] = CMPLX(NAN,NAN);
         for(int i=0; i<csr_nrows(&Hfull_blk); i++)
-            x[csr_local_offset(&Hfull_blk) + i] = CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
+            x[csr_local_offset(&Hfull_blk) + i] = CMPLX(1, 1); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
 
         tic(); printf("    blocked spmv ");
         csr_comm(&Hfull_blk, rank, nranks);
@@ -544,21 +530,17 @@ int main(int argc, char *argv[])
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
         for(int i=0; i<csr_nrows(&Hfull); i++)
-            x[csr_local_offset(&Hfull) + i] = CMPLX(Hfull.row_beg + i, Hfull.row_beg + i);
+            x[csr_local_offset(&Hfull) + i] = CMPLX(1, 1); // CMPLX(Hfull.row_beg + i, Hfull.row_beg + i);
 
-        // perform spmv for the non-blocked Hfull matrix (native CSR storage)
+        // perform spmv for the non-blocked Hfull matrix (native csr storage)
         tic(); printf("non-blocked spmv ");
         csr_comm(&Hfull, rank, nranks);
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
-
+        
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
-        csr_write("Hfull.csr",&Hfull);
-        csr_write("H0full.csr",&H0full);
-        csr_write("Sfull.csr",&Sfull);
-                
 #if defined USE_CUDA | defined USE_HIP
         gpu_spmv_test(Hfull, x, yfull);
         // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
