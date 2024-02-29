@@ -62,6 +62,31 @@ void csr_write(const char*fname, csmat& mat)
     fclose(fd);
 }
 
+template <typename MatrixType>
+void dense_write(const char* fname, MatrixType& mat) {
+	const typename MatrixType::Scalar *Ax;
+	
+	typename MatrixType::Index rows = mat.rows();
+	typename MatrixType::Index cols = mat.cols();
+	
+	FILE *fd;
+	fd = fopen(fname, "w+");
+	
+	Ax = mat.data();
+	
+    if(!fd) {
+        fprintf(stderr, "cant open %s\n", fname);
+        exit(0);
+    }
+	
+	size_t fsize, nread;
+	//Storage format: rows, cols, data
+	fwrite(&rows, sizeof(typename MatrixType::Index), 1, fd);
+	fwrite(&cols, sizeof(typename MatrixType::Index), 1, fd);
+    fwrite(Ax, sizeof(csmat::Scalar), rows*cols, fd);
+	
+    fclose(fd);
+}
 
 void printSparseNonZeros(const csmat& mat) {
     cerr << mat.nonZeros() << "\n";
@@ -256,7 +281,19 @@ int main(int argc, char* argv[]) {
             csr_write("s2.csr",s2m);
         
         	
-			cout << H.getevals(-1);
+			vec evls0 = H.getevals(-1);;
+			//To find the ground state we identify the index of the eigenvalue closest to the ground state energy, -0.500007
+			
+			vec::Index e0idx;
+			
+			double e0 = vec(evls0+vec::Constant(evls0.rows(),0.500007)).array().abs().minCoeff(&e0idx);
+			
+			// cout << evls0;
+			cout << "e0: " << evls0[e0idx] << ", idx: " << e0idx << endl;
+			
+			cvec evc0 = H.getevec(e0idx,-1,-0.5);
+			
+			dense_write("psi0",evc0);
 		}
 	MPI_Finalize();
 	return 0;
