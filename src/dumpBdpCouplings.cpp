@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
             clsmat& splch = dkbb.splineCache(x);
             clsmat& dsplch = dkbb.dSplineCache(x,1);
             clsmat& ddsplch = dkbb.dSplineCache(x,2);
-	
+		
             //Construct laser pulse with desired parameters
             beyondDipolePulse bdpp(Intensity,omega,cycles);
 
@@ -237,7 +237,9 @@ int main(int argc, char* argv[]) {
             H.Vfunc = &coloumb<Z>;
             H.prepeigsLowMem(Nsplines,Nsplines/2, true);
             H.H0radprep();
-	
+			
+			//Verify that the ground state is correct
+			
             for(int n = 0; n < 4; n++) {
 				char fname[256];
 				snprintf(fname,255,"h0%d.csr",n);
@@ -252,8 +254,10 @@ int main(int argc, char* argv[]) {
             csr_write("s0.csr",s0m);
             csr_write("s1.csr",s1m);
             csr_write("s2.csr",s2m);
-        }
         
+        	
+			cout << H.getevals(-1);
+		}
 	MPI_Finalize();
 	return 0;
 }

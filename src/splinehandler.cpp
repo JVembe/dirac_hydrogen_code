@@ -360,11 +360,12 @@ void splineHandler::checkx(const lvec& x) {
 	}
 }
 
-lvec& splineHandler::glpts() {
+lvec& splineHandler::glpts(int ll) {
 	if (isCached(glpch)) return glpch;
 	else {
 		
-		int l = splinedeg + 1;
+		if(ll == -1) l = splinedeg + 1;
+		else l = l;
 		
 		std::vector<long double> glzeros = boost::math::legendre_p_zeros<long double>(l);
 	
@@ -397,7 +398,7 @@ lvec& splineHandler::glpts() {
 clsmat& splineHandler::wtmat() {
 	if (isCached(wtmt)) return wtmt;
 	else {
-		int l = this->splinedeg + 1;
+		// int l = this->splinedeg + 1;
 		
 		int N = l * (t.size()-1);
 		wtmt = clsmat(N,N);

@@ -210,8 +210,13 @@ int main(int argc, char* argv[]) {
 
 	int Nr = rthphb.radqN();
 
-	b = rthphb.bdpamatvecMPIblock(testvec);
-	cout << "Hvtst " << b.format(outformat);
+	cvec Htv = rthphb.bdpamatvecMPIblock(testvec);
+	cvec H0v = H.H0(testvec);
+	cvec Sv  = H.S(testvec);
+	
+	cout << "Htvtst " << Htv.format(outformat);
+	cout << "H0vtst " << H0v.format(outformat);
+	cout << "Svtst "  << Sv.format(outformat);
 	return 0;
 
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
