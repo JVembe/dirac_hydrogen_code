@@ -35,6 +35,7 @@ csr_index_t csr_local_offset(const sparse_csr_t *sp_blk);
 
 void csr_read(const char *fname, sparse_csr_t *sp);
 void csr_write(const char *fname, const sparse_csr_t *sp);
+void csr_ijk_write(const char *fname, const sparse_csr_t *sp);
 
 void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz);
 void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t *blk_ptr);
@@ -50,6 +51,6 @@ csr_data_t csr_get_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t co
 void csr_set_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t val);
 void csr_conj_transpose(sparse_csr_t *out, const sparse_csr_t *in);
 
-void csr_spmv(csr_index_t row_l, csr_index_t row_u, sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result);
+void csr_spmv(csr_index_t row_l, csr_index_t row_u, const sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result);
 
 #endif /* _CSR_H */

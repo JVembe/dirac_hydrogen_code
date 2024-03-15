@@ -6,12 +6,12 @@
 
 static struct timeval tb, te;
 
-void tic()
+static void tic()
 {
     gettimeofday(&tb, NULL);
 }
 
-void toc()
+static void toc()
 {
     long s,u;
     gettimeofday(&te, NULL);

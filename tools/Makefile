@@ -2,15 +2,17 @@ OBJS=sorted_list.o \
 	csr.o \
 	gpu_sparse.o \
 	matrix_tool.o \
+	bicgstab.o \
+	superlu.o
 
 CFLAGS_CUDA = #-DUSE_CUDA -lcusparse
 CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
-CFLAGS = -g -lm -DUSE_MPI 
+CFLAGS = -g -lm -DUSE_MPI0 -I/home/angainor/work/institution/usit/aus/dirac_gpu/install/include
 
 LDFLAGS_CUDA = #-lcusparse -lcudart
-LDFLAGS = $(LDFLAGS_CUDA)
+LDFLAGS = $(LDFLAGS_CUDA) -L/home/angainor/work/institution/usit/aus/dirac_gpu/install/lib -lsuperlu -lblas
 
-CC?=mpicc
+CC?=gcc
 CC_CUDA = nvcc
 CC_HIP = hipcc
 

@@ -9,6 +9,7 @@
 #include <xmmintrin.h>
 #endif
 
+#include "types.h"
 void csr_print(const sparse_csr_t *sp)
 {
     for(csr_index_t row = 0; row < sp->nrows; row++){
@@ -256,6 +257,40 @@ void csr_write(const char *fname, const sparse_csr_t *sp)
     if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
 
     fclose(fd);
+}
+
+void csr_ijk_write(const char *fname, const sparse_csr_t *sp)
+{
+    csr_index_t *Aj;
+    Aj = (csr_index_t *)malloc(sizeof(csr_index_t)*sp->nnz);
+
+    for(csr_index_t i=0; i<sp->nrows; i++){
+        for(csr_index_t j=sp->Ap[i]; j<sp->Ap[i+1]; j++){
+            Aj[j] = i;
+        }
+    }
+
+    size_t nwrite;
+
+    FILE *fd = fopen(fname, "w+");
+    if(!fd) ERROR("cant open %s\n", fname);
+
+    // storage format: dim, nnz, Ai, Aj, Ax
+    nwrite = fwrite(&sp->nrows, sizeof(csr_index_t), 1, fd);
+    nwrite = fwrite(&sp->nnz, sizeof(csr_index_t), 1, fd);    
+
+    nwrite = fwrite(sp->Ai, sizeof(csr_index_t), sp->nnz, fd);
+    if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
+
+    nwrite = fwrite(Aj, sizeof(csr_index_t), sp->nnz, fd);
+    if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
+
+    nwrite = fwrite(sp->Ax, sizeof(csr_data_t), sp->nnz, fd);
+    if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
+    
+    fclose(fd);
+
+    free(Aj);
 }
 
 /* walk through Ai and save communication (non-local) columns */
@@ -759,7 +794,7 @@ void csr_conj_transpose(sparse_csr_t *out, const sparse_csr_t *in)
 }
 
 
-void csr_spmv(csr_index_t row_beg, csr_index_t row_end, sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result)
+void csr_spmv(csr_index_t row_beg, csr_index_t row_end, const sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result)
 {
     csr_data_t  *Ax = sp->Ax;
     csr_index_t *Ap = sp->Ap;
@@ -776,7 +811,7 @@ void csr_spmv(csr_index_t row_beg, csr_index_t row_end, sparse_csr_t *sp, const 
 
     for(i=row_beg; i<row_end; i++){
 
-        stemp = 0;
+        stemp = CMPLX(0, 0);
 
         for(j=Ap[i]; j<Ap[i+1]; j++){
 #ifdef USE_PREFETCHING
