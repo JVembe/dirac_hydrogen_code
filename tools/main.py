@@ -55,7 +55,7 @@ res = res + sparse.identity(res.shape[0],format="csr")
 res_orig = res_orig + sparse.identity(res_orig.shape[0],format="csr")
 
 part_Ap = npy.array([0, len(nzc)], dtype=idxtype)
-nparts = 1
+nparts = 4
 if nparts > 1:
     # metis partitioning - for now only for demonstration
     # directly use the CSR storage from scipy sparse

@@ -38,6 +38,8 @@
 
 #define max(a,b) ((a)>(b)?(a):(b))
 
+int rank = 0, nranks = 1;
+
 // from spnrbasis.cpp
 int ik(int i) {
     int ii = i/4;
@@ -55,7 +57,7 @@ double imu(int i) {
     return mu;
 }
 
-void vec_read(const char *fname, cdouble_t **out)
+void vec_read(const char *fname, int start, int end, cdouble_t **out)
 {
     size_t nread;
     FILE *fd = fopen(fname, "r");
@@ -64,11 +66,19 @@ void vec_read(const char *fname, cdouble_t **out)
     int n;
     nread = fread(&n, sizeof(int), 1, fd);
     if(nread!=1) ERROR("wrong file format in %s\n", fname);
-    printf("%s size %d\n", fname, n);
 
+    nread = fseek(fd, sizeof(cdouble_t)*start, SEEK_CUR);
+    if(nread!=0) ERROR("wrong file format in %s\n", fname);
+    nread = ftell(fd);
+    printf("current pos %li\n", nread);
+
+    // read only local vector part
+    n = end-start;
     *out = (cdouble_t*)malloc(sizeof(cdouble_t)*n);
     nread = fread(*out, sizeof(cdouble_t), n, fd);
     if(nread!=n) ERROR("wrong file format in %s\n", fname);
+    printf("%s local size %d\n", fname, n);
+    fclose(fd);
 }
 
 // simple C-fied beyondDipolePulse implementation
@@ -79,12 +89,14 @@ typedef struct
     double T;
 } beyondDipolePulse_t;
 
+
 void beyondDipolePulse_init(beyondDipolePulse_t *this, double E0, double omega, double N)
 {
     this->E0 = E0;
     this->omega = omega;
     this->T = (double)N*2*M_PI / omega;
 }
+
 
 void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t *out)
 {
@@ -109,21 +121,33 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
             printf("nan in vector!\n");
             continue;
         }
-        if(fabs(cimag(v1[i]-v2[i]))>1e-8) fprintf(stderr, "%e i\n", cimag(v1[i]) - cimag(v2[i]));
-        if(fabs(creal(v1[i]-v2[i]))>1e-8) fprintf(stderr, "%e\n", creal(v1[i]) - creal(v2[i]));
+        if(fabs(cimag(v1[i]-v2[i]))>1e-8) fprintf(stderr, "v1 %e v2 %e diff %e i\n",
+                                                  cimag(v1[i]), cimag(v2[i]), cimag(v1[i]) - cimag(v2[i]));
+        if(fabs(creal(v1[i]-v2[i]))>1e-8) fprintf(stderr, "v1 %e v3 %e diff %e\n",
+                                                  creal(v1[i]), creal(v2[i]), creal(v1[i]) - creal(v2[i]));
     }
 }
+
 
 typedef struct {
     sparse_csr_t *H, *S;
 } HS_matrices;
 
-void HS_spmv_fun(const void *mat, const cdouble_t *x, cdouble_t *out)
+void rankprint(cdouble_t *v, int n);
+
+int cnt = 0;
+
+void HS_spmv_fun(const void *mat, cdouble_t *x, cdouble_t *out)
 {
     HS_matrices *hsptr = (HS_matrices*)mat;
-    // todo comm
+
+    // Setup the communication for H: this is cheap - just sets up recv pointers for x
+    csr_init_communication(hsptr->H, x, rank, nranks);
+    csr_comm(hsptr->H, rank, nranks);
     csr_spmv(0, csr_nrows(hsptr->H), hsptr->H, x, out);
-    csr_spmv(0, csr_nrows(hsptr->S), hsptr->S, x, out);
+
+    // S has only local vector entries - x has to be shifted compared to H
+    csr_spmv(0, csr_nrows(hsptr->S), hsptr->S, x + csr_local_offset(hsptr->H), out);
 }
 
 
@@ -142,16 +166,16 @@ int main(int argc, char *argv[])
     sparse_csr_t *g, *gt, *h0, *s0;
     sparse_csr_t *H;
     cdouble_t *psi0;
-    
+
     int opt;
     int lmax;
     double intensity, omega, cycles, time;
     double dt, h;
     int cnt;
-    
+
     slu_matrix_t sluA;
     slu_LU_t sluLU;
-    
+
     if(argc<5){
         fprintf(stderr, "Usage: %s -l time -l lmax -i intensity -o omega -c cycles\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -172,7 +196,7 @@ int main(int argc, char *argv[])
 
     dt = 0.000125;
     h  = 1;
-    
+
     printf("Parameters:\n");
     printf(" - time      %f\n", time);
     printf(" - lmax      %d\n", lmax);
@@ -186,16 +210,12 @@ int main(int argc, char *argv[])
     beyondDipolePulse_t bdpp;
     beyondDipolePulse_init(&bdpp, intensity, omega, cycles);
 
-    // read initial state
-    snprintf(fname, 255, "psi0.vec");
-    vec_read(fname, &psi0);
-
     // read the full couplings matrix structure
     // each non-zero value denotes a submatrix of dimensions same as the G matrices
     snprintf(fname, 255, "H.csr");
     csr_read(fname, &Hall);
 
-    // for convenience, create a diagonal matrix for the S-part (and the stationary H part)
+    // create a diagonal matrix for the S-part (and the stationary H part)
     csr_diag(&Sdiag, csr_nrows(&Hall));
 
     // copy partitioning from Hall to Sdiag
@@ -206,8 +226,7 @@ int main(int argc, char *argv[])
         Sdiag.perm = (csr_index_t*)malloc(sizeof(csr_index_t)*Sdiag.nrows);
         memcpy(Sdiag.perm, Hall.perm + Hall.local_offset, sizeof(csr_index_t)*Hall.nrows);
     }
-    
-    int rank = 0, nranks = 1;
+
 #ifdef USE_MPI
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -323,6 +342,10 @@ int main(int argc, char *argv[])
     csr_unblock_comm_info(&S, &S_blk, rank, nranks);
     csr_unblock_comm_info(&Hst, &Hst_blk, rank, nranks);
 
+    // read initial state
+    snprintf(fname, 255, "psi0.vec");
+    vec_read(fname, Hfull.row_beg, Hfull.row_end, &psi0);
+
     for(int r=0; r<nranks; r++){
         if(rank == r){
             printf("%d: All matrices read correctly. System info:\n", rank);
@@ -340,20 +363,17 @@ int main(int argc, char *argv[])
     }
 
     // allocate x and y vectors for SpMV: y = spA*x
-    csr_data_t *x, *yblk, *yfull;
+    csr_data_t *x, *yblk, *yfull, *rhs;
+
+    // x and rhs have to have the non-loca entries for communication - hence ncols
     x     = (csr_data_t *)calloc(csr_ncols(&Hfull_blk), sizeof(csr_data_t));
+    rhs   = (csr_data_t *)calloc(csr_ncols(&Hfull_blk), sizeof(csr_data_t));
     yblk  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
     yfull = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
 
     { // Compute
         csr_index_t row, col, colp;
 
-        cdouble_t *rhs, *x;        
-        rhs = ALLOC_VECTOR(csr_nrows(&Hfull_blk));
-        x   = ALLOC_VECTOR(csr_nrows(&Hfull_blk));
-        memset(rhs, 0, sizeof(cdouble_t)*csr_nrows(&Hfull_blk));
-        memset(x, 0, sizeof(cdouble_t)*csr_nrows(&Hfull_blk));
-        
         // TODO get the time to compute time-dependent f(a,t)
         csr_data_t ft[6];
         complex ihdt = I*h*dt/2;
@@ -412,11 +432,11 @@ int main(int argc, char *argv[])
                                   h0[2].Ax[i]*ki*ki   +
                                   h0[3].Ax[i]*ki*ki*ki);
                     }
-                    
+
                     // store the submatrix in the global Hst_blk - need it for ILU
-                    csr_block_insert(&Hst_blk, row, col, submatrix.Ax);
+                    csr_block_insert(&Hst_blk, row, row, submatrix.Ax);
                 }
-                
+
                 // the H matrix is still updated with Hst, so do not clear the submatrix
                 for(int l=0; l<lmax; l++){
                     if(H0[l] != CMPLX(0,0)){
@@ -477,10 +497,10 @@ int main(int argc, char *argv[])
         // S is block-diagonal, so row == col
         for(row = 0; row < csr_nrows(&Spart); row++){
             csr_index_t orig_row = row;
-            int ki = (int)ik(orig_row); // k'
             if(Spart.perm) {
                 orig_row = Spart.perm[row];
             }
+            int ki = (int)ik(orig_row); // k'
             csr_zero(&submatrix);
             for(csr_index_t i=0; i < csr_nnz(&submatrix); i++){
                 submatrix.Ax[i] =
@@ -488,13 +508,11 @@ int main(int argc, char *argv[])
                     s0[1].Ax[i]*ki    +
                     s0[2].Ax[i]*ki*ki ;
             }
-                    
+
             // store the submatrix in the global S_blk
             csr_block_insert(&S_blk,row,row,submatrix.Ax);
         }
 
-        toc();
-        
         // convert blocked Hfull_blk to non-blocked Hfull
         // could be done immediately above, but we do it here for timing purposes
         tic(); printf("convert HI to non-blocked matrix ");
@@ -556,7 +574,7 @@ int main(int argc, char *argv[])
             }
         }
         toc();
-        
+
         tic(); printf("convert Hst to non-blocked matrix ");
         for(row = 0; row < Hst_blk.nrows; row++){
 
@@ -595,9 +613,9 @@ int main(int argc, char *argv[])
             for(colp = Hst.Ap[row]; colp < Hst.Ap[row+1]; colp++){
                 Hst.Ax[colp] += S.Ax[colp];
             }
-        }                
+        }
         toc();
-        
+
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
@@ -607,12 +625,12 @@ int main(int argc, char *argv[])
         // set up communication buffers
         csr_init_communication(&Hfull_blk, x, rank, nranks);
         csr_init_communication(&Hfull, x, rank, nranks);
-               
+
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull_blk); i++) x[i] = CMPLX(NAN,NAN);
         for(int i=0; i<csr_nrows(&Hfull_blk); i++)
-            x[csr_local_offset(&Hfull_blk) + i] = CMPLX(1, 1); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
+            x[csr_local_offset(&Hfull_blk) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
 
         tic(); printf("    blocked spmv ");
         csr_comm(&Hfull_blk, rank, nranks);
@@ -642,41 +660,57 @@ int main(int argc, char *argv[])
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
         for(int i=0; i<csr_nrows(&Hfull); i++)
-            x[csr_local_offset(&Hfull) + i] = CMPLX(1, 1); // CMPLX(Hfull.row_beg + i, Hfull.row_beg + i);
+            x[csr_local_offset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull.row_beg + i, Hfull.row_beg + i);
 
         // perform spmv for the non-blocked Hfull matrix (native csr storage)
         tic(); printf("non-blocked spmv ");
         csr_comm(&Hfull, rank, nranks);
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
-        
+
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
-        csr_ijk_write("H.ijk", &Hfull);
-        csr_ijk_write("S.ijk", &S);
-        csr_ijk_write("Hst.ijk", &Hst);
+        if(1){
+            /* char fname[255]; */
+            /* snprintf(fname, 254, "S%d.ijk", rank); */
+            /* csr_ijk_write(fname, &Hst); */
+            // csr_ijk_write("S.ijk", &S);
+            // csr_ijk_write("Hst.ijk", &Hst);
 
-        if(time==0){
-            sluA = slu_create_matrix(csr_nrows(&Hst), csr_ncols(&Hst), csr_nnz(&Hst), Hst.Ax, Hst.Ai, Hst.Ap);
-            sluLU = slu_compute_ilu(sluA);
+            if(time==0){
+                sluA = slu_create_matrix(csr_nrows(&Hst), csr_ncols(&Hst), csr_nnz(&Hst), Hst.Ax, Hst.Ai, Hst.Ap);
+                sluLU = slu_compute_ilu(sluA);
+            }
         }
 
         // rhs: (S - iH*h*dt/2)*psi0;
-        // todo comm
-        csr_spmv(0, csr_nrows(&Hfull), &Hfull, psi0, rhs);
+        for(int i=0; i<csr_ncols(&Hfull); i++) rhs[i] = 0;
+        for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
+        for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_offset(&Hfull) + i] = psi0[i];
+        csr_comm(&Hfull, rank, nranks);
+        csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, rhs);
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = -1*rhs[i];
-        csr_spmv(0, csr_nrows(&S), &S, psi0, rhs);
+        csr_spmv(0, csr_nrows(&S), &S, x + csr_local_offset(&Hfull), rhs);
 
+        // TODO: initial solution vector from previous iteration
         memset(x, 0, csr_nrows(&S)*sizeof(cdouble_t));
-        
+
         int iters = 500;
         double tol_error = 1e-16;
         HS_matrices mat;
         mat.H = &Hfull;
         mat.S = &S;
-        bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), LU_precond_fun, &sluLU, &iters, &tol_error);
-        
+        printf("bicgstab setup: nrows %d ncols %d local offset %d\n",
+               csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_offset(&Hfull));
+        solver_workspace_t wsp = {0};
+        bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_offset(&Hfull),
+                 LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
+
+        // re-use the solution vector
+        bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_offset(&Hfull),
+                 LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
+
 #if defined USE_CUDA | defined USE_HIP
         gpu_spmv_test(Hfull, x, yfull);
         // gpu_spmb_block_test(Hfull_blk, x, yfull, g);

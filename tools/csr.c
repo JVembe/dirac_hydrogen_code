@@ -569,6 +569,10 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
     // allocate memory for the unblocked matrix
     csr_allocate(out, csr_nrows(in), csr_ncols(in), csr_nnz(in));
 
+    // this is true only for 1 rank. fixed later in csr_unblock_comm_info
+    out->row_beg = 0;
+    out->row_end = out->nrows;
+    
     // for all rows
     for(row = 0; row < in->nrows; row++){
 
@@ -716,7 +720,7 @@ void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nran
         recv_location += sp->n_comm_entries[rank*nranks+irank]*sp->blk_dim;
 
         /* setup the send buffer */
-        if(sp->n_comm_entries[irank*nranks+rank]){
+        if(sp->n_comm_entries[irank*nranks+rank] && !sp->send_ptr[irank]){
             csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
             sp->send_ptr[irank] = (csr_data_t*)calloc(nent, sizeof(csr_data_t));
         }
@@ -792,7 +796,6 @@ void csr_conj_transpose(sparse_csr_t *out, const sparse_csr_t *in)
         }
     }
 }
-
 
 void csr_spmv(csr_index_t row_beg, csr_index_t row_end, const sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result)
 {
