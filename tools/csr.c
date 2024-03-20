@@ -163,9 +163,19 @@ csr_index_t csr_nrows(const sparse_csr_t *sp_blk)
     return sp_blk->nrows*sp_blk->blk_dim;
 }
 
-csr_index_t csr_local_offset(const sparse_csr_t *sp_blk)
+csr_index_t csr_ncolblocks(const sparse_csr_t *sp_blk)
 {
-    return sp_blk->local_offset*sp_blk->blk_dim;
+    return sp_blk->ncols;
+}
+
+csr_index_t csr_nrowblocks(const sparse_csr_t *sp_blk)
+{
+    return sp_blk->nrows;
+}
+
+csr_index_t csr_local_rowoffset(const sparse_csr_t *sp_blk)
+{
+    return sp_blk->local_offset;
 }
 
 csr_index_t csr_nnz(const sparse_csr_t *sp_blk)
@@ -600,6 +610,39 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
             // next Hfull row - start where the last one ends
             out->Ap[rowp_dst+1] = out->Ap[rowp_dst];
             rowp_dst++;
+        }
+    }
+}
+
+void csr_blocked_to_full(sparse_csr_t *Afull, sparse_csr_t *Ablk, sparse_csr_t *submatrix)
+{
+    csr_index_t row, col, colp;
+    int blkdim = Ablk->blk_dim;
+    for(row = 0; row < Ablk->nrows; row++){
+
+        // for non-zeros in each row
+        for(colp = Ablk->Ap[row]; colp < Ablk->Ap[row+1]; colp++){
+
+            // NOTE: rows and cols are remapped wrt. the original numbering in H
+            col = Ablk->Ai[colp];
+
+            csr_block_link(submatrix, Ablk, row, col);
+
+            // insert into non-blocked Hfull matrix
+            csr_index_t row_blk, col_blk, colp_blk;
+            csr_index_t row_dst, col_dst;
+            csr_index_t valp = 0;
+            for(row_blk=0; row_blk<blkdim; row_blk++){
+
+                row_dst = row*blkdim + row_blk;
+                for(colp_blk=submatrix->Ap[row_blk]; colp_blk<submatrix->Ap[row_blk+1]; colp_blk++){
+                    col_blk = submatrix->Ai[colp_blk];
+                    col_dst = col*blkdim + col_blk;
+
+                    csr_set_value(Afull, row_dst, col_dst, submatrix->Ax[valp]);
+                    valp++;
+                }
+            }
         }
     }
 }

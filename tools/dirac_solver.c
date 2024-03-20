@@ -40,6 +40,17 @@
 
 int rank = 0, nranks = 1;
 
+void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
+                              sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
+                              const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt);
+
+void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
+                                 sparse_csr_t *S_blk, sparse_csr_t *S,
+                                 sparse_csr_t *Hst_blk, sparse_csr_t *Hst,
+                                 const sparse_csr_t *h0, const sparse_csr_t *s0);
+
+slu_LU_t compute_preconditioner(const sparse_csr_t *S, const sparse_csr_t *Hst);
+
 // from spnrbasis.cpp
 int ik(int i) {
     int ii = i/4;
@@ -169,12 +180,9 @@ int main(int argc, char *argv[])
 
     int opt;
     int lmax;
-    double intensity, omega, cycles, time;
+    double intensity, omega, cycles, maxtime, time = 0;
     double dt, h;
     int cnt;
-
-    slu_matrix_t sluA;
-    slu_LU_t sluLU;
 
     if(argc<5){
         fprintf(stderr, "Usage: %s -l time -l lmax -i intensity -o omega -c cycles\n", argv[0]);
@@ -183,7 +191,7 @@ int main(int argc, char *argv[])
 
     while ((opt = getopt(argc, argv, "t:l:i:o:c:")) != -1) {
         switch (opt) {
-        case 't': time = atof(optarg); break;
+        case 't': maxtime = atof(optarg); break;
         case 'l': lmax = atoi(optarg); break;
         case 'i': intensity = atof(optarg); break;
         case 'o': omega = atof(optarg); break;
@@ -194,11 +202,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    dt = 0.000125;
+    dt = 0.125;
     h  = 1;
 
     printf("Parameters:\n");
-    printf(" - time      %f\n", time);
+    printf(" - time      %f\n", maxtime);
     printf(" - lmax      %d\n", lmax);
     printf(" - intensity %lf\n", intensity);
     printf(" - omega     %lf\n", omega);
@@ -241,10 +249,6 @@ int main(int argc, char *argv[])
 
         // partitioning of the S-part is trivial, but still needs to be done
         csr_get_partition(&S_blk, &Sdiag, rank, Hall.npart);
-
-        /* DEBUG */
-        /* snprintf(fname, 255, "H_part%d.csr", rank); */
-        /* csr_write(fname, &Hfull_blk); */
     } else {
         Hfull_blk = Hall;
         S_blk = Sdiag;
@@ -325,7 +329,7 @@ int main(int argc, char *argv[])
     // each submatrix will have the same non-zero structure as the base g matrices
     sparse_csr_t submatrix;
     csr_copy(&submatrix, g);
-    
+
     // create the non-blocked rank-local Hfull matrix structure
     //  - each non-zero is converted to blkdim x blkdim submatrix
     //  - each row has row_nnz(Hfull_blk)*row_nnz(G) non-zero entries
@@ -368,282 +372,254 @@ int main(int argc, char *argv[])
     }
 
     // allocate x and y vectors for SpMV: y = spA*x
-    csr_data_t *x, *yblk, *yfull, *rhs;
+    csr_data_t *x, *rhs;
 
-    // x and rhs have to have the non-loca entries for communication - hence ncols
+    // rhs = (S-H)*psi0
+    // x(=psi0) has to have the non-loca entries for communication - hence ncols
     x     = (csr_data_t *)calloc(csr_ncols(&Hfull_blk), sizeof(csr_data_t));
-    rhs   = (csr_data_t *)calloc(csr_ncols(&Hfull_blk), sizeof(csr_data_t));
-    yblk  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
-    yfull = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
+    rhs   = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
 
-    { // Compute
-        csr_index_t row, col, colp;
+    for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
+    for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i];
+    
+    // compute the stationary part once
+    compute_stationary_matrices(h, dt, &submatrix, &S_blk, &S, &Hst_blk, &Hst, h0, s0);
 
+    // compute the preconditioner once - based on the stationary part
+    slu_LU_t sluLU = compute_preconditioner(&S, &Hst);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // time iterations
+    int iter = 0;
+    solver_workspace_t wsp = {0};
+    while(time <= maxtime){
         // TODO get the time to compute time-dependent f(a,t)
-        csr_data_t ft[6];
+        csr_data_t ft[6] = {0};
         complex ihdt = I*h*dt/2;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
-        printf("f(t)\n");
-        for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
 
-        tic(); printf("matrix assembly H ");
-        // for all rows
-        for(row = 0; row < csr_nrowblocks(&Hfull_blk); row++){
-
-            // for non-zeros in each row
-            for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
-
-                // NOTE: rows and cols in Hfull_blk are remapped wrt. the original numbering in H
-                col = Hfull_blk.Ai[colp];
-
-                // apply node renumbering - if available
-                csr_index_t orig_row = row;
-                csr_index_t orig_col = col;
-                if(Hfull_blk.perm) {
-                    orig_row = Hfull_blk.perm[csr_local_rowoffset(&Hfull_blk) + row];
-                    orig_col = Hfull_blk.perm[col];
-                }
-
-                // calculate kappa and mu parameters from row/col indices
-                // see spnrbasis::bdpalphsigmaXmat
-                int ki = (int)ik(orig_row); // k'
-                int kj = (int)ik(orig_col); // k
-
-                sparse_csr_t *pg0, *pg1, *pg2, *pg3;
-                sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
-                csr_data_t H0[lmax], H1[lmax];
-
-                // prefetch the Hamiltonian values H0(l) and H1(l)
-                for(int l=0; l<lmax; l++){
-                    H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
-                    H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
-                }
-
-                csr_zero(&submatrix);
-
-                // stationary part of H
-                if(orig_row==orig_col) {
-                    for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
-                        submatrix.Ax[i] =
-                            ihdt*(h0[0].Ax[i]         +
-                                  h0[1].Ax[i]*ki      +
-                                  h0[2].Ax[i]*ki*ki   +
-                                  h0[3].Ax[i]*ki*ki*ki);
-                    }
-
-                    // store the submatrix in the global Hst_blk - need it for ILU
-                    csr_block_insert(&Hst_blk, row, row, submatrix.Ax);
-                }
-
-                // the H matrix is still updated with Hst, so do not clear the submatrix
-                for(int l=0; l<lmax; l++){
-                    if(H0[l] != CMPLX(0,0)){
-
-                        for(int a=0; a<6; a++){
-                            if((a%2!=l%2)) { //Skip redundant matrices
-                                pg0 = g + a*4*lmax + l*4;
-                                pg1 = pg0 + 1;
-                                pg2 = pg0 + 2;
-                                pg3 = pg0 + 3;
-
-                                // g matrices all have the same nnz pattern,
-                                // so we can operate directly on the internal storage Ax
-                                for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
-                                    submatrix.Ax[i] +=
-                                        ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
-                                                          pg1->Ax[i]*ki     +
-                                                          pg2->Ax[i]*kj     +
-                                                          pg3->Ax[i]*ki*kj) ;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                for(int l=0; l<lmax; l++){
-                    if(H1[l] != CMPLX(0,0)){
-
-                        for(int a=0; a<6; a++){
-                            if((a%2!=l%2)) { //Skip redundant matrices
-                                pgt0 = gt + a*4*lmax + l*4;
-                                pgt1 = pgt0 + 1;
-                                pgt2 = pgt0 + 2;
-                                pgt3 = pgt0 + 3;
-
-                                // g matrices all have the same nnz pattern,
-                                // so we can operate directly on the internal storage Ax
-                                for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
-                                    submatrix.Ax[i] +=
-                                        ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
-                                                          pgt1->Ax[i]*kj    +
-                                                          pgt2->Ax[i]*ki    +
-                                                          pgt3->Ax[i]*ki*kj);
-
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // store the submatrix in the global Hfull_blk
-                csr_block_insert(&Hfull_blk, row, col, submatrix.Ax);
-            }
+        if(rank==0) {
+            printf("time %e\n", time);
+            printf("f(t)\n");
+            for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
         }
-        toc();
-
-        tic(); printf("matrix assembly S ");
-        // S is block-diagonal, so row == col
-        for(row = 0; row < csr_nrowblocks(&S_blk); row++){
-            csr_index_t orig_row = row;
-            if(S_blk.perm) {
-                orig_row = S_blk.perm[row];
-            }
-            int ki = (int)ik(orig_row); // k'
-            csr_zero(&submatrix);
-            for(csr_index_t i=0; i < csr_nnz(&submatrix); i++){
-                submatrix.Ax[i] =
-                    s0[0].Ax[i]       +
-                    s0[1].Ax[i]*ki    +
-                    s0[2].Ax[i]*ki*ki ;
-            }
-
-            // store the submatrix in the global S_blk
-            csr_block_insert(&S_blk,row,row,submatrix.Ax);
-        }
-
-        // convert blocked Hfull_blk to non-blocked Hfull
-        // could be done immediately above, but we do it here for timing purposes
-        tic(); printf("convert H to non-blocked matrix ");
-        csr_blocked_to_full(&Hfull, &Hfull_blk, &submatrix);
-        toc();
-
-        tic(); printf("convert S to non-blocked matrix ");
-        csr_blocked_to_full(&S, &S_blk, &submatrix);
-        toc();
-
-        tic(); printf("convert Hst to non-blocked matrix ");
-        csr_blocked_to_full(&Hst, &Hst_blk, &submatrix);
-        toc();
-
-        tic(); printf("construct base preconditioner matrix ");
-
-        // preconditioner is based on ILU of S+Hst, so compute Hst = S+Hst
-        // this is trivial since S and Hst have the same, block-diagonal structure
-        for(row = 0; row < Hst.nrows; row++){
-            for(colp = Hst.Ap[row]; colp < Hst.Ap[row+1]; colp++){
-                Hst.Ax[colp] += S.Ax[colp];
-            }
-        }
-        toc();
-
-        // The Hfull_blk matrix contains all computed submatrices.
-        // The submatrices are stored as a sub-block in the csr storage
-        // meaning that the relevant Ax parts can be used directly
-        // as Ax arrays in a template submatrix csr structure, e.g.
-        // csr_block_link(&submatrix, &Hfull_blk, row, col);
-
-        // set up communication buffers
-        csr_init_communication(&Hfull_blk, x, rank, nranks);
+        
+        // time-dependent part of the Hamiltonian
+        compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
+        
+        // rhs = (S-H)*psi(n-1)
+        for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = 0;
         csr_init_communication(&Hfull, x, rank, nranks);
-
-        // initialize input vector. non-local parts are set to nan to verify communication:
-        // all non-local entries are received from peers, hence set to non-nan during communication
-        for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull); i++)
-            x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
-
-        tic(); printf("    blocked spmv ");
-        csr_comm(&Hfull_blk, rank, nranks);
-        for(row = 0; row < Hfull_blk.nrows; row++){
-
-            // for non-zero blocks in each row
-            for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
-
-                // NOTE: rows and cols are remapped wrt. the original numbering in H
-                col = Hfull_blk.Ai[colp];
-
-                csr_block_link(&submatrix, &Hfull_blk, row, col);
-
-                csr_data_t *xin, *yout;
-                xin  = x + col*blkdim;
-                yout = yblk + row*blkdim;
-
-                // perform spmv
-                csr_spmv(0, csr_nrows(&submatrix), &submatrix, xin, yout);
-
-                // remember that at this stage xin and yout are renumbered wrt. the original node numbering
-            }
-        }
-        toc();
-
-        // perform spmv for the non-blocked Hfull matrix (native csr storage)
-        tic(); printf("non-blocked spmv ");
-        csr_comm(&Hfull, rank, nranks);
-        csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
-        toc();
-
-        // validate - compare yblk and yfull results
-        compare_vectors(yfull, yblk, csr_nrows(&Hfull));
-
-        if(1){
-            /* char fname[255]; */
-            /* snprintf(fname, 254, "S%d.ijk", rank); */
-            /* csr_ijk_write(fname, &Hst); */
-            // csr_ijk_write("S.ijk", &S);
-            // csr_ijk_write("Hst.ijk", &Hst);
-
-            sluA = slu_create_matrix(csr_nrows(&Hst), csr_ncols(&Hst), csr_nnz(&Hst), Hst.Ax, Hst.Ai, Hst.Ap);
-            sluLU = slu_compute_ilu(sluA);
-        }
-
-        // rhs: (S - iH*h*dt/2)*psi0;
-        for(int i=0; i<csr_ncols(&Hfull); i++) rhs[i] = 0;
-        for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i];
         csr_comm(&Hfull, rank, nranks);
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, rhs);
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = -1*rhs[i];
         csr_spmv(0, csr_nrows(&S), &S, x + csr_local_rowoffset(&Hfull), rhs);
-
-        // TODO: initial solution vector from previous iteration
-        memset(x, 0, csr_nrows(&S)*sizeof(cdouble_t));
-
+        
         int iters = 500;
         double tol_error = 1e-16;
         HS_matrices mat;
         mat.H = &Hfull;
         mat.S = &S;
-        printf("bicgstab setup: nrows %d ncols %d local offset %d\n",
-               csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull));
-        solver_workspace_t wsp = {0};
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
 
-        rankprint(x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull));
-        
-        // re-use the solution vector
-        bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
-                 LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
-
-#if defined USE_CUDA | defined USE_HIP
-        gpu_spmv_test(Hfull, x, yfull);
-        // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
-#endif
-
-        // DEBUG: write out the result vectors for comparison with single-rank result
-        /*
-          for(int r=0; r<nranks; r++){
-          if(rank == r){
-          for(row = 0; row < csr_nrows(&Hfull_blk); row++) fprintf(stderr, "%e %e\n", creal(yblk[row]), cimag(yblk[row]));
-          }
-          MPI_Barrier(MPI_COMM_WORLD);
-          }
-          MPI_Barrier(MPI_COMM_WORLD);
-        */
+        iter++;
+        time = time + dt;
     }
-
+    rankprint(x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull));
+    
 #ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 #endif
+}
+
+void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
+                              sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
+                              const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt)
+{
+    csr_index_t row, col, colp;
+    complex ihdt = I*h*dt/2;
+
+    // for all rows
+    for(row = 0; row < csr_nrowblocks(Hfull_blk); row++){
+
+        // for non-zeros in each row
+        for(colp = Hfull_blk->Ap[row]; colp < Hfull_blk->Ap[row+1]; colp++){
+
+            // NOTE: rows and cols in Hfull_blk are remapped wrt. the original numbering in H
+            col = Hfull_blk->Ai[colp];
+
+            // apply node renumbering - if available
+            csr_index_t orig_row = row;
+            csr_index_t orig_col = col;
+            if(Hfull_blk->perm) {
+                orig_row = Hfull_blk->perm[csr_local_rowoffset(Hfull_blk) + row];
+                orig_col = Hfull_blk->perm[col];
+            }
+
+            // calculate kappa and mu parameters from row/col indices
+            // see spnrbasis::bdpalphsigmaXmat
+            int ki = (int)ik(orig_row); // k'
+            int kj = (int)ik(orig_col); // k
+
+            const sparse_csr_t *pg0, *pg1, *pg2, *pg3;
+            const sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
+            csr_data_t H0[lmax], H1[lmax];
+
+            // prefetch the Hamiltonian values H0(l) and H1(l)
+            for(int l=0; l<lmax; l++){
+                H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
+                H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
+            }
+
+            csr_zero(submatrix);
+
+            // stationary part of H
+            // TODO: check if this is faster than extraction from Hst
+            if(orig_row==orig_col) {
+                for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                    submatrix->Ax[i] =
+                        ihdt*(h0[0].Ax[i]         +
+                              h0[1].Ax[i]*ki      +
+                              h0[2].Ax[i]*ki*ki   +
+                              h0[3].Ax[i]*ki*ki*ki);
+                }
+            }
+
+            // the H matrix is still updated with Hst, so do not clear the submatrix
+            for(int l=0; l<lmax; l++){
+                if(H0[l] != CMPLX(0,0)){
+
+                    for(int a=0; a<6; a++){
+                        if((a%2!=l%2)) { //Skip redundant matrices
+                            pg0 = g + a*4*lmax + l*4;
+                            pg1 = pg0 + 1;
+                            pg2 = pg0 + 2;
+                            pg3 = pg0 + 3;
+
+                            // g matrices all have the same nnz pattern,
+                            // so we can operate directly on the internal storage Ax
+                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                submatrix->Ax[i] +=
+                                    ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
+                                                      pg1->Ax[i]*ki     +
+                                                      pg2->Ax[i]*kj     +
+                                                      pg3->Ax[i]*ki*kj) ;
+                            }
+                        }
+                    }
+                }
+            }
+
+            for(int l=0; l<lmax; l++){
+                if(H1[l] != CMPLX(0,0)){
+
+                    for(int a=0; a<6; a++){
+                        if((a%2!=l%2)) { //Skip redundant matrices
+                            pgt0 = gt + a*4*lmax + l*4;
+                            pgt1 = pgt0 + 1;
+                            pgt2 = pgt0 + 2;
+                            pgt3 = pgt0 + 3;
+
+                            // g matrices all have the same nnz pattern,
+                            // so we can operate directly on the internal storage Ax
+                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                submatrix->Ax[i] +=
+                                    ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
+                                                      pgt1->Ax[i]*kj    +
+                                                      pgt2->Ax[i]*ki    +
+                                                      pgt3->Ax[i]*ki*kj);
+
+                            }
+                        }
+                    }
+                }
+            }
+
+            // store the submatrix in the global Hfull_blk
+            csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
+        }
+    }
+
+    csr_blocked_to_full(Hfull, Hfull_blk, submatrix);
+}
+
+void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
+                                 sparse_csr_t *S_blk, sparse_csr_t *S,
+                                 sparse_csr_t *Hst_blk, sparse_csr_t *Hst,
+                                 const sparse_csr_t *h0, const sparse_csr_t *s0)
+{
+    csr_index_t row, col, colp;
+    int blkdim = S_blk->blk_dim;
+    complex ihdt = I*h*dt/2;
+
+    tic(); printf("matrix assembly S ");
+    // S is block-diagonal, so row == col
+    for(row = 0; row < csr_nrowblocks(S_blk); row++){
+        csr_index_t orig_row = row;
+        if(S_blk->perm) {
+            orig_row = S_blk->perm[row];
+        }
+        int ki = (int)ik(orig_row); // k'
+        
+        csr_zero(submatrix);
+        for(csr_index_t i=0; i < csr_nnz(submatrix); i++){
+            submatrix->Ax[i] =
+                s0[0].Ax[i]       +
+                s0[1].Ax[i]*ki    +
+                s0[2].Ax[i]*ki*ki ;
+        }
+
+        // store the submatrix in the global S_blk
+        csr_block_insert(S_blk,row,row,submatrix->Ax);
+
+        // stationary part of H
+        csr_zero(submatrix);
+        for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+            submatrix->Ax[i] =
+                ihdt*(h0[0].Ax[i]         +
+                      h0[1].Ax[i]*ki      +
+                      h0[2].Ax[i]*ki*ki   +
+                      h0[3].Ax[i]*ki*ki*ki);
+        }
+
+        // store the submatrix in the global Hst_blk - need it for ILU
+        csr_block_insert(Hst_blk, row, row, submatrix->Ax);
+    }
+
+    tic(); printf("convert S to non-blocked matrix ");
+    csr_blocked_to_full(S, S_blk, submatrix);
+    toc();
+
+    tic(); printf("convert Hst to non-blocked matrix ");
+    csr_blocked_to_full(Hst, Hst_blk, submatrix);
+    toc();
+}
+
+slu_LU_t compute_preconditioner(const sparse_csr_t *S, const sparse_csr_t *Hst)
+{
+    csr_index_t row, col, colp;
+    slu_matrix_t sluA;
+    slu_LU_t sluLU;
+
+    csr_data_t *P = (csr_data_t*)malloc(sizeof(csr_data_t)*Hst->nnz);
+
+    tic(); printf("construct base preconditioner matrix ");
+
+    // preconditioner is based on ILU of S+Hst, so compute Hst = S+Hst
+    // this is trivial since S and Hst have the same, block-diagonal structure
+    for(row = 0; row < Hst->nrows; row++){
+        for(colp = Hst->Ap[row]; colp < Hst->Ap[row+1]; colp++){
+            P[colp] = S->Ax[colp] + Hst->Ax[colp];
+        }
+    }
+    toc();
+
+    // compute ILU
+    sluA = slu_create_matrix(csr_nrows(Hst), csr_ncols(Hst), csr_nnz(Hst), P, Hst->Ai, Hst->Ap);
+    sluLU = slu_compute_ilu(sluA);
+    free(P);
+
+    return sluLU;
 }

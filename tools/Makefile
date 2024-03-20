@@ -1,7 +1,6 @@
 OBJS=sorted_list.o \
 	csr.o \
 	gpu_sparse.o \
-	matrix_tool.o \
 	bicgstab.o \
 	superlu.o
 
@@ -19,8 +18,11 @@ CC_HIP = hipcc
 %.o : %.c
 	$(CC) -O3 -c $(CFLAGS) $< -o $@
 
-all: $(OBJS)
-	$(CC) -O3 $(OBJS) -o matrix_tool -lm $(LDFLAGS)
+matrix_tool: $(OBJS) matrix_tool.o
+	$(CC) -O3 $(OBJS) $@.o -o matrix_tool -lm $(LDFLAGS)
+
+dirac_solver: $(OBJS) dirac_solver.o
+	$(CC) -O3 $(OBJS) $@.o -o dirac_solver -lm $(LDFLAGS)
 
 clean:
 	rm *.o
