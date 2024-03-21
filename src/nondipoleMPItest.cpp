@@ -28,6 +28,32 @@
 int beyondDipolePulse::l = 1;
 int beyondDipoleCarrierPulse::l = 1;
 
+template <typename MatrixType>
+void dense_write(const char* fname, MatrixType& mat) {
+	const typename MatrixType::Scalar *Ax;
+	
+	typename MatrixType::Index rows = mat.rows();
+	typename MatrixType::Index cols = mat.cols();
+	
+	FILE *fd;
+	fd = fopen(fname, "w+");
+	
+	Ax = mat.data();
+	
+    if(!fd) {
+        fprintf(stderr, "cant open %s\n", fname);
+        exit(0);
+    }
+	
+	size_t fsize, nread;
+	//Storage format: rows, cols, data
+	fwrite(&rows, sizeof(typename MatrixType::Index), 1, fd);
+	fwrite(&cols, sizeof(typename MatrixType::Index), 1, fd);
+    fwrite(Ax, sizeof(csmat::Scalar), rows*cols, fd);
+	
+    fclose(fd);
+}
+
 void printSparseNonZeros(const csmat& mat) {
 	cout << " = npy.array((\n";
 
@@ -206,9 +232,11 @@ int main(int argc, char* argv[]) {
 	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 
-	// cvec b;
+	cvec b;
 
 	int Nr = rthphb.radqN();
+
+	b = H.S(testvec) - dt * cdouble(0,0.5) * H.H(T,testvec);
 
 	// cvec Htv = rthphb.bdpamatvecMPIblock(testvec);
 	// cvec H0v = H.H0(testvec);
@@ -247,7 +275,11 @@ int main(int argc, char* argv[]) {
 
 	// solver.setMaxIterations(1000);
 
-	// cvec psi2 = solver.solve(b);
+	cvec psi2 = solver.solve(b);
+	
+	dense_write("presolve",b);
+	dense_write("postsolve",psi2);
+	
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 
 	// cout << "psi2" << psi2.format(outformat) << endl;
@@ -259,7 +291,7 @@ int main(int argc, char* argv[]) {
 	// cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
 
 	// MPI_Finalize();
-	// return 0;
+	return 0;
 	// //Initialize crank-nicholson propagator
 	Cranknich<Htype,dirbs,true> cnp(H);
 
