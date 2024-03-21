@@ -225,6 +225,8 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			
 			proptest->setTime(t);
 			
+			bdpft vt = H->vExt->template axialPart<axis::t>(t);
+			cout << "f("<<t<<"):\n" << vt << endl;
 			// cvec Hpsi = H->H(this->t,this->wft.coefs);
 			
 			// b = H->S(this->wft.coefs) - dt * cdouble(0,0.5) * Hpsi;

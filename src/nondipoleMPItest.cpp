@@ -277,8 +277,8 @@ int main(int argc, char* argv[]) {
 
 	cvec psi2 = solver.solve(b);
 	
-	dense_write("presolve",b);
-	dense_write("postsolve",psi2);
+	// dense_write("presolve",b);
+	// dense_write("postsolve",psi2);
 	
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 
@@ -291,7 +291,7 @@ int main(int argc, char* argv[]) {
 	// cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
 
 	// MPI_Finalize();
-	return 0;
+	// return 0;
 	// //Initialize crank-nicholson propagator
 	Cranknich<Htype,dirbs,true> cnp(H);
 

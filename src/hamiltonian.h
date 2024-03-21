@@ -1135,8 +1135,9 @@ class Dirac: public DiracBase<Dirac<basistype>,basistype> {
 	
 	protected:
 		
-		Potential<dipolePulse>* vExt = NULL;
 	public:
+		Potential<dipolePulse>* vExt = NULL;
+		
 		Dirac(basis<basistype>& bs, Potential<dipolePulse>& vExt):DiracBase<Dirac<basistype>, basistype> (bs) {
 			this->vExt = &vExt;
 		}
@@ -1167,9 +1168,9 @@ class DiracBDP: public DiracBase<DiracBDP<basistype>, basistype> {
 	
 	protected:
 		//bdpft (*extPotT) (long double);
-		Potential<beyondDipolePulse>* vExt = NULL;
-	public:
 		
+	public:
+		Potential<beyondDipolePulse>* vExt = NULL;
 	
 		DiracBDP(basis<basistype>& bs, Potential<beyondDipolePulse>& vExt):DiracBase<DiracBDP<basistype>,basistype>(bs) {
 			this->vExt = &vExt;
@@ -1177,7 +1178,8 @@ class DiracBDP: public DiracBase<DiracBDP<basistype>, basistype> {
 		cvec HtVec(double t, const cvec& v) const {
 			vExt->setTime(t);
 			
-			//bdpft vt = vExt->template axialPart<axis::t>(t);
+			// bdpft vt = vExt->template axialPart<axis::t>(t);
+			// cout << "f("<<t<<"):\n" << vt;
 			
 			cvec out = cvec::Zero(v.size());
 			
