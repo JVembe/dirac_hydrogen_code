@@ -144,7 +144,7 @@ typedef struct {
     sparse_csr_t *H, *S;
 } HS_matrices;
 
-void rankprint(cdouble_t *v, int n);
+void rankprint(char *fname, cdouble_t *v, int n);
 
 int cnt = 0;
 
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
 
     int opt;
     int lmax;
-    double intensity, omega, cycles, maxtime, time = 0;
+    double intensity, omega, cycles, maxtime = 0, time = 0;
     double dt, h;
     int cnt;
 
@@ -423,10 +423,15 @@ int main(int argc, char *argv[])
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
 
+        {
+            char fname[256];
+            snprintf(fname, 255, "x%d.out", iter);
+            rankprint(fname, x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull));
+        }
+        
         iter++;
         time = time + dt;
     }
-    rankprint(x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull));
     
 #ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);

@@ -34,18 +34,22 @@ double complex zreduce(double complex val)
     return retval;
 }
 
-void rankprint(cdouble_t *v, int n)
+void rankprint(char *fname, cdouble_t *v, int n)
 {
+    FILE *fd;
     for(int r=0; r<nranks; r++){
         if(rank==r){
+            if(0==rank)
+                fd = fopen(fname, "w+");
+            else
+                fd = fopen(fname, "a+");                
             for(int i=0; i<n; i++){
-                fprintf(stderr, "%e %e\n", creal(v[i]), cimag(v[i]));
+                fprintf(fd, "%e %e\n", creal(v[i]), cimag(v[i]));
             }
+            fclose(fd);
         }
         MPI_Barrier(MPI_COMM_WORLD);
     }
-    MPI_Finalize();
-    exit(0);
 }
 
 #else
