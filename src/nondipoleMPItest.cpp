@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
 	beyondDipolePulse bdpp(Intensity,omega,cycles);
 
 	//This is for verifying that things work before starting the simulation
-	double dt = (0.6*PI)/Ntime;
+	double dt = 0.125;
 	double T = 1.00;
 	bdpp.setTime(T);
 
@@ -206,18 +206,18 @@ int main(int argc, char* argv[]) {
 	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 
-	cvec b;
+	// cvec b;
 
 	int Nr = rthphb.radqN();
 
-	cvec Htv = rthphb.bdpamatvecMPIblock(testvec);
-	cvec H0v = H.H0(testvec);
-	cvec Sv  = H.S(testvec);
+	// cvec Htv = rthphb.bdpamatvecMPIblock(testvec);
+	// cvec H0v = H.H0(testvec);
+	// cvec Sv  = H.S(testvec);
 	
-	cout << "Htvtst " << Htv.format(outformat);
-	cout << "H0vtst " << H0v.format(outformat);
-	cout << "Svtst "  << Sv.format(outformat);
-	return 0;
+	// cout << "Htvtst " << Htv.format(outformat);
+	// cout << "H0vtst " << H0v.format(outformat);
+	// cout << "Svtst "  << Sv.format(outformat);
+	// return 0;
 
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
 	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
@@ -245,16 +245,16 @@ int main(int argc, char* argv[]) {
 	//Eigen solvers need a compute step to be performed before solving
 	solver.compute(proptest);
 
-	solver.setMaxIterations(1000);
+	// solver.setMaxIterations(1000);
 
-	cvec psi2 = solver.solve(b);
+	// cvec psi2 = solver.solve(b);
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 
 	// cout << "psi2" << psi2.format(outformat) << endl;
 	// cout << "psi2_mpi" << psi2_mpi.format(outformat) << endl;
 
 
-	cout << "iterations: "  << solver.iterations();
+	// cout << "iterations: "  << solver.iterations();
 
 	// cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
 
@@ -268,14 +268,14 @@ int main(int argc, char* argv[]) {
 	cnp.proptest = &proptest;
 	cnp.solver = &solver;
 
-	// cnp.setDumpfile((filenamePrefix + "_dump"));
+	cnp.setDumpfile((filenamePrefix + "_dump"));
 
-	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
+	cnp.propagate(psi1,dt,Ntime,1);
 
 	dirwf wft = cnp.wft;
 
 	if(wrank==0)
-	cout << "wft" << wft.coefs.format(outformat);
+	// cout << "wft" << wft.coefs.format(outformat);
 
 	H.savePsievs(wft,"psiev");
 	

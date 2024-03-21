@@ -1005,14 +1005,14 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		//Need to get evecs corresponding to current kappa
 		// cout << "Nr = " << Nr << endl;
-		cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
+		// cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
 		
 		std::vector<cmat> psievs(lNth - lth0);
 		
 		for(int th = lth0; th < lNth; th++) {
-			cout << "Index: " << th 
-				 << "\nTransformed index: " << this->bs->indexTransform(th) 
-				 << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
+			// cout << "Index: " << th 
+				 // << "\nTransformed index: " << this->bs->indexTransform(th) 
+				 // << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
 			int i = -1;
 			
 			
@@ -1021,14 +1021,14 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				if(kappas[j] == ik(this->bs->indexTransform(th))) i = j;
 			}
 			
-			cout << "kappa index: " << i << endl;
+			// cout << "kappa index: " << i << endl;
 			
-			cout << psi.coefs.size() << endl;
+			// cout << psi.coefs.size() << endl;
 			
 			this->bs->getRadial().setState(this->bs->indexTransform(th));
 			// cvec psiseg = this->bs->getRadial().template matfree<S>(psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0));
 			cvec psiseg = psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0);
-			cout << psiseg.rows() << ", " << psiseg.cols() << endl;
+			// cout << psiseg.rows() << ", " << psiseg.cols() << endl;
 			
 			cmat skev(Nr,Nr);
 			
@@ -1037,7 +1037,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				skev.col(j) = this->bs->getRadial().template matfree<S>(kappaevecs[i].col(j));
 			}
 			
-			cout << skev.rows() << ", " << skev.cols() << endl;
+			// cout << skev.rows() << ", " << skev.cols() << endl;
 			Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 			
 			cmat psiev = (psiseg.adjoint() * skev);
