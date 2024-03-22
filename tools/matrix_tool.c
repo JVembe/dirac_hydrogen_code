@@ -40,6 +40,8 @@
 
 int rank = 0, nranks = 1;
 
+#define SoL 137.035999084
+
 // from spnrbasis.cpp
 int ik(int i) {
     int ii = i/4;
@@ -450,10 +452,10 @@ int main(int argc, char *argv[])
                                 // so we can operate directly on the internal storage Ax
                                 for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
                                     submatrix.Ax[i] +=
-                                        ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
-                                                          pg1->Ax[i]*ki     +
-                                                          pg2->Ax[i]*kj     +
-                                                          pg3->Ax[i]*ki*kj) ;
+                                        SoL*ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
+                                                              pg1->Ax[i]*ki     +
+                                                              pg2->Ax[i]*kj     +
+                                                              pg3->Ax[i]*ki*kj) ;
                                 }
                             }
                         }
@@ -474,10 +476,10 @@ int main(int argc, char *argv[])
                                 // so we can operate directly on the internal storage Ax
                                 for(csr_index_t i=0; i<csr_nnz(&submatrix); i++){
                                     submatrix.Ax[i] +=
-                                        ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
-                                                          pgt1->Ax[i]*kj    +
-                                                          pgt2->Ax[i]*ki    +
-                                                          pgt3->Ax[i]*ki*kj);
+                                        SoL*ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
+                                                              pgt1->Ax[i]*kj    +
+                                                              pgt2->Ax[i]*ki    +
+                                                              pgt3->Ax[i]*ki*kj);
 
                                 }
                             }

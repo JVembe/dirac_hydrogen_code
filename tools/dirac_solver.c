@@ -28,6 +28,8 @@
 #include "../src/tictoc.h"
 //#include "../src/potential.h"
 
+#define SoL 137.035999084
+
 #ifdef USE_MPI
 #include <mpi.h>
 #endif
@@ -507,10 +509,10 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
                             // so we can operate directly on the internal storage Ax
                             for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                                 submatrix->Ax[i] +=
-                                    ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
-                                                      pg1->Ax[i]*ki     +
-                                                      pg2->Ax[i]*kj     +
-                                                      pg3->Ax[i]*ki*kj) ;
+                                    SoL*ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
+                                                          pg1->Ax[i]*ki     +
+                                                          pg2->Ax[i]*kj     +
+                                                          pg3->Ax[i]*ki*kj) ;
                             }
                         }
                     }
@@ -531,10 +533,10 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
                             // so we can operate directly on the internal storage Ax
                             for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                                 submatrix->Ax[i] +=
-                                    ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
-                                                      pgt1->Ax[i]*kj    +
-                                                      pgt2->Ax[i]*ki    +
-                                                      pgt3->Ax[i]*ki*kj);
+                                    SoL*ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
+                                                          pgt1->Ax[i]*kj    +
+                                                          pgt2->Ax[i]*ki    +
+                                                          pgt3->Ax[i]*ki*kj);
 
                             }
                         }
