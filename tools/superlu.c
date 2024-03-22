@@ -199,7 +199,7 @@ slu_LU_t slu_compute_ilu(slu_matrix_t opaqueA)
     options.ILU_DropTol = 1e-2;
     options.ILU_MILU = SILU; //SMILU_1;
     options.DiagPivotThresh = 0;
-    options.ILU_FillFactor = 12.0;
+    options.ILU_FillFactor = 2.0;
 
     B.ncol = 0;  /* not to perform triangular solution */
     tic(); printf("compute ilu ");
