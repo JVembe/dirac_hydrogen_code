@@ -197,9 +197,9 @@ slu_LU_t slu_compute_ilu(slu_matrix_t opaqueA)
     options.ConditionNumber = YES;/* Compute reciprocal condition number */
     options.ILU_DropRule = DROP_BASIC;
     options.ILU_DropTol = 1e-2;
-    options.ILU_MILU = SMILU_2;
+    options.ILU_MILU = SILU; //SMILU_1;
     options.DiagPivotThresh = 0;
-    options.ILU_FillFactor = 10.0;
+    options.ILU_FillFactor = 12.0;
 
     B.ncol = 0;  /* not to perform triangular solution */
     tic(); printf("compute ilu ");

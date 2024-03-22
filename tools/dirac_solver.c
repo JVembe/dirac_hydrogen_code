@@ -394,11 +394,12 @@ int main(int argc, char *argv[])
     // time iterations
     int iter = 0;
     solver_workspace_t wsp = {0};
+    time = 0;
     while(time <= maxtime){
         // TODO get the time to compute time-dependent f(a,t)
         csr_data_t ft[6] = {0};
         complex ihdt = I*h*dt/2;
-        time = time + dt;
+        time = time + dt;       
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
 
         if(rank==0) {
@@ -408,11 +409,15 @@ int main(int argc, char *argv[])
         }
         
         // time-dependent part of the Hamiltonian
-        tic(); printf("compute Ht ");
+        if(rank==0){
+            tic(); printf("compute Ht ");
+        }
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-        toc();
-        
-        tic(); printf("solve iteration %d\n", iter);
+        if(rank==0) toc();
+
+        if(rank==0){
+            tic(); printf("solve iteration %d\n", iter);
+        }
                       
         // rhs = (S-H)*psi(n-1)
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = 0;
@@ -430,7 +435,7 @@ int main(int argc, char *argv[])
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
 
-        toc();
+        if(rank==0) toc();
 
         {
             char fname[256];

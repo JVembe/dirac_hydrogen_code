@@ -16,7 +16,7 @@ CC_CUDA = nvcc
 CC_HIP = hipcc
 
 %.o : %.c
-	$(CC) -O3 -c $(CFLAGS) $< -o $@
+	$(CC) -O3 -march=native -c $(CFLAGS) $< -o $@
 
 matrix_tool: $(OBJS) matrix_tool.o
 	$(CC) -O3 $(OBJS) $@.o -o matrix_tool -lm $(LDFLAGS)
