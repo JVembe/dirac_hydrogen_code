@@ -277,8 +277,8 @@ int main(int argc, char* argv[]) {
 
 	cvec psi2 = solver.solve(b);
 	
-	// dense_write("presolve",b);
-	// dense_write("postsolve",psi2);
+	dense_write("presolve",b);
+	dense_write("postsolve",psi2);
 	
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 
