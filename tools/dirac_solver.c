@@ -42,6 +42,8 @@
 
 int rank = 0, nranks = 1;
 
+void rankprint(char *fname, cdouble_t *v, int n);
+
 void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
                               const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt);
@@ -83,14 +85,32 @@ void vec_read(const char *fname, int start, int end, cdouble_t **out)
     nread = fseek(fd, sizeof(cdouble_t)*start, SEEK_CUR);
     if(nread!=0) ERROR("wrong file format in %s\n", fname);
     nread = ftell(fd);
-    printf("current pos %li\n", nread);
 
     // read only local vector part
     n = end-start;
     *out = (cdouble_t*)malloc(sizeof(cdouble_t)*n);
     nread = fread(*out, sizeof(cdouble_t), n, fd);
     if(nread!=n) ERROR("wrong file format in %s\n", fname);
-    printf("%s local size %d\n", fname, n);
+    fclose(fd);
+}
+
+void vec_read_perm(const char *fname, csr_index_t **out)
+{
+    size_t nread;
+    FILE *fd = fopen(fname, "r");
+    if(!fd) ERROR("cant open %s\n", fname);
+
+    int n;
+    nread = fread(&n, sizeof(int), 1, fd);
+    if(nread!=1) ERROR("wrong file format in %s\n", fname);
+
+    nread = fseek(fd, sizeof(cdouble_t)*n, SEEK_CUR);
+    if(nread!=0) ERROR("wrong file format in %s\n", fname);
+
+    // read only local vector part
+    *out = (csr_index_t*)malloc(sizeof(csr_index_t)*n);
+    nread = fread(*out, sizeof(csr_index_t), n, fd);
+    if(nread!=n) ERROR("wrong file format in %s\n", fname);
     fclose(fd);
 }
 
@@ -145,8 +165,6 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
 typedef struct {
     sparse_csr_t *H, *S;
 } HS_matrices;
-
-void rankprint(char *fname, cdouble_t *v, int n);
 
 int cnt = 0;
 
@@ -207,15 +225,6 @@ int main(int argc, char *argv[])
     dt = 0.125;
     h  = 1;
 
-    printf("Parameters:\n");
-    printf(" - time      %f\n", maxtime);
-    printf(" - lmax      %d\n", lmax);
-    printf(" - intensity %lf\n", intensity);
-    printf(" - omega     %lf\n", omega);
-    printf(" - cycles    %lf\n", cycles);
-    printf(" - dt        %lf\n", dt);
-    printf(" - h         %lf\n", h);
-
     // time-dependent part
     beyondDipolePulse_t bdpp;
     beyondDipolePulse_init(&bdpp, intensity, omega, cycles);
@@ -244,6 +253,17 @@ int main(int argc, char *argv[])
     if(nranks>1 && Hall.npart != nranks)
         ERROR("There are %d MPI ranks, but the matrix is partition for %d ranks.\n", nranks, Hall.npart);
 #endif
+
+    if(0 == rank){
+        printf("Parameters:\n");
+        printf(" - time      %f\n", maxtime);
+        printf(" - lmax      %d\n", lmax);
+        printf(" - intensity %lf\n", intensity);
+        printf(" - omega     %lf\n", omega);
+        printf(" - cycles    %lf\n", cycles);
+        printf(" - dt        %lf\n", dt);
+        printf(" - h         %lf\n", h);
+    }
 
     // get local partition of the global H matrix
     if(nranks>1){
@@ -373,7 +393,17 @@ int main(int argc, char *argv[])
 #endif
     }
 
+    // xall is the solution vector collected on rank 0 for un-permuting and printing
+    csr_data_t *xall = NULL, *xorig = NULL;
+    csr_index_t *xperm = NULL;
+    if(0 == rank) {
+        vec_read_perm("psi0.vec", &xperm);
+        xall  = (csr_data_t *)calloc(csr_nrows(&Hall)*blkdim, sizeof(csr_data_t));
+        xorig = (csr_data_t *)calloc(csr_nrows(&Hall)*blkdim, sizeof(csr_data_t));
+    }
+
     // allocate x and y vectors for SpMV: y = spA*x
+    // xall is the solution vector collected on rank 0 for un-permuting and printing
     csr_data_t *x, *rhs;
 
     // rhs = (S-H)*psi0
@@ -383,7 +413,7 @@ int main(int argc, char *argv[])
 
     for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
     for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i];
-    
+
     // compute the stationary part once
     compute_stationary_matrices(h, dt, &submatrix, &S_blk, &S, &Hst_blk, &Hst, h0, s0);
 
@@ -396,18 +426,17 @@ int main(int argc, char *argv[])
     solver_workspace_t wsp = {0};
     time = 0;
     while(time <= maxtime){
-        // TODO get the time to compute time-dependent f(a,t)
         csr_data_t ft[6] = {0};
         complex ihdt = I*h*dt/2;
-        time = time + dt;       
+        time = time + dt;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
 
         if(rank==0) {
-            printf("------- simulatoin time %e\n", time);
+            printf("------- simulation time %e\n", time);
             printf("f(t)\n");
             for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
         }
-        
+
         // time-dependent part of the Hamiltonian
         if(rank==0){
             tic(); printf("compute Ht ");
@@ -418,7 +447,7 @@ int main(int argc, char *argv[])
         if(rank==0){
             tic(); printf("solve iteration %d\n", iter);
         }
-                      
+
         // rhs = (S-H)*psi(n-1)
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = 0;
         csr_init_communication(&Hfull, x, rank, nranks);
@@ -426,7 +455,7 @@ int main(int argc, char *argv[])
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, rhs);
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = -1*rhs[i];
         csr_spmv(0, csr_nrows(&S), &S, x + csr_local_rowoffset(&Hfull), rhs);
-        
+
         int iters = 500;
         double tol_error = 1e-16;
         HS_matrices mat;
@@ -437,15 +466,52 @@ int main(int argc, char *argv[])
 
         if(rank==0) toc();
 
-        {
+        // collect the results on rank 0 for un-permuting and printing
+        if(0 == rank){
+
+            // submit recv requests on solution vector parts
+            MPI_Request comm_requests[nranks];
+            comm_requests[0] = MPI_REQUEST_NULL;
+            for(int r=1; r<nranks; r++){
+                csr_index_t row_beg = Hall.row_cpu_dist[r]*blkdim;
+                csr_index_t row_end = Hall.row_cpu_dist[r+1]*blkdim;
+                CHECK_MPI(MPI_Irecv(xall+row_beg, 2*(row_end-row_beg), MPI_DOUBLE, r, 0, MPI_COMM_WORLD, comm_requests+r));
+            }
+
+            // copy local vector part
+            for(int i=0; i<csr_nrows(&Hfull); i++) xall[i] = x[i];
+
+            // progress communication
+            CHECK_MPI(MPI_Waitall(nranks, comm_requests, MPI_STATUSES_IGNORE));
+
+            // un-permute the solution vector
+            for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
+                xorig[xperm[i]] = xall[i];
+            }            
+
+            FILE *fd;
             char fname[256];
             snprintf(fname, 255, "x%d.out", iter);
-            rankprint(fname, x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull));
+            fd = fopen(fname, "w+");
+            for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
+                fprintf(fd, "%e %e\n", creal(xorig[i]), cimag(xorig[i]));
+            }
+            /* fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd); */
+            fclose(fd);
+
+        } else {
+            CHECK_MPI(MPI_Send(x + csr_local_rowoffset(&Hfull), 2*csr_nrows(&Hfull), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD));
         }
-        
+
+        /* { */
+        /*     char fname[256]; */
+        /*     snprintf(fname, 255, "y%d.out", iter); */
+        /*     rankprint(fname, x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull)); */
+        /* } */
+
         iter++;
     }
-    
+
 #ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
@@ -580,7 +646,7 @@ void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
             orig_row = S_blk->perm[row];
         }
         int ki = (int)ik(orig_row); // k'
-        
+
         csr_zero(submatrix);
         for(csr_index_t i=0; i < csr_nnz(submatrix); i++){
             submatrix->Ax[i] =
