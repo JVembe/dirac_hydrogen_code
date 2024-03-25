@@ -42,8 +42,6 @@
 
 int rank = 0, nranks = 1;
 
-void rankprint(char *fname, cdouble_t *v, int n);
-
 void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
                               const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt);
@@ -343,7 +341,8 @@ int main(int argc, char *argv[])
     int blkdim = csr_nrows(&g[0]);
     csr_copy(&Hst_blk, &S_blk);
 
-    // setup block parameters for the blocked matrices
+    // setup block parameters for the blocked matrices.
+    // NOTE: Ax (data) memory is not allocated.
     csr_block_params(&Hfull_blk, blkdim, csr_nnz(&g[0]));
     csr_block_params(&S_blk, blkdim, csr_nnz(&s0[0]));
     csr_block_params(&Hst_blk, blkdim, csr_nnz(&s0[0]));
@@ -417,6 +416,17 @@ int main(int argc, char *argv[])
     // compute the stationary part once
     compute_stationary_matrices(h, dt, &submatrix, &S_blk, &S, &Hst_blk, &Hst, h0, s0);
 
+    // precompute ik indices
+    int *ikarr = NULL;
+    ikarr = malloc(sizeof(csr_index_t)*csr_ncolblocks(&Hfull_blk));
+    for(csr_index_t col = 0; col < csr_ncolblocks(&Hfull_blk); col++){
+        csr_index_t orig_col = col;
+        if(Hfull_blk.perm) {
+            orig_col = Hfull_blk.perm[col];
+        } 
+        ikarr[col] = (int)ik(orig_col);
+    }    
+    
     // compute the preconditioner once - based on the stationary part
     slu_LU_t sluLU = compute_preconditioner(&S, &Hst);
     MPI_Barrier(MPI_COMM_WORLD);
@@ -438,11 +448,7 @@ int main(int argc, char *argv[])
         }
 
         // time-dependent part of the Hamiltonian
-        if(rank==0){
-            tic(); printf("compute Ht ");
-        }
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-        if(rank==0) toc();
 
         if(rank==0){
             tic(); printf("solve iteration %d\n", iter);
@@ -489,6 +495,7 @@ int main(int argc, char *argv[])
                 xorig[xperm[i]] = xall[i];
             }            
 
+            // write to file
             FILE *fd;
             char fname[256];
             snprintf(fname, 255, "x%d.out", iter);
@@ -502,12 +509,6 @@ int main(int argc, char *argv[])
         } else {
             CHECK_MPI(MPI_Send(x + csr_local_rowoffset(&Hfull), 2*csr_nrows(&Hfull), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD));
         }
-
-        /* { */
-        /*     char fname[256]; */
-        /*     snprintf(fname, 255, "y%d.out", iter); */
-        /*     rankprint(fname, x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull)); */
-        /* } */
 
         iter++;
     }
@@ -524,8 +525,11 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
 {
     csr_index_t row, col, colp;
     complex ihdt = I*h*dt/2;
-
+    
     // for all rows
+    if(rank==0){
+        tic(); printf("compute Ht ");
+    }
     for(row = 0; row < csr_nrowblocks(Hfull_blk); row++){
 
         // for non-zeros in each row
@@ -544,8 +548,12 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
 
             // calculate kappa and mu parameters from row/col indices
             // see spnrbasis::bdpalphsigmaXmat
-            int ki = (int)ik(orig_row); // k'
-            int kj = (int)ik(orig_col); // k
+            /* int ki = (int)ik(orig_row); // k' */
+            /* int kj = (int)ik(orig_col); // k */
+
+            // precomputed is faster
+            int ki = ikarr[csr_local_rowoffset(Hfull_blk) + row];
+            int kj = ikarr[col];
 
             const sparse_csr_t *pg0, *pg1, *pg2, *pg3;
             const sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
@@ -558,9 +566,8 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
             }
 
             csr_zero(submatrix);
-
+            
             // stationary part of H
-            // TODO: check if this is faster than extraction from Hst
             if(orig_row==orig_col) {
                 for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                     submatrix->Ax[i] =
@@ -570,6 +577,14 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
                               h0[3].Ax[i]*ki*ki*ki);
                 }
             }
+
+            // instead we can extract it from Hst_blk, but speed is the same / worse
+            /* if(orig_row==orig_col) { */
+            /*     csr_block_link(&tmpsp, Hst_blk, row, row); */
+            /*     memcpy(submatrix->Ax, tmpsp.Ax, csr_nnz(submatrix)*sizeof(csr_data_t)); */
+            /* } else { */
+            /*     csr_zero(submatrix); */
+            /* } */
 
             // the H matrix is still updated with Hst, so do not clear the submatrix
             for(int l=0; l<lmax; l++){
@@ -609,12 +624,10 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
                             // g matrices all have the same nnz pattern,
                             // so we can operate directly on the internal storage Ax
                             for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                                submatrix->Ax[i] +=
                                     SoL*ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
                                                           pgt1->Ax[i]*kj    +
                                                           pgt2->Ax[i]*ki    +
                                                           pgt3->Ax[i]*ki*kj);
-
                             }
                         }
                     }
@@ -622,11 +635,18 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
             }
 
             // store the submatrix in the global Hfull_blk
-            csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
+            // csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
+
+            // store immediately in non-blocked Hfull matrix
+            csr_full_insert(Hfull, row, col, submatrix);
         }
     }
+    if(rank==0){
+        toc();
+    }
 
-    csr_blocked_to_full(Hfull, Hfull_blk, submatrix);
+    // un-block, if above we used the blocked storage
+    // csr_blocked_to_full(Hfull, Hfull_blk, submatrix);
 }
 
 void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
@@ -656,7 +676,8 @@ void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
         }
 
         // store the submatrix in the global S_blk
-        csr_block_insert(S_blk,row,row,submatrix->Ax);
+        // csr_block_insert(S_blk,row,row,submatrix->Ax);
+        csr_full_insert(S, row, row, submatrix);
 
         // stationary part of H
         csr_zero(submatrix);
@@ -669,16 +690,13 @@ void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
         }
 
         // store the submatrix in the global Hst_blk - need it for ILU
-        csr_block_insert(Hst_blk, row, row, submatrix->Ax);
+        // csr_block_insert(Hst_blk, row, row, submatrix->Ax);
+        csr_full_insert(Hst, row, row, submatrix);
     }
 
-    tic(); printf("convert S to non-blocked matrix ");
-    csr_blocked_to_full(S, S_blk, submatrix);
-    toc();
-
-    tic(); printf("convert Hst to non-blocked matrix ");
-    csr_blocked_to_full(Hst, Hst_blk, submatrix);
-    toc();
+    // un-block, if above we used the blocked storage
+    // csr_blocked_to_full(S, S_blk, submatrix);
+    // csr_blocked_to_full(Hst, Hst_blk, submatrix);
 }
 
 slu_LU_t compute_preconditioner(const sparse_csr_t *S, const sparse_csr_t *Hst)

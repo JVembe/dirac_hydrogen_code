@@ -41,6 +41,7 @@ void csr_ijk_write(const char *fname, const sparse_csr_t *sp);
 
 void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz);
 void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t *blk_ptr);
+void csr_full_insert(sparse_csr_t *Afull, csr_index_t row, csr_index_t col, sparse_csr_t *submatrix);
 void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr_index_t col);
 
 void csr_get_partition(sparse_csr_t *out, const sparse_csr_t *sp, int rank, int nranks);

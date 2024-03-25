@@ -104,8 +104,8 @@ void slu_LU_write(const SuperMatrix *L, const SuperMatrix *U)
     printf("U nnz %d real %d\n", Lnnz, Uidx);
     printf("L nnz %d real %d\n", Lnnz, Lidx);
 
-    write_ijk("U.ijk", UAi, UAj, UAx, Uidx, n);
-    write_ijk("L.ijk", LAi, LAj, LAx, Lidx, n);
+    /* write_ijk("U.ijk", UAi, UAj, UAx, Uidx, n); */
+    /* write_ijk("L.ijk", LAi, LAj, LAx, Lidx, n); */
 
     free(LAi);    free(LAj);    free(LAx);
     free(UAi);    free(UAj);    free(UAx);

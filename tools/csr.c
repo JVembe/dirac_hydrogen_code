@@ -19,6 +19,7 @@ void csr_print(const sparse_csr_t *sp)
     }
 }
 
+
 void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_index_t nnz)
 {
     out->nnz = nnz;
@@ -126,9 +127,11 @@ void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz
 
     // update Ax storage
     if(!sp->is_link) free(sp->Ax);  sp->Ax = NULL;
-    sp->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
-    bzero(sp->Ax, sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
     sp->is_link = 0;
+
+    // do not allocate new storage - can be done when needed
+    // sp->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
+    // bzero(sp->Ax, sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
 
     // do NOT update Ap pointers - need them for Ai
 }
@@ -139,6 +142,34 @@ void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_da
     cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
     if(cp==sp->Ap[row+1] || sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
     memcpy(sp->Ax + cp*sp->blk_nnz, blk_ptr, sizeof(csr_data_t)*sp->blk_nnz);
+}
+
+void csr_full_insert(sparse_csr_t *Afull, csr_index_t row, csr_index_t col, sparse_csr_t *submatrix)
+{
+    int blkdim = submatrix->nrows;
+    csr_index_t row_blk, col_blk, colp_blk;
+    csr_index_t row_dst, col_dst;
+
+    // insert into non-blocked Hfull matrix
+    for(row_blk=0; row_blk<blkdim; row_blk++){
+
+        // submatrix row and col
+        colp_blk=submatrix->Ap[row_blk];
+        col_blk = submatrix->Ai[colp_blk];
+
+        // Afull row and col
+        col_dst = col*blkdim + col_blk;
+        row_dst = row*blkdim + row_blk;       
+
+        // locate row start in Afull
+        csr_index_t cp = Afull->Ap[row_dst] +
+            sorted_list_locate(Afull->Ai + Afull->Ap[row_dst], Afull->Ap[row_dst+1] - Afull->Ap[row_dst], col_dst);        
+        if(cp==Afull->Ap[row_dst+1] || Afull->Ai[cp]!=col_dst)
+            ERROR("cant set matrix value: (%d,%d) not present in CSR.", row_dst, col_dst);
+
+        csr_index_t nrowent = submatrix->Ap[row_blk+1] - colp_blk;
+        memcpy(Afull->Ax + cp, submatrix->Ax + colp_blk, nrowent*sizeof(csr_data_t));
+    }
 }
 
 void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr_index_t col)
