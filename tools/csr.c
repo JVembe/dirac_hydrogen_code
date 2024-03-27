@@ -915,7 +915,6 @@ void csr_coo2csr(sparse_csr_t *sp, const csr_index_t *rowidx, const csr_index_t 
     csr_index_t **lists_dynamic = 0;
     csr_index_t *n_list_elems_dynamic = 0;
     csr_index_t *list_size_dynamic = 0;
-    csr_index_t n_row_entries = 0;
     csr_index_t *Ap_out = NULL;
     csr_index_t *Ai_out = NULL;
     csr_data_t  *Ax_out = NULL;
