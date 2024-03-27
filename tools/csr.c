@@ -974,6 +974,15 @@ void csr_coo2csr(sparse_csr_t *sp, const csr_index_t *rowidx, const csr_index_t 
         Ax_out[cp] += val[i];
     }
 
+    /* cleanup */
+    for(csr_index_t i=0; i<matrix_dim; i++){
+        free(lists_dynamic[i]);
+    }
+    free(lists_dynamic);
+    free(n_list_elems_dynamic);
+    free(list_size_dynamic);
+
+    /* output */
     sp->nnz = csr_nnz;
     sp->nrows = matrix_dim;
     sp->ncols = matrix_dim;
