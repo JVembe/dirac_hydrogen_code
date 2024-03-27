@@ -59,3 +59,21 @@ void sorted_list_add(dimType **list, dimType *nelems, dimType *lsize, dimType va
     (*list)[l] = value;
     (*nelems)++;
 }
+
+void sorted_list_add_static(dimType *list, dimType *nelems, dimType value)
+{
+    dimType l, u;
+
+    l = sorted_list_locate(list, *nelems, value);
+    if(l<*nelems && list[l]==value) return;
+
+    /* insert into array */
+    u = *nelems;
+    while(l!=u){
+        list[u] = list[u-1];
+        u--;
+    }
+
+    list[l] = value;
+    (*nelems)++;
+}

@@ -41,6 +41,7 @@
 #define max(a,b) ((a)>(b)?(a):(b))
 
 int rank = 0, nranks = 1;
+static int *ikarr = NULL;
 
 void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
@@ -417,7 +418,6 @@ int main(int argc, char *argv[])
     compute_stationary_matrices(h, dt, &submatrix, &S_blk, &S, &Hst_blk, &Hst, h0, s0);
 
     // precompute ik indices
-    int *ikarr = NULL;
     ikarr = malloc(sizeof(csr_index_t)*csr_ncolblocks(&Hfull_blk));
     for(csr_index_t col = 0; col < csr_ncolblocks(&Hfull_blk); col++){
         csr_index_t orig_col = col;
@@ -429,6 +429,22 @@ int main(int argc, char *argv[])
     
     // compute the preconditioner once - based on the stationary part
     slu_LU_t sluLU = compute_preconditioner(&S, &Hst);
+
+    if(0){
+        csr_index_t *LAi, *LAj;
+        csr_index_t *UAi, *UAj;
+        csr_data_t *LAx, *UAx;
+        csr_index_t Lnnz, Unnz;
+        sparse_csr_t spL, spU;
+        
+        slu_LU2coo(sluLU.L, sluLU.U,
+                   &LAi, &LAj, (doublecomplex**)&LAx, &Lnnz,
+                   &UAi, &UAj, (doublecomplex**)&UAx, &Unnz);
+        
+        csr_coo2csr(&spU, UAi, UAj, UAx, csr_nrows(&Hfull), Unnz);
+        csr_coo2csr(&spL, LAi, LAj, LAx, csr_nrows(&Hfull), Lnnz);
+    }
+    
     MPI_Barrier(MPI_COMM_WORLD);
 
     // time iterations
@@ -721,7 +737,7 @@ slu_LU_t compute_preconditioner(const sparse_csr_t *S, const sparse_csr_t *Hst)
     // compute ILU
     sluA = slu_create_matrix(csr_nrows(Hst), csr_ncols(Hst), csr_nnz(Hst), P, Hst->Ai, Hst->Ap);
     sluLU = slu_compute_ilu(sluA);
-    free(P);
 
+    free(P);
     return sluLU;
 }

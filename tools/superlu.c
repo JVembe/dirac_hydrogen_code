@@ -3,6 +3,8 @@
 #include "utils.h"
 #include "../src/tictoc.h"
 
+void csr_coo2csr(const int *rowidx, const int *colidx, const doublecomplex *val, int dim, int nnz);
+
 void write_ijk(const char *fname, int *I, int *J, doublecomplex *X, int nnz, int n)
 {
     printf("write file %s\n", fname);
@@ -33,7 +35,9 @@ void slu_ijk_write(const char *fname, int *Ap, int *Aj, doublecomplex *Ax, int n
 }
 
 
-void slu_LU_write(const SuperMatrix *L, const SuperMatrix *U)
+void slu_LU2coo(const SuperMatrix *L, const SuperMatrix *U,
+                int_t **LAi_out, int_t **LAj_out, doublecomplex **LAx_out, int_t *Lnnz_out,
+                int_t **UAi_out, int_t **UAj_out, doublecomplex **UAx_out, int_t *Unnz_out)
 {
     SCformat     *Lstore;
     NCformat     *Ustore;
@@ -101,14 +105,17 @@ void slu_LU_write(const SuperMatrix *L, const SuperMatrix *U)
         }
     }
 
-    printf("U nnz %d real %d\n", Lnnz, Uidx);
-    printf("L nnz %d real %d\n", Lnnz, Lidx);
-
     /* write_ijk("U.ijk", UAi, UAj, UAx, Uidx, n); */
     /* write_ijk("L.ijk", LAi, LAj, LAx, Lidx, n); */
 
-    free(LAi);    free(LAj);    free(LAx);
-    free(UAi);    free(UAj);    free(UAx);
+    *LAi_out = LAi;
+    *LAj_out = LAj;
+    *LAx_out = LAx;
+    *UAi_out = UAi;
+    *UAj_out = UAj;
+    *UAx_out = UAx;
+    *Lnnz_out = Lidx;
+    *Unnz_out = Uidx;
 }
 
 slu_matrix_t slu_create_matrix(int nrows, int ncols, int nnz,
@@ -211,7 +218,6 @@ slu_LU_t slu_compute_ilu(slu_matrix_t opaqueA)
     Lstore = L->Store;
     printf("SuperLU L type %d dimension %dx%d; # nonzeros %d\n", L->Stype, (int)L->nrow, (int)L->ncol, (int)Lstore->nnz);
     printf("SuperLU U type %d dimension %dx%d; # nonzeros %d\n", U->Stype, (int)U->nrow, (int)U->ncol, (int)Ustore->nnz);
-    slu_LU_write(L, U);
 
     ret.A = A;
     ret.U = U;
@@ -246,9 +252,8 @@ void slu_lu_solve(slu_LU_t lu, doublecomplex *rhs, doublecomplex *x)
 
     /* Set the options to do solve-only. */
     options.Fact = FACTORED;
-
-    /* tic(); printf("solve ilu "); */
     zgsisx(&options, lu.A, lu.perm_c, lu.perm_r, NULL, &lu.equed, lu.R, lu.C, lu.L, lu.U, NULL, 0,
            &YY, &XX, NULL, NULL, NULL, lu.mem_usage, lu.stat, &info);
-    /* toc(); */
+
+    // cuda: cusparseSpSV
 }

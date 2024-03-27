@@ -10,13 +10,19 @@
 #endif
 
 #include "types.h"
-void csr_print(const sparse_csr_t *sp)
+void csr_print(const char *fname, const sparse_csr_t *sp)
 {
+    printf("write file %s\n", fname);
+    FILE *fd = fopen(fname, "w+");
+    if(!fd) ERROR("cant open %s\n", fname);
+
     for(csr_index_t row = 0; row < sp->nrows; row++){
         for(csr_index_t cp = sp->Ap[row]; cp < sp->Ap[row+1]; cp++){
-            fprintf(stderr, "%d %d %le %le\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
+            fprintf(fd, "%d %d %le %le\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
         }
     }
+
+    fclose(fd);
 }
 
 
@@ -159,11 +165,11 @@ void csr_full_insert(sparse_csr_t *Afull, csr_index_t row, csr_index_t col, spar
 
         // Afull row and col
         col_dst = col*blkdim + col_blk;
-        row_dst = row*blkdim + row_blk;       
+        row_dst = row*blkdim + row_blk;
 
         // locate row start in Afull
         csr_index_t cp = Afull->Ap[row_dst] +
-            sorted_list_locate(Afull->Ai + Afull->Ap[row_dst], Afull->Ap[row_dst+1] - Afull->Ap[row_dst], col_dst);        
+            sorted_list_locate(Afull->Ai + Afull->Ap[row_dst], Afull->Ap[row_dst+1] - Afull->Ap[row_dst], col_dst);
         if(cp==Afull->Ap[row_dst+1] || Afull->Ai[cp]!=col_dst)
             ERROR("cant set matrix value: (%d,%d) not present in CSR.", row_dst, col_dst);
 
@@ -318,7 +324,7 @@ void csr_ijk_write(const char *fname, const sparse_csr_t *sp)
 
     // storage format: dim, nnz, Ai, Aj, Ax
     nwrite = fwrite(&sp->nrows, sizeof(csr_index_t), 1, fd);
-    nwrite = fwrite(&sp->nnz, sizeof(csr_index_t), 1, fd);    
+    nwrite = fwrite(&sp->nnz, sizeof(csr_index_t), 1, fd);
 
     nwrite = fwrite(sp->Ai, sizeof(csr_index_t), sp->nnz, fd);
     if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
@@ -328,7 +334,7 @@ void csr_ijk_write(const char *fname, const sparse_csr_t *sp)
 
     nwrite = fwrite(sp->Ax, sizeof(csr_data_t), sp->nnz, fd);
     if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
-    
+
     fclose(fd);
 
     free(Aj);
@@ -613,7 +619,7 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
     // this is true only for 1 rank. fixed later in csr_unblock_comm_info
     out->row_beg = 0;
     out->row_end = out->nrows;
-    
+
     // for all rows
     for(row = 0; row < in->nrows; row++){
 
@@ -900,4 +906,94 @@ void csr_spmv(csr_index_t row_beg, csr_index_t row_end, const sparse_csr_t *sp, 
 
         result[i] += stemp;
     }
+}
+
+void csr_coo2csr(sparse_csr_t *sp, const csr_index_t *rowidx, const csr_index_t *colidx, const csr_data_t *val,
+                 csr_index_t matrix_dim, csr_index_t nnz)
+{
+
+    csr_index_t **lists_dynamic = 0;
+    csr_index_t *n_list_elems_dynamic = 0;
+    csr_index_t *list_size_dynamic = 0;
+    csr_index_t n_row_entries = 0;
+    csr_index_t *Ap_out = NULL;
+    csr_index_t *Ai_out = NULL;
+    csr_data_t  *Ax_out = NULL;
+
+    /* if we run out of space, allocate dynamic lists */
+    lists_dynamic = calloc(sizeof(csr_index_t*)*matrix_dim, 1);
+    n_list_elems_dynamic = calloc(sizeof(csr_index_t)*matrix_dim, 1);
+    list_size_dynamic = calloc(sizeof(csr_index_t)*matrix_dim, 1);
+
+    /* find unique row / column pairs */
+    for(csr_index_t i=0; i<nnz; i++){
+        csr_index_t row, col, pos;
+        row = rowidx[i];
+        col = colidx[i];
+
+        /* check if a given row has a dynamic list */
+        if(!list_size_dynamic[row]){
+            sorted_list_create(lists_dynamic + row, list_size_dynamic + row);
+        }
+
+        /* add column to row, ignores existing entries */
+        sorted_list_add(lists_dynamic + row, n_list_elems_dynamic + row, list_size_dynamic + row, col);
+    }
+
+    /* allocate CSR data structures: Ap */
+    Ap_out = calloc(sizeof(csr_index_t)*(matrix_dim+1), 1);
+
+    /* Count a cumulative sum of the number of non-zeros in every matrix row. */
+    for(csr_index_t i=0; i<matrix_dim; i++) {
+        Ap_out[i+1] = Ap_out[i] + n_list_elems_dynamic[i];
+    }
+    printf("number of non-zeros %d / %d\n", Ap_out[matrix_dim], nnz);
+
+    /* allocate CSR data structures: Ai and Ax */
+    csr_index_t csr_nnz = Ap_out[matrix_dim];
+    Ai_out = malloc(sizeof(csr_index_t)*csr_nnz);
+    Ax_out = calloc(sizeof(csr_data_t)*csr_nnz, 1);
+
+    /* copy rows into Ai */
+    for(csr_index_t i=0; i<matrix_dim; i++){
+        csr_index_t rowp = Ap_out[i];
+        csr_index_t nent = Ap_out[i+1] - Ap_out[i];
+        if(n_list_elems_dynamic[i] != nent) ERROR("wrong number of row entries in coo2csr");
+        memcpy(Ai_out+rowp, lists_dynamic[i], sizeof(csr_index_t)*nent);
+    }
+
+    /* accumulate values into Ax */
+    for(csr_index_t i=0; i<nnz; i++){
+        csr_index_t row, col;
+        row = rowidx[i];
+        col = colidx[i];
+
+        csr_index_t nent = Ap_out[row+1] - Ap_out[row];
+        csr_index_t cp = Ap_out[row] + sorted_list_locate(Ai_out + Ap_out[row], nent, col);
+        if(cp==Ap_out[row+1] || Ai_out[cp]!=col) ERROR("cant set matrix value: (%d,%d) not present in CSR.", row, col);
+        Ax_out[cp] += val[i];
+    }
+
+    sp->nnz = csr_nnz;
+    sp->nrows = matrix_dim;
+    sp->ncols = matrix_dim;
+    sp->blk_nnz = 1;
+    sp->blk_dim = 1;
+    sp->is_link = 0;
+    sp->perm = NULL;
+    sp->Ap = Ap_out;
+    sp->Ai = Ai_out;
+    sp->Ax = Ax_out;
+    
+    sp->row_cpu_dist       = NULL;
+    sp->comm_pattern       = NULL;
+    sp->comm_pattern_size  = NULL;
+    sp->n_comm_entries     = NULL;
+    sp->recv_ptr           = NULL;
+    sp->send_ptr           = NULL;
+    sp->send_vec           = NULL;
+    sp->npart              = 1;
+    sp->row_beg            = 0;
+    sp->row_end            = 0;
+    sp->local_offset       = 0;    
 }

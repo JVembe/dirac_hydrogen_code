@@ -21,7 +21,7 @@ typedef struct {
     int is_link;
 } sparse_csr_t;
 
-void csr_print(const sparse_csr_t *sp);
+void csr_print(const char *fname, const sparse_csr_t *sp);
 void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_index_t nnz);
 void csr_free(sparse_csr_t *sp);
 void csr_copy(sparse_csr_t *out, const sparse_csr_t *in);
@@ -56,5 +56,8 @@ void csr_set_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr
 void csr_conj_transpose(sparse_csr_t *out, const sparse_csr_t *in);
 
 void csr_spmv(csr_index_t row_l, csr_index_t row_u, const sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result);
+
+void csr_coo2csr(sparse_csr_t *out, const csr_index_t *rowidx, const csr_index_t *colidx, const csr_data_t *val,
+                 csr_index_t matrix_dim, csr_index_t nnz);
 
 #endif /* _CSR_H */

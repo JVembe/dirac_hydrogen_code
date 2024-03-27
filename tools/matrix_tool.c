@@ -489,6 +489,7 @@ int main(int argc, char *argv[])
 
                 // store the submatrix in the global Hfull_blk
                 csr_block_insert(&Hfull_blk, row, col, submatrix.Ax);
+                csr_full_insert(&Hfull, row, col, &submatrix);
             }
         }
         toc();
@@ -515,9 +516,11 @@ int main(int argc, char *argv[])
 
         // convert blocked Hfull_blk to non-blocked Hfull
         // could be done immediately above, but we do it here for timing purposes
-        tic(); printf("convert H to non-blocked matrix ");
-        csr_blocked_to_full(&Hfull, &Hfull_blk, &submatrix);
-        toc();
+
+        // This is done in the compute loop
+        /* tic(); printf("convert H to non-blocked matrix "); */
+        /* csr_blocked_to_full(&Hfull, &Hfull_blk, &submatrix); */
+        /* toc();         */
 
         tic(); printf("convert S to non-blocked matrix ");
         csr_blocked_to_full(&S, &S_blk, &submatrix);
@@ -587,45 +590,45 @@ int main(int argc, char *argv[])
         // validate - compare yblk and yfull results
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
-        if(1){
-            /* char fname[255]; */
-            /* snprintf(fname, 254, "S%d.ijk", rank); */
-            /* csr_ijk_write(fname, &Hst); */
-            // csr_ijk_write("S.ijk", &S);
-            // csr_ijk_write("Hst.ijk", &Hst);
+        /* if(1){ */
+        /*     /\* char fname[255]; *\/ */
+        /*     /\* snprintf(fname, 254, "S%d.ijk", rank); *\/ */
+        /*     /\* csr_ijk_write(fname, &Hst); *\/ */
+        /*     // csr_ijk_write("S.ijk", &S); */
+        /*     // csr_ijk_write("Hst.ijk", &Hst); */
 
-            sluA = slu_create_matrix(csr_nrows(&Hst), csr_ncols(&Hst), csr_nnz(&Hst), Hst.Ax, Hst.Ai, Hst.Ap);
-            sluLU = slu_compute_ilu(sluA);
-        }
+        /*     sluA = slu_create_matrix(csr_nrows(&Hst), csr_ncols(&Hst), csr_nnz(&Hst), Hst.Ax, Hst.Ai, Hst.Ap); */
+        /*     sluLU = slu_compute_ilu(sluA); */
+        /* } */
 
-        // rhs: (S - iH*h*dt/2)*psi0;
-        for(int i=0; i<csr_ncols(&Hfull); i++) rhs[i] = 0;
-        for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i];
-        csr_comm(&Hfull, rank, nranks);
-        csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, rhs);
-        for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = -1*rhs[i];
-        csr_spmv(0, csr_nrows(&S), &S, x + csr_local_rowoffset(&Hfull), rhs);
+        /* // rhs: (S - iH*h*dt/2)*psi0; */
+        /* for(int i=0; i<csr_ncols(&Hfull); i++) rhs[i] = 0; */
+        /* for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN); */
+        /* for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i]; */
+        /* csr_comm(&Hfull, rank, nranks); */
+        /* csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, rhs); */
+        /* for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = -1*rhs[i]; */
+        /* csr_spmv(0, csr_nrows(&S), &S, x + csr_local_rowoffset(&Hfull), rhs); */
 
-        // TODO: initial solution vector from previous iteration
-        memset(x, 0, csr_nrows(&S)*sizeof(cdouble_t));
+        /* // TODO: initial solution vector from previous iteration */
+        /* memset(x, 0, csr_nrows(&S)*sizeof(cdouble_t)); */
 
-        int iters = 500;
-        double tol_error = 1e-16;
-        HS_matrices mat;
-        mat.H = &Hfull;
-        mat.S = &S;
-        printf("bicgstab setup: nrows %d ncols %d local offset %d\n",
-               csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull));
-        solver_workspace_t wsp = {0};
-        bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
-                 LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
+        /* int iters = 500; */
+        /* double tol_error = 1e-16; */
+        /* HS_matrices mat; */
+        /* mat.H = &Hfull; */
+        /* mat.S = &S; */
+        /* printf("bicgstab setup: nrows %d ncols %d local offset %d\n", */
+        /*        csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull)); */
+        /* solver_workspace_t wsp = {0}; */
+        /* bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull), */
+        /*          LU_precond_fun, &sluLU, &wsp, &iters, &tol_error); */
 
-        rankprint(x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull));
+        /* rankprint(x + csr_local_rowoffset(&Hfull), csr_nrows(&Hfull)); */
         
-        // re-use the solution vector
-        bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
-                 LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
+        /* // re-use the solution vector */
+        /* bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull), */
+        /*          LU_precond_fun, &sluLU, &wsp, &iters, &tol_error); */
 
 #if defined USE_CUDA | defined USE_HIP
         gpu_spmv_test(Hfull, x, yfull);
