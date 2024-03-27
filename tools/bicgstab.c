@@ -1,7 +1,6 @@
 #include "bicgstab.h"
 #include <string.h>
 #include <math.h>
-#include <cblas-netlib.h>
 
 
 #define ALLOC_VECTOR(wsp, v, n)                                         \

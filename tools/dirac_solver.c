@@ -183,8 +183,7 @@ void HS_spmv_fun(const void *mat, cdouble_t *x, cdouble_t *out)
 
 void LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
 {
-    slu_LU_t *slup = (slu_LU_t*)precond;
-    slu_lu_solve(*slup, (doublecomplex*)rhs, (doublecomplex*)x);
+    slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
 }
 
 
@@ -443,6 +442,9 @@ int main(int argc, char *argv[])
         
         csr_coo2csr(&spU, UAi, UAj, UAx, csr_nrows(&Hfull), Unnz);
         csr_coo2csr(&spL, LAi, LAj, LAx, csr_nrows(&Hfull), Lnnz);
+
+        free(LAi); free(LAj); free(LAx);
+        free(UAi); free(UAj); free(UAx);
     }
     
     MPI_Barrier(MPI_COMM_WORLD);

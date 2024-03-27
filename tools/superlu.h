@@ -24,6 +24,6 @@ slu_LU_t slu_compute_ilu(slu_matrix_t A);
 void slu_LU2coo(const SuperMatrix *L, const SuperMatrix *U,
                 int_t **LAi_out, int_t **LAj_out, doublecomplex **LAx_out, int_t *Lnnz,
                 int_t **UAi_out, int_t **UAj_out, doublecomplex **UAx_out, int_t *Unnz);
-void slu_lu_solve(slu_LU_t lu, doublecomplex *rhs, doublecomplex *x);
+void slu_lu_solve(slu_LU_t *lu, doublecomplex *rhs, doublecomplex *x);
 
 #endif /* _INCLUDE_SUPERLU_H */

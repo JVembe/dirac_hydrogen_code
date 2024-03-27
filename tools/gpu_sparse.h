@@ -20,6 +20,7 @@
 #define gpuMalloc                                 cudaMalloc
 #define gpuFree                                   cudaFree
 #define gpuMemcpy                                 cudaMemcpy
+#define gpuMemset                                 cudaMemset
 #define gpuMemcpyHostToDevice                     cudaMemcpyHostToDevice
 #define gpuMemcpyDeviceToHost                     cudaMemcpyDeviceToHost
 
@@ -147,9 +148,36 @@
 
 #endif
 
+typedef struct {
+    gpusparseSpMatDescr_t desc;
+    csr_index_t nrows, ncols, nnz;    
+    csr_index_t *Ap;
+    csr_index_t *Ai;
+    csr_data_t  *Ax;
+    cusparseSpSVDescr_t spsvDescr;
+    void *spsvBuffer;
+} gpu_sparse_csr_t;
+
+typedef struct {
+    gpusparseDnVecDescr_t desc;
+    csr_index_t dim;
+    csr_data_t *x;
+} gpu_dense_vec_t;
+
+
+void gpu_sparse_init();
+void gpu_sparse_fini();
+
+void gpu_put_csr(const sparse_csr_t *Ahost, gpu_sparse_csr_t *Agpu);
+void gpu_put_vec(const csr_data_t *xhost, csr_index_t dim, gpu_dense_vec_t *xgpu);
+void gpu_get_vec(const gpu_dense_vec_t *xgpu, csr_data_t *xhost);
+
 void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y);
 void gpu_spmv_block(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *y, sparse_csr_t *g);
 void gpu_spmb_block_test(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *yfull, sparse_csr_t *g);
 void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull);
+
+void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, gpu_dense_vec_t *y);
+void gpu_lu_solve(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, gpu_dense_vec_t *y, gpu_dense_vec_t *temp);
 
 #endif /* GPU_SPARSE_H */

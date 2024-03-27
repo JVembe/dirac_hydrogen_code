@@ -234,9 +234,9 @@ slu_LU_t slu_compute_ilu(slu_matrix_t opaqueA)
     return ret;
 }
 
-void slu_lu_solve(slu_LU_t lu, doublecomplex *rhs, doublecomplex *x)
+void slu_lu_solve(slu_LU_t *lu, doublecomplex *rhs, doublecomplex *x)
 {
-    int nrows = ((SuperMatrix*)lu.A)->nrow;
+    int nrows = ((SuperMatrix*)lu->A)->nrow;
     superlu_options_t options;
     int_t    info = 0;
 
@@ -252,8 +252,8 @@ void slu_lu_solve(slu_LU_t lu, doublecomplex *rhs, doublecomplex *x)
 
     /* Set the options to do solve-only. */
     options.Fact = FACTORED;
-    zgsisx(&options, lu.A, lu.perm_c, lu.perm_r, NULL, &lu.equed, lu.R, lu.C, lu.L, lu.U, NULL, 0,
-           &YY, &XX, NULL, NULL, NULL, lu.mem_usage, lu.stat, &info);
+    zgsisx(&options, lu->A, lu->perm_c, lu->perm_r, NULL, &lu->equed, lu->R, lu->C, lu->L, lu->U, NULL, 0,
+           &YY, &XX, NULL, NULL, NULL, lu->mem_usage, lu->stat, &info);
 
     // cuda: cusparseSpSV
 }
