@@ -368,6 +368,7 @@ int main(int argc, char *argv[])
         // TODO get the time to compute time-dependent f(a,t)
         csr_data_t ft[6];
         complex ihdt = I*h*dt/2;
+        time = time + dt;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
         printf("f(t)\n");
         for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
