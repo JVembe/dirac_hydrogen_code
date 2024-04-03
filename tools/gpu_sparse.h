@@ -148,6 +148,8 @@
 
 #endif
 
+#if defined USE_CUDA | defined USE_HIP
+
 typedef struct {
     gpusparseSpMatDescr_t desc;
     csr_index_t nrows, ncols, nnz;    
@@ -179,5 +181,7 @@ void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull);
 
 void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, gpu_dense_vec_t *y);
 void gpu_lu_solve(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, gpu_dense_vec_t *y, gpu_dense_vec_t *temp);
+
+#endif
 
 #endif /* GPU_SPARSE_H */

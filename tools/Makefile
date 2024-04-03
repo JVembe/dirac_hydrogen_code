@@ -1,6 +1,7 @@
 OBJS=sorted_list.o \
 	csr.o \
 	gpu_sparse.o \
+	solver.o \
 	bicgstab.o \
 	superlu.o
 
