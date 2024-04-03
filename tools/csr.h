@@ -15,6 +15,9 @@ typedef struct {
     csr_index_t *perm, *row_cpu_dist;
     csr_index_t **comm_pattern, *comm_pattern_size, *n_comm_entries;
     csr_data_t  **recv_ptr, **send_ptr, *send_vec;
+#ifdef USE_MPI
+    MPI_Datatype *send_type;
+#endif
     csr_index_t *Ap;
     csr_index_t *Ai;
     csr_data_t  *Ax;
