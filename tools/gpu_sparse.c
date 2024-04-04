@@ -9,8 +9,14 @@ void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim);
 
 static gpusparseHandle_t sparseHandle;
 
+extern int rank, nranks;
+
 void gpu_sparse_init()
 { 
+    // Print device info
+    int deviceCount;
+    CHECK_GPU(gpuGetDeviceCount(&deviceCount));
+    printf("Device count: %d\n", deviceCount);
     CHECK_GPUSPARSE(gpusparseCreate(&sparseHandle));   
 }
 
@@ -20,7 +26,7 @@ void gpu_sparse_fini()
 }
 
 // copy sparse matrix from host to device
-void gpu_put_csr(const sparse_csr_t *Ahost, gpu_sparse_csr_t *Agpu)
+void gpu_put_csr(gpu_sparse_csr_t *Agpu, const sparse_csr_t *Ahost)
 {
     // Allocate device memory for CSR matrix and vectors
     csr_index_t *dAp, *dAi;
@@ -40,7 +46,6 @@ void gpu_put_csr(const sparse_csr_t *Ahost, gpu_sparse_csr_t *Agpu)
     CHECK_GPUSPARSE(gpusparseCreateCsr(&Adevice, csr_nrows(Ahost), csr_ncols(Ahost), csr_nnz(Ahost),
                                        dAp, dAi, dAx,
                                        GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_BASE_ZERO, GPU_C_64F));
-
     Agpu->desc = Adevice;
     Agpu->Ap = dAp;
     Agpu->Ai = dAi;
@@ -48,9 +53,10 @@ void gpu_put_csr(const sparse_csr_t *Ahost, gpu_sparse_csr_t *Agpu)
     Agpu->nnz = csr_nnz(Ahost);
     Agpu->nrows = csr_nrows(Ahost);
     Agpu->ncols = csr_ncols(Ahost);
+    Agpu->cuBuffer = NULL;
 }
 
-void gpu_put_vec(const csr_data_t *xhost, csr_index_t dim, gpu_dense_vec_t *xgpu)
+void gpu_put_vec(gpu_dense_vec_t *xgpu, const csr_data_t *xhost, csr_index_t dim)
 {
     CHECK_GPU(gpuMalloc((void**) &xgpu->x, dim*sizeof(csr_data_t)));
     if(xhost) {
@@ -60,9 +66,16 @@ void gpu_put_vec(const csr_data_t *xhost, csr_index_t dim, gpu_dense_vec_t *xgpu
     }
     CHECK_GPUSPARSE(gpusparseCreateDnVec(&xgpu->desc, dim, xgpu->x, GPU_C_64F));
     xgpu->dim = dim;
+    xgpu->desc_local = NULL;
 }
 
-void gpu_get_vec(const gpu_dense_vec_t *xgpu, csr_data_t *xhost)
+void gpu_vec_local_part(gpu_dense_vec_t *xgpu, csr_index_t dim, csr_index_t local_offset)
+{
+    CHECK_GPUSPARSE(gpusparseCreateDnVec(&xgpu->desc_local, dim, xgpu->x + local_offset, GPU_C_64F));
+    xgpu->local_offset = local_offset;
+}
+
+void gpu_get_vec(csr_data_t *xhost, const gpu_dense_vec_t *xgpu)
 {
     CHECK_GPU(gpuMemcpy(xhost, xgpu->x, xgpu->dim*sizeof(csr_data_t), gpuMemcpyDeviceToHost));
 }
@@ -87,7 +100,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                       CUSPARSE_SPSV_ALG_DEFAULT,
                                       L->spsvDescr,
                                       &bufferSize));
-    CHECK_GPU(gpuMalloc((void**) &L->spsvBuffer, bufferSize));
+    CHECK_GPU(gpuMalloc((void**) &L->cuBuffer, bufferSize));
     CHECK_GPU(cusparseSpSV_analysis(sparseHandle,
                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha,
@@ -97,7 +110,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                     CUDA_C_64F,
                                     CUSPARSE_SPSV_ALG_DEFAULT,
                                     L->spsvDescr,
-                                    L->spsvBuffer));
+                                    L->cuBuffer));
 
     cusparseSpSV_createDescr(&U->spsvDescr);
     value = CUSPARSE_FILL_MODE_UPPER;
@@ -114,7 +127,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                       CUSPARSE_SPSV_ALG_DEFAULT,
                                       U->spsvDescr,
                                       &bufferSize));
-    CHECK_GPU(gpuMalloc((void**) &U->spsvBuffer, bufferSize));
+    CHECK_GPU(gpuMalloc((void**) &U->cuBuffer, bufferSize));
     CHECK_GPU(cusparseSpSV_analysis(sparseHandle,
                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha,
@@ -124,7 +137,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                     CUDA_C_64F,
                                     CUSPARSE_SPSV_ALG_DEFAULT,
                                     U->spsvDescr,
-                                    U->spsvBuffer));
+                                    U->cuBuffer));
 }
 
 void gpu_lu_solve(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, gpu_dense_vec_t *y, gpu_dense_vec_t *temp) {
@@ -149,8 +162,53 @@ void gpu_lu_solve(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, 
                                  U->spsvDescr));
 }
 
+
 // Function for performing sparse matrix-vector multiplication on GPU.
-void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y) {
+void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y) {
+    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
+    if(NULL == Hfull->cuBuffer){
+        // Analyze matrix and calculate buffer size for the SpMV operation
+        size_t bufferSize;
+        CHECK_GPUSPARSE(gpusparseSpMV_bufferSize(sparseHandle,
+                                                 GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, Hfull->desc, x->desc,
+                                                 (const void*)&beta, y->desc,
+                                                 GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize));
+
+        // Allocate buffer for the SpMV operation
+        CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize*sizeof(csr_data_t)));
+    }
+    
+    CHECK_GPUSPARSE(gpusparseSpMV(sparseHandle,
+                                  GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, Hfull->desc, x->desc,
+                                  (const void*)&beta, y->desc,
+                                  GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, Hfull->cuBuffer));
+}
+
+
+// Function for performing sparse matrix-vector multiplication on GPU: local vector part
+void gpu_spmv_local(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y) {
+    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
+    if(NULL == Hfull->cuBuffer){
+        // Analyze matrix and calculate buffer size for the SpMV operation
+        size_t bufferSize;
+        CHECK_GPUSPARSE(gpusparseSpMV_bufferSize(sparseHandle,
+                                                 GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, Hfull->desc, x->desc_local,
+                                                 (const void*)&beta, y->desc,
+                                                 GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize));
+
+        // Allocate buffer for the SpMV operation
+        CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize*sizeof(csr_data_t)));
+    }
+
+    CHECK_GPUSPARSE(gpusparseSpMV(sparseHandle,
+                                  GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, Hfull->desc, x->desc_local,
+                                  (const void*)&beta, y->desc,
+                                  GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, Hfull->cuBuffer));
+}
+
+
+// Function for performing sparse matrix-vector multiplication on GPU.
+void gpu_spmv_old(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y) {
 
     // Allocate device memory for CSR matrix and vectors
     csr_index_t *dAp, *dAi;
@@ -248,12 +306,10 @@ void gpu_spmv_block(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *y, sparse_csr
             csr_data_t *yout_gpu;
             yout_gpu = y + row*blkdim;
 
-            gpu_spmv(submatrix, xin, yout_gpu);
-
+            // gpu_spmv(submatrix, xin, yout_gpu);
             // remember that at this stage xin and yout are renumbered wrt. the original node numbering
         }
     }
-
 }
 
 void gpu_spmb_block_test(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *yfull, sparse_csr_t *g) {
@@ -276,20 +332,40 @@ void gpu_spmb_block_test(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *yfull, s
 // Function for testing the result of the sparse matrix-vector multiplication.
 void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull) {
 
-    // Print device info
-    int deviceCount;
-    CHECK_GPU(gpuGetDeviceCount(&deviceCount));
-    printf("Device count: %d\n", deviceCount);
+    gpu_sparse_csr_t gpuHfull;
+    gpu_put_csr(&gpuHfull, &Hfull);
+
+    gpu_dense_vec_t xgpu, ygpu;
+    gpu_put_vec(&xgpu, x, csr_ncols(&Hfull));
+    gpu_put_vec(&ygpu, NULL, csr_nrows(&Hfull));
+
+    /* // Analyze matrix and calculate buffer size for the SpMV operation */
+    /* csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0); */
+    /* size_t bufferSize; */
+    /* CHECK_GPUSPARSE(gpusparseSpMV_bufferSize(sparseHandle, */
+    /*                                          GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, gpuHfull.desc, xgpu.desc, */
+    /*                                          (const void*)&beta, ygpu.desc, */
+    /*                                          GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize)); */
+
+    /* // Allocate buffer for the SpMV operation */
+    /* CHECK_GPU(gpuMalloc((void**) &gpuHfull.cuBuffer, bufferSize*sizeof(csr_data_t))); */
 
     // Allocate vector for GPU SpMV result
     csr_data_t *gpu_result;
     gpu_result = (csr_data_t *)calloc(csr_nrows(&Hfull), sizeof(csr_data_t));
 
     // Perform the matrix-vector multiplication on the GPU
-    gpu_spmv(Hfull, x, gpu_result);
+    csr_init_communication(&Hfull, xgpu.x, rank, nranks);
 
-    // Validate - compare yfull and gpu results
-    compare_vectors(yfull, gpu_result, csr_nrows(&Hfull));
+    PRINTF0("Device comm: "); tic();
+    csr_comm(&Hfull, rank, nranks);
+    toc();
+
+    PRINTF0("Device spmv: "); tic();
+    gpu_spmv(&gpuHfull, &xgpu, &ygpu);
+    toc();
+
+    gpu_get_vec(yfull, &ygpu);
 
     // Clean up host resources
     free(gpu_result);

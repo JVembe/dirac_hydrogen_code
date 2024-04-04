@@ -157,12 +157,14 @@ typedef struct {
     csr_index_t *Ai;
     csr_data_t  *Ax;
     cusparseSpSVDescr_t spsvDescr;
-    void *spsvBuffer;
+    void *cuBuffer;
 } gpu_sparse_csr_t;
 
 typedef struct {
     gpusparseDnVecDescr_t desc;
+    gpusparseDnVecDescr_t desc_local;
     csr_index_t dim;
+    csr_index_t local_offset;
     csr_data_t *x;
 } gpu_dense_vec_t;
 
@@ -170,11 +172,13 @@ typedef struct {
 void gpu_sparse_init();
 void gpu_sparse_fini();
 
-void gpu_put_csr(const sparse_csr_t *Ahost, gpu_sparse_csr_t *Agpu);
-void gpu_put_vec(const csr_data_t *xhost, csr_index_t dim, gpu_dense_vec_t *xgpu);
-void gpu_get_vec(const gpu_dense_vec_t *xgpu, csr_data_t *xhost);
+void gpu_put_csr(gpu_sparse_csr_t *Agpu, const sparse_csr_t *Ahost);
+void gpu_put_vec(gpu_dense_vec_t *xgpu, const csr_data_t *xhost, csr_index_t dim);
+void gpu_vec_local_part(gpu_dense_vec_t *xgpu, csr_index_t dim, csr_index_t local_offset);
+void gpu_get_vec(csr_data_t *xhost, const gpu_dense_vec_t *xgpu);
 
-void gpu_spmv(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *y);
+void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y);
+void gpu_spmv_local(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y);
 void gpu_spmv_block(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *y, sparse_csr_t *g);
 void gpu_spmb_block_test(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *yfull, sparse_csr_t *g);
 void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull);

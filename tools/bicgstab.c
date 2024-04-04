@@ -8,7 +8,6 @@
         wsp->v = (cdouble_t*)calloc(n, sizeof(cdouble_t));              \
     v = wsp->v;
 
-int incx = 1;
 #define squarednorm(v, n) creal(zdotc_(&n, v, &incx, v, &incx))
 
 #ifdef USE_MPI
@@ -17,7 +16,7 @@ int incx = 1;
 #include "utils.h"
 extern int rank, nranks;
 
-double dreduce(double val)
+static double dreduce(double val)
 {
     double retval;
     if(nranks==1) return val;
@@ -25,7 +24,7 @@ double dreduce(double val)
     return retval;
 }
 
-double complex zreduce(double complex val)
+static double complex zreduce(double complex val)
 {
     double complex retval;
     if(nranks==1) return val;
@@ -33,7 +32,7 @@ double complex zreduce(double complex val)
     return retval;
 }
 
-void rankprint(char *fname, cdouble_t *v, int n)
+static void rankprint(char *fname, cdouble_t *v, int n)
 {
     FILE *fd;
     for(int r=0; r<nranks; r++){
@@ -75,7 +74,16 @@ const void pvec(const char *hdr, const cdouble_t *v, int n)
 // BLAS1
 complex double zdotc_(const int *n, const double complex *x, const int *incx, const double complex *y, const int *incy);
 void zaxpy_(const int *n, const double complex *alpha, const double complex *x, const int *incx, double complex *y, const int *incy);
+void zscal_(const int *n, const double complex *alpha, const double complex *x, const int *incx);
 void zaxpby_(const int *n, const double complex *alpha, const double complex *x, const int *incx, const double complex *beta, double complex *y, const int *incy);
+
+/* if zaxpby is not available */
+/* #define zaxpby_(n, alpha, x, incx, beta, y, incy)   \ */
+/*     {                                               \ */
+/*         zscal_(n, beta, y, incy);                   \ */
+/*         zaxpy_(n, alpha, x, incx, y, incy);         \ */
+/*     } */
+
 
 /** \internal Low-level bi conjugate gradient stabilized algorithm
   * \param mat The matrix A
@@ -92,6 +100,7 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
 {
   double tol = *tol_error;
   int maxIters = *iters;
+  int incx = 1;
   
   cdouble_t rho    = 1;
   cdouble_t alpha  = 1;

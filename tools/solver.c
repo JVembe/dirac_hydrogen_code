@@ -42,9 +42,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
     }
     
     // for all rows
-    if(rank==0){
-        tic(); printf("compute Ht ");
-    }
+    PRINTF0("compute Ht ");
     for(row = 0; row < csr_nrowblocks(Hfull_blk); row++){
 
         // for non-zeros in each row
@@ -173,7 +171,7 @@ void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
     int blkdim = S_blk->blk_dim;
     complex ihdt = I*h*dt/2;
 
-    tic(); printf("matrix assembly S ");
+    tic(); PRINTF0("matrix assembly S ");
     // S is block-diagonal, so row == col
     for(row = 0; row < csr_nrowblocks(S_blk); row++){
         csr_index_t orig_row = row;
@@ -208,6 +206,7 @@ void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,
         // csr_block_insert(Hst_blk, row, row, submatrix->Ax);
         csr_full_insert(Hst, row, row, submatrix);
     }
+    toc();
 
     // un-block, if above we used the blocked storage
     // csr_blocked_to_full(S, S_blk, submatrix);
@@ -222,7 +221,7 @@ slu_LU_t compute_preconditioner(const sparse_csr_t *S, const sparse_csr_t *Hst)
 
     csr_data_t *P = (csr_data_t*)malloc(sizeof(csr_data_t)*Hst->nnz);
 
-    tic(); printf("construct base preconditioner matrix ");
+    tic(); PRINTF0("construct base preconditioner matrix ");
 
     // preconditioner is based on ILU of S+Hst, so compute Hst = S+Hst
     // this is trivial since S and Hst have the same, block-diagonal structure

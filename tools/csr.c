@@ -822,15 +822,16 @@ void csr_comm(const sparse_csr_t *sp, int rank, int nranks)
         }
     }
 
-    /* gather sent data into send buffers and send */
     for(int irank=0; irank<nranks; irank++){
         comm_requests[nranks+irank] = MPI_REQUEST_NULL;
         if(sp->send_type){
+            /* use MPI_Type_indexed for sending - supports GPU */
             if(MPI_DATATYPE_NULL != sp->send_type[irank]){
                 CHECK_MPI(MPI_Isend(sp->send_vec, 1, sp->send_type[irank], irank, 0,
                                     MPI_COMM_WORLD, comm_requests+nranks+irank));
             }
         } else {
+            /* gather sent data into send buffers and send */
             if(sp->send_ptr[irank]){
                 csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
                 csr_index_t col_local;
