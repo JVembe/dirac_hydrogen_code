@@ -328,22 +328,22 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			// cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
 			for(int i = 1; i < Nt; i++) {
 				t = i*dt;
-				if (i%10 == 0) {
-					cdouble iprod = (psi*wft)(0,0);
-					
-					auto currentTime = std::chrono::system_clock::now();
-					auto elapsed = (currentTime - starttime);
-					
-					auto ETA = (currentTime - starttime)/i * (Nt-i + 1) * (2 * ((Nt - i) / Nt + 1));
-					
-					if(wrank == 0) {
-						cout <<"step: " << i <<",\nt: " << t << ",\n<psi0|psi"<<i<<">=" << abs(iprod) << ",\nElapsed: ";
-						hmsPrint(elapsed); 
-						cout << ",\nETA: "; 
-						hmsPrint(ETA);
-						cout << "\nIterations: " << solver->iterations() << ", error estimate: " << solver->error() << std::endl;																					 
-					}
+				// if (i%10 == 0) {
+				cdouble iprod = (psi*wft)(0,0);
+				
+				auto currentTime = std::chrono::system_clock::now();
+				auto elapsed = (currentTime - starttime);
+				
+				auto ETA = (currentTime - starttime)/i * (Nt-i + 1) * (2 * ((Nt - i) / Nt + 1));
+				
+				if(wrank == 0) {
+					cout <<"step: " << i <<",\nt: " << t << ",\n<psi0|psi"<<i<<">=" << abs(iprod) << ",\nElapsed: ";
+					hmsPrint(elapsed); 
+					cout << ",\nETA: "; 
+					hmsPrint(ETA);
+					cout << "\nIterations: " << solver->iterations() << ", error estimate: " << solver->error() << std::endl;																					 
 				}
+				// }
 				// try {			
 				this->timeStep();
 				

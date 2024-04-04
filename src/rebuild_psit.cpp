@@ -227,10 +227,10 @@ int main(int argc, char** argv) {
 	// return 0;
 	
 	dkbb.Sm();
-	// for(int l = 0; l < spnrb.bdplmax(); l++) {
-		// dkbb.bdpam(1,1,1,l,bdpp);
-		// dkbb.bdpam(1,1,-1,l,bdpp);
-	// }
+	for(int l = 0; l < spnrb.bdplmax(); l++) {
+		dkbb.bdpam(1,1,1,l,bdpp);
+		dkbb.bdpam(1,1,-1,l,bdpp);
+	}
 	
 	dkbb.setState(-1);
 	
@@ -280,9 +280,10 @@ int main(int argc, char** argv) {
 		int kappaid = 2*abs(kappa) + (sgn(kappa) - 1)/2 - 1;
 		cout << i <<"," << kappaid << endl;
 		cmat evcs = H.getevecs(ik(rthphb.angids[i]),imu(rthphb.angids[i]));
-		cvec freeEvlPos = cvec(((evls[kappaid].array() > 0) /* (evls[kappaid].array() < 75)*/).cast<double>());
+		cvec freeEvlPos = cvec(((evls[kappaid].array() > 0) /* (evls[kappaid].array() < 0)*/).cast<double>());
 		cvec freeEvlNeg = 0*cvec((evls[kappaid].array() < -pow(SoL,2)).cast<double>());
 		cmat evcsFree = evcs.array().rowwise()*(freeEvlPos.array() + freeEvlNeg.array()).array().transpose();
+		// cmat evcsFree = evcs;
 		
 		// cout << "i" << evcs << "\n\n" << freeEvlPos.format(outformat) << "\n\n" << freeEvlNeg.format(outformat) << "\n\n" << evcsFree << endl;
 		
@@ -291,19 +292,24 @@ int main(int argc, char** argv) {
 	}
 	// return 0;
 	
-	cout << "psit" << psit.format(outformat);
+	// cout << "psit" << psit.format(outformat);
 	
 	
 	dirwf psi1 = dirwf(rthphb,psit);
-	// psi1.normalize();
+	psi1.normalize();
 	// cout << "psi " << psi1.coefs.format(outformat)<<"\n";
 	
 	cvec azv = rthphb.template matfree<dpa>(psi1.coefs);
 	
-	cout << "azv "  << azv.format(outformat) << std::endl;
-	cout << "az" << SoL * cvec(psi1.coefs).dot(azv);
+	// cout << "azv "  << azv.format(outformat) << std::endl;
+	cout << "az" << SoL * cvec(psi1.coefs).dot(azv) << endl;
 	
-	cout << "pIon" << abs((psi1 * psi1)(0,0));
+	cvec axv = rthphb.dpaXmatvecMPIblock(cvec(psi1.coefs));
+	
+	// cout << "axv "  << axv.format(outformat) << std::endl;
+	cout << "ax" << SoL * cvec(psi1.coefs).dot(axv) << endl;
+	
+	// cout << "pIon" << abs((psi1 * psi1)(0,0));
 	
 	// cout << "E0" << H.getevecs(-1,-0.5).format(outformat) << endl;
 	

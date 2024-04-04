@@ -1186,7 +1186,8 @@ class DiracBDP: public DiracBase<DiracBDP<basistype>, basistype> {
 		cvec HtVec(double t, const cvec& v) const {
 			vExt->setTime(t);
 			
-			//bdpft vt = vExt->template axialPart<axis::t>(t);
+			// bdpft vt = vExt->template axialPart<axis::t>(t);
+			// cout << "f("<<t<<"):\n" << vt;
 			
 			cvec out = cvec::Zero(v.size());
 			

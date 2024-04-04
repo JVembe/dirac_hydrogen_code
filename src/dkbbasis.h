@@ -658,11 +658,10 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 			
 			// cout << "mat3 dims: (" << mat3.rows() << ", " << mat3.cols() << ")" << endl; 
 			// w.transposeInPlace();
-
+			// cout << "m\n" <<  m << endl << endl;
 			if(ul == LOWER) {
 				w.noalias() += (thmat * (dpalph0 * m).transpose());
 				w.noalias() += (kappasmat * thmat * (dpalphk0 * m).transpose());
-				
 				w.noalias() += (thmat * localKappasmat * (dpalph0k * m).transpose()); // (thmat * ((kappasmat.middleRows(wrank*thmat.cols(),thmat.cols()) * (dpalph0k * m)))).transpose();
 				w.noalias() += ((kappasmat * thmat * localKappasmat) * (dpalphkk * m).transpose());
 			}
@@ -673,7 +672,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 				w.noalias() += (thmat * localKappasmat * (dpalph0k * m).transpose());
 				w.noalias() += (kappasmat * thmat * localKappasmat * (dpalphkk * m).transpose());
 			}
-
+			// cout << "w\n" <<  w << endl << endl;
 			// w.transposeInPlace();
 		}
 		

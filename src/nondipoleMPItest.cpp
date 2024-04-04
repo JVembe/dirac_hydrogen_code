@@ -240,7 +240,7 @@ int main(int argc, char* argv[]) {
 	//Eigen solvers need a compute step to be performed before solving
 	solver.compute(proptest);
 
-	solver.setMaxIterations(1000);
+	// solver.setMaxIterations(1000);
 
 	cvec psi2 = solver.solve(b);
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);

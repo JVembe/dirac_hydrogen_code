@@ -359,7 +359,7 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 					H.getBasis().getRadial().setState(iid,iid,1);
 					
 					
-					csmat mat2 = H.template S<radial>() - dt * cdouble(0,0.5)  * H.template H0<radial>();
+					csmat mat2 = H.template S<radial>() + dt * cdouble(0,0.5)  * H.template H0<radial>();
 					amats.push_back(mat2);
 					ILUT* subsolver2 = new ILUT(mat2);
 					
@@ -572,6 +572,8 @@ class SubmatPreconditioner: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
 		
 		
 };
+
+
 
 template<typename _Scalar, typename _StorageIndex = int>
 class SubmatPreconditioner_old: public Eigen::IncompleteLUT<_Scalar,_StorageIndex> {
