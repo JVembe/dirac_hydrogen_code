@@ -42,7 +42,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
     }
     
     // for all rows
-    PRINTF0("compute Ht ");
+    tic(); PRINTF0("compute Ht ");
     for(row = 0; row < csr_nrowblocks(Hfull_blk); row++){
 
         // for non-zeros in each row

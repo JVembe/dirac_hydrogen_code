@@ -155,6 +155,11 @@ void LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
     slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
 }
 
+void gpu_LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
+{
+    // slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -446,20 +451,21 @@ int main(int argc, char *argv[])
         compare_vectors(yfull, yblk, csr_nrows(&Hfull));
 
 #if defined USE_CUDA | defined USE_HIP
-
-        // initialize input vector. non-local parts are set to nan to verify communication:
-        // all non-local entries are received from peers, hence set to non-nan during communication
-        for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull); i++)
-            x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
-        
-        gpu_sparse_init();
-        gpu_spmv_test(Hfull, x, ydev);
-
-        // validate - compare yblk and yfull results
-        compare_vectors(yfull, ydev, csr_nrows(&Hfull));
-
-        // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
+        {
+            // initialize input vector. non-local parts are set to nan to verify communication:
+            // all non-local entries are received from peers, hence set to non-nan during communication
+            for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
+            for(int i=0; i<csr_nrows(&Hfull); i++)
+                x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
+            
+            gpu_sparse_init();
+            gpu_spmv_test(Hfull, x, ydev);
+            
+            // validate - compare yblk and yfull results
+            compare_vectors(yfull, ydev, csr_nrows(&Hfull));
+            
+            // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
+        }
 #endif
 
         // compute the stationary part once
@@ -493,8 +499,13 @@ int main(int argc, char *argv[])
             toc();
 
             gpu_get_vec(ydev, &ygpu);
-            
+
             compare_vectors(yfull, ydev, csr_nrows(&Hfull));
+
+            // cleanup
+            gpu_free_vec(&xgpu);
+            gpu_free_vec(&ygpu);
+            gpu_free_csr(&gpuS);
         }
 #endif
         
@@ -506,15 +517,14 @@ int main(int argc, char *argv[])
         
 #if defined USE_CUDA | defined USE_HIP
         // compare SuperLU solve with cusparse / hipsparse solve
-        {
-        
-            // convert from SuperLU super-node format to csr format
-            sparse_csr_t hostL, hostU;
+        sparse_csr_t hostL, hostU;
+        {        
             csr_index_t *LAi, *LAj;
             csr_index_t *UAi, *UAj;
             csr_data_t *LAx, *UAx;
             csr_index_t Lnnz, Unnz;
 
+            // convert from SuperLU super-node format to csr format
             slu_LU2coo(sluLU.L, sluLU.U,
                        &LAi, &LAj, (doublecomplex**)&LAx, &Lnnz,
                        &UAi, &UAj, (doublecomplex**)&UAx, &Unnz);
@@ -534,12 +544,25 @@ int main(int argc, char *argv[])
             gpu_put_vec(&ygpu, NULL, csr_nrows(&Hfull));
             gpu_put_vec(&tempgpu, NULL, csr_nrows(&Hfull));
 
-            // GPU sulve using cusparse / hipsparse
+            // GPU solve using cusparse / hipsparse
+            tic(); PRINTF0("GPU LU analyze ");
             gpu_lu_analyze(&gpuL, &gpuU, &xgpu, &ygpu);
+            toc();
+
+            tic(); PRINTF0("GPU LU solve ");
             gpu_lu_solve(&gpuL, &gpuU, &xgpu, &ygpu, &tempgpu);
+            toc();
+
             gpu_get_vec(yfull, &ygpu);
 
             compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+
+            // cleanup
+            gpu_free_vec(&xgpu);
+            gpu_free_vec(&ygpu);
+            gpu_free_vec(&tempgpu);
+            gpu_free_csr(&gpuL);
+            gpu_free_csr(&gpuU);
         }
 #endif
 
@@ -566,13 +589,26 @@ int main(int argc, char *argv[])
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
 
-        /* { */
-        /*     gpu_HS_matrices gpumat; */
-        /*     gpumat.H = &Hfull; */
-        /*     gpumat.S = &S; */
-        /*     gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, const gpu_complex_t *rhs, gpu_complex_t *x, int nrow, int ncol, int local_col_beg, */
-        /*              gpu_precond_fun psolve, const void *precond, solver_workspace_t *wsp, int *iters, double *tol_error); */
-        
+#if defined USE_CUDA | defined USE_HIP
+        {
+            gpu_HS_matrices gpumat;
+            gpu_sparse_csr_t gpuS, gpuHfull;
+
+            gpu_put_csr(&gpuS, &S);
+            gpu_put_csr(&gpuHfull, &Hfull);
+            gpumat.H = &Hfull;
+            gpumat.gpuH = &gpuHfull;
+            gpumat.S = &S;
+            gpumat.gpuS = &gpuS;
+
+            gpu_sparse_csr_t gpuL, gpuU;
+            gpu_put_csr(&gpuL, &hostL);
+            gpu_put_csr(&gpuU, &hostU);
+
+            /* gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, const gpu_complex_t *rhs, gpu_complex_t *x, int nrow, int ncol, int local_col_beg, */
+            /*          gpu_precond_fun psolve, const void *precond, solver_workspace_t *wsp, int *iters, double *tol_error); */
+        }
+#endif
     }
 
 #ifdef USE_MPI

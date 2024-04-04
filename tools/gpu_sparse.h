@@ -45,6 +45,8 @@
 #define gpusparseDnVecDescr_t                     cusparseDnVecDescr_t
 #define gpusparseCreateCsr                        cusparseCreateCsr
 #define gpusparseCreateDnVec                      cusparseCreateDnVec
+#define gpusparseDestroyDnVec                     cusparseDestroyDnVec
+#define gpusparseDestroySpMat                     cusparseDestroySpMat
 #define gpusparseSpMV_bufferSize                  cusparseSpMV_bufferSize
 #define gpusparseSpMV                             cusparseSpMV
 
@@ -173,9 +175,12 @@ void gpu_sparse_init();
 void gpu_sparse_fini();
 
 void gpu_put_csr(gpu_sparse_csr_t *Agpu, const sparse_csr_t *Ahost);
+void gpu_free_csr(gpu_sparse_csr_t *Agpu);
+
 void gpu_put_vec(gpu_dense_vec_t *xgpu, const csr_data_t *xhost, csr_index_t dim);
 void gpu_vec_local_part(gpu_dense_vec_t *xgpu, csr_index_t dim, csr_index_t local_offset);
 void gpu_get_vec(csr_data_t *xhost, const gpu_dense_vec_t *xgpu);
+void gpu_free_vec(gpu_dense_vec_t *xgpu);
 
 void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y);
 void gpu_spmv_local(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y);
