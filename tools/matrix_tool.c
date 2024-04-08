@@ -86,6 +86,13 @@ void HS_spmv_fun(const void *mat, cdouble_t *x, cdouble_t *out)
 }
 
 
+void LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
+{
+    slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
+}
+
+#if defined USE_CUDA | defined USE_HIP
+
 typedef struct {
     sparse_csr_t *H, *S;
     gpu_sparse_csr_t *gpuH, *gpuS;
@@ -104,18 +111,13 @@ void gpu_HS_spmv_fun(const void *mat, gpu_dense_vec_t *x, gpu_dense_vec_t *out, 
     gpu_spmv_local(hsptr->gpuS, x, out, alpha, CMPLX(1,0));
 }
 
-
-void LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
-{
-    slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
-}
-
 void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_dense_vec_t *x)
 {
     gpu_lu_t *precond = (gpu_lu_t*)_precond;
     gpu_lu_solve(precond->L, precond->U, rhs, x, precond->temp);
 }
 
+#endif
 
 int main(int argc, char *argv[])
 {

@@ -1,5 +1,5 @@
 #include "solver.h"
-
+#include <omp.h>
 extern int rank;
 static int *ikarr = NULL;
 
@@ -44,13 +44,10 @@ void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t 
     out[5] = (  E0/(2*omega) * sin( phi + t * omega));
 }
 
-void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
+void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
                               const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt)
 {
-    csr_index_t row, col, colp;
-    complex ihdt = I*h*dt/2;
-
     if(NULL == ikarr){
         // precompute ik indices
         ikarr = malloc(sizeof(csr_index_t)*csr_ncolblocks(Hfull_blk));
@@ -58,124 +55,148 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_
             csr_index_t orig_col = col;
             if(Hfull_blk->perm) {
                 orig_col = Hfull_blk->perm[col];
-            } 
+            }
             ikarr[col] = (int)ik(orig_col);
         }
     }
-    
-    // for all rows
-    tic(); PRINTF0("compute Ht ");
-    for(row = 0; row < csr_nrowblocks(Hfull_blk); row++){
 
-        // for non-zeros in each row
-        for(colp = Hfull_blk->Ap[row]; colp < Hfull_blk->Ap[row+1]; colp++){
+    char *envar;
+    int nthr = 1;
+    envar = getenv("MAT_NUM_THREADS");
+    if(NULL == envar) envar = getenv("OMP_NUM_THREADS");
+    if(NULL != envar) nthr = atoi(envar);
+    if(0 == nthr) nthr = 1;
+    tic(); PRINTF0("compute Ht on %d threads ", nthr);
 
-            // NOTE: rows and cols in Hfull_blk are remapped wrt. the original numbering in H
-            col = Hfull_blk->Ai[colp];
+#pragma omp parallel num_threads(nthr)
+    {
+        csr_index_t row, col, colp;
+        complex ihdt = I*h*dt/2;
 
-            // apply node renumbering - if available
-            csr_index_t orig_row = row;
-            csr_index_t orig_col = col;
-            if(Hfull_blk->perm) {
-                orig_row = Hfull_blk->perm[csr_local_rowoffset(Hfull_blk) + row];
-                orig_col = Hfull_blk->perm[col];
-            }
+        // copy submatrix - should be thread-local
+        sparse_csr_t lsubmatrix, *submatrix;
+        submatrix = &lsubmatrix;
+        csr_copy(submatrix, _submatrix);
 
-            // calculate kappa and mu parameters from row/col indices
-            // see spnrbasis::bdpalphsigmaXmat
-            /* int ki = (int)ik(orig_row); // k' */
-            /* int kj = (int)ik(orig_col); // k */
+        int nrows = csr_nrowblocks(Hfull_blk);
 
-            // precomputed is faster
-            int ki = ikarr[csr_local_rowoffset(Hfull_blk) + row];
-            int kj = ikarr[col];
+#pragma omp for
+        // for all rows
+        for(row = 0; row < nrows; row++){
 
-            const sparse_csr_t *pg0, *pg1, *pg2, *pg3;
-            const sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
-            csr_data_t H0[lmax], H1[lmax];
+            // for non-zeros in each row
+            for(colp = Hfull_blk->Ap[row]; colp < Hfull_blk->Ap[row+1]; colp++){
 
-            // prefetch the Hamiltonian values H0(l) and H1(l)
-            for(int l=0; l<lmax; l++){
-                H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
-                H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
-            }
+                // NOTE: rows and cols in Hfull_blk are remapped wrt. the original numbering in H
+                col = Hfull_blk->Ai[colp];
 
-            csr_zero(submatrix);
-            
-            // stationary part of H
-            if(orig_row==orig_col) {
-                for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                    submatrix->Ax[i] =
-                        ihdt*(h0[0].Ax[i]         +
-                              h0[1].Ax[i]*ki      +
-                              h0[2].Ax[i]*ki*ki   +
-                              h0[3].Ax[i]*ki*ki*ki);
+                // apply node renumbering - if available
+                csr_index_t orig_row = row;
+                csr_index_t orig_col = col;
+                if(Hfull_blk->perm) {
+                    orig_row = Hfull_blk->perm[csr_local_rowoffset(Hfull_blk) + row];
+                    orig_col = Hfull_blk->perm[col];
                 }
-            }
 
-            // instead we can extract it from Hst_blk, but speed is the same / worse
-            /* if(orig_row==orig_col) { */
-            /*     csr_block_link(&tmpsp, Hst_blk, row, row); */
-            /*     memcpy(submatrix->Ax, tmpsp.Ax, csr_nnz(submatrix)*sizeof(csr_data_t)); */
-            /* } else { */
-            /*     csr_zero(submatrix); */
-            /* } */
+                // calculate kappa and mu parameters from row/col indices
+                // see spnrbasis::bdpalphsigmaXmat
+                /* int ki = (int)ik(orig_row); // k' */
+                /* int kj = (int)ik(orig_col); // k */
 
-            // the H matrix is still updated with Hst, so do not clear the submatrix
-            for(int l=0; l<lmax; l++){
-                if(H0[l] != CMPLX(0,0)){
+                // precomputed is faster
+                int ki = ikarr[csr_local_rowoffset(Hfull_blk) + row];
+                int kj = ikarr[col];
 
-                    for(int a=0; a<6; a++){
-                        if((a%2!=l%2)) { //Skip redundant matrices
-                            pg0 = g + a*4*lmax + l*4;
-                            pg1 = pg0 + 1;
-                            pg2 = pg0 + 2;
-                            pg3 = pg0 + 3;
+                const sparse_csr_t *pg0, *pg1, *pg2, *pg3;
+                const sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
+                csr_data_t H0[lmax], H1[lmax];
 
-                            // g matrices all have the same nnz pattern,
-                            // so we can operate directly on the internal storage Ax
-                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                                submatrix->Ax[i] +=
-                                    SoL*ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
-                                                          pg1->Ax[i]*ki     +
-                                                          pg2->Ax[i]*kj     +
-                                                          pg3->Ax[i]*ki*kj) ;
+                // prefetch the Hamiltonian values H0(l) and H1(l)
+                for(int l=0; l<lmax; l++){
+                    H0[l] = csr_get_value(H + 2*l + 0, orig_row, orig_col);
+                    H1[l] = csr_get_value(H + 2*l + 1, orig_row, orig_col);
+                }
+
+                csr_zero(submatrix);
+
+                // stationary part of H
+                if(orig_row==orig_col) {
+                    for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                        submatrix->Ax[i] =
+                            ihdt*(h0[0].Ax[i]         +
+                                  h0[1].Ax[i]*ki      +
+                                  h0[2].Ax[i]*ki*ki   +
+                                  h0[3].Ax[i]*ki*ki*ki);
+                    }
+                }
+
+                // instead we can extract it from Hst_blk, but speed is the same / worse
+                /* if(orig_row==orig_col) { */
+                /*     csr_block_link(&tmpsp, Hst_blk, row, row); */
+                /*     memcpy(submatrix->Ax, tmpsp.Ax, csr_nnz(submatrix)*sizeof(csr_data_t)); */
+                /* } else { */
+                /*     csr_zero(submatrix); */
+                /* } */
+
+                // the H matrix is still updated with Hst, so do not clear the submatrix
+                for(int l=0; l<lmax; l++){
+                    if(H0[l] != CMPLX(0,0)){
+
+                        for(int a=0; a<6; a++){
+                            if((a%2!=l%2)) { //Skip redundant matrices
+                                pg0 = g + a*4*lmax + l*4;
+                                pg1 = pg0 + 1;
+                                pg2 = pg0 + 2;
+                                pg3 = pg0 + 3;
+
+                                // g matrices all have the same nnz pattern,
+                                // so we can operate directly on the internal storage Ax
+                                for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                    submatrix->Ax[i] +=
+                                        SoL*ihdt*ft[a]*H0[l]*(pg0->Ax[i]        +
+                                                              pg1->Ax[i]*ki     +
+                                                              pg2->Ax[i]*kj     +
+                                                              pg3->Ax[i]*ki*kj) ;
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            for(int l=0; l<lmax; l++){
-                if(H1[l] != CMPLX(0,0)){
+                for(int l=0; l<lmax; l++){
+                    if(H1[l] != CMPLX(0,0)){
 
-                    for(int a=0; a<6; a++){
-                        if((a%2!=l%2)) { //Skip redundant matrices
-                            pgt0 = gt + a*4*lmax + l*4;
-                            pgt1 = pgt0 + 1;
-                            pgt2 = pgt0 + 2;
-                            pgt3 = pgt0 + 3;
+                        for(int a=0; a<6; a++){
+                            if((a%2!=l%2)) { //Skip redundant matrices
+                                pgt0 = gt + a*4*lmax + l*4;
+                                pgt1 = pgt0 + 1;
+                                pgt2 = pgt0 + 2;
+                                pgt3 = pgt0 + 3;
 
-                            // g matrices all have the same nnz pattern,
-                            // so we can operate directly on the internal storage Ax
-                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                // g matrices all have the same nnz pattern,
+                                // so we can operate directly on the internal storage Ax
+                                for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                                     SoL*ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
                                                           pgt1->Ax[i]*kj    +
                                                           pgt2->Ax[i]*ki    +
                                                           pgt3->Ax[i]*ki*kj);
+                                }
                             }
                         }
                     }
                 }
+
+                // store the submatrix in the global Hfull_blk
+                if(Hfull_blk->Ax) csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
+
+                // store immediately in non-blocked Hfull matrix
+                csr_full_insert(Hfull, row, col, submatrix);
             }
-
-            // store the submatrix in the global Hfull_blk
-            if(Hfull_blk->Ax) csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
-
-            // store immediately in non-blocked Hfull matrix
-            csr_full_insert(Hfull, row, col, submatrix);
         }
+
+        csr_free(submatrix);
     }
+
     if(rank==0){
         toc();
     }

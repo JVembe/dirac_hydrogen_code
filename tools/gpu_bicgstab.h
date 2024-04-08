@@ -1,6 +1,7 @@
 #ifndef _GPU_BICGSTAB_H
 #define _GPU_BICGSTAB_H
 
+#ifdef USE_CUDA
 #include <cublas_v2.h>
 #include "gpu_sparse.h"
 
@@ -46,5 +47,7 @@ void gpu_blas_init();
 void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs, gpu_dense_vec_t *x, 
                   int nrow, int ncol, int local_col_beg,
                   gpu_precond_fun psolve, const void *precond, gpu_solver_workspace_t *wsp, int *iters, double *tol_error);
+
+#endif
 
 #endif

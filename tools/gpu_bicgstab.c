@@ -3,6 +3,8 @@
 #include "gpu_sparse.h"
 #include "gpu_bicgstab.h"
 
+#if defined USE_CUDA | defined USE_HIP
+
 gpucublasHandle_t handle;
 void gpu_blas_init()
 {
@@ -279,3 +281,5 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
   *iters = i;
   return;
 }
+
+#endif
