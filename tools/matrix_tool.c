@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
 
             // GPU solve using cusparse / hipsparse
             tic(); PRINTF0("GPU LU analyze ");
-            gpu_lu_analyze(&gpuL, &gpuU, &xgpu, &ygpu);
+            gpu_lu_analyze(&gpuL, &gpuU, &xgpu, &ygpu, &tempgpu);
             toc();
 
             tic(); PRINTF0("GPU LU solve ");
@@ -545,7 +545,7 @@ int main(int argc, char *argv[])
         HS_matrices mat;
         mat.H = &Hfull;
         mat.S = &S;
-        printf("CPU BICGSTAB\n"); tic();
+        PRINTF0("CPU BICGSTAB\n"); tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
         toc();
@@ -584,7 +584,7 @@ int main(int argc, char *argv[])
             gpu_vec_local_part(&xgpu, csr_nrows(&Hfull), csr_local_rowoffset(&Hfull));
             gpu_put_vec(&rhsgpu, NULL, csr_nrows(&Hfull));
 
-            gpu_lu_analyze(&gpuL, &gpuU, &rhsgpu, &xgpu);
+            gpu_lu_analyze(&gpuL, &gpuU, &rhsgpu, &xgpu, &tempgpu);
 
             // rhs = (S-H)*psi(n-1)
             csr_init_communication(&Hfull, (csr_data_t*)xgpu.x, rank, nranks);
@@ -599,7 +599,7 @@ int main(int argc, char *argv[])
             gpu_solver_workspace_t gpuwsp = {0};
             int iters = 500;
             double tol_error = 1e-16;
-            printf("GPU BICGSTAB\n"); tic();
+            PRINTF0("GPU BICGSTAB\n"); tic();
             gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                          gpu_LU_precond_fun, &gpuLU, &gpuwsp, &iters, &tol_error);
             toc();
