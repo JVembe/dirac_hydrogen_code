@@ -22,6 +22,28 @@ double imu(int i) {
     return mu;
 }
 
+
+void beyondDipolePulse_init(beyondDipolePulse_t *this, double E0, double omega, double N)
+{
+    this->E0 = E0;
+    this->omega = omega;
+    this->T = (double)N*2*M_PI / omega;
+}
+
+void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t *out)
+{
+    cdouble_t phi = CMPLX(-M_PI/2, 0);
+    double E0 = this->E0;
+    double omega = this->omega;
+    double T = this->T;
+    out[0] = ( -E0/(4*omega) * cos( phi + t * (2 * M_PI / T + omega)));
+    out[1] = ( -E0/(4*omega) * sin( phi + t * (2 * M_PI / T + omega)));
+    out[2] = ( -E0/(4*omega) * cos(-phi + t * (2 * M_PI / T - omega)));
+    out[3] = (  E0/(4*omega) * sin(-phi + t * (2 * M_PI / T - omega)));
+    out[4] = (  E0/(2*omega) * cos( phi + t * omega));
+    out[5] = (  E0/(2*omega) * sin( phi + t * omega));
+}
+
 void compute_timedep_matrices(double h, double dt, sparse_csr_t *submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
                               const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt)

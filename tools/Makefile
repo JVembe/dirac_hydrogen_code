@@ -3,6 +3,8 @@ OBJS=sorted_list.o \
 	gpu_sparse.o \
 	solver.o \
 	bicgstab.o \
+	gpu_bicgstab.o \
+	utils.o \
 	superlu.o
 
 CFLAGS_CUDA = -DUSE_CUDA

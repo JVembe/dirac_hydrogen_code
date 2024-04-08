@@ -26,6 +26,7 @@
 #include "superlu.h"
 #include "bicgstab.h"
 #include "solver.h"
+#include "utils.h"
 #include "../src/tictoc.h"
 //#include "../src/potential.h"
 
@@ -35,6 +36,7 @@
 
 #if defined USE_CUDA | defined USE_HIP
 #include "gpu_sparse.h"
+#include "gpu_bicgstab.h"
 #endif
 
 #define max(a,b) ((a)>(b)?(a):(b))
@@ -65,53 +67,6 @@ void vec_read(const char *fname, int start, int end, cdouble_t **out)
     fclose(fd);
 }
 
-// simple C-fied beyondDipolePulse implementation
-typedef struct
-{
-    double E0;
-    double omega;
-    double T;
-} beyondDipolePulse_t;
-
-
-void beyondDipolePulse_init(beyondDipolePulse_t *this, double E0, double omega, double N)
-{
-    this->E0 = E0;
-    this->omega = omega;
-    this->T = (double)N*2*M_PI / omega;
-}
-
-
-void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t *out)
-{
-    cdouble_t phi = CMPLX(-M_PI/2, 0);
-    double E0 = this->E0;
-    double omega = this->omega;
-    double T = this->T;
-    out[0] = ( -E0/(4*omega) * cos( phi + t * (2 * M_PI / T + omega)));
-    out[1] = ( -E0/(4*omega) * sin( phi + t * (2 * M_PI / T + omega)));
-    out[2] = ( -E0/(4*omega) * cos(-phi + t * (2 * M_PI / T - omega)));
-    out[3] = (  E0/(4*omega) * sin(-phi + t * (2 * M_PI / T - omega)));
-    out[4] = (  E0/(2*omega) * cos( phi + t * omega));
-    out[5] = (  E0/(2*omega) * sin( phi + t * omega));
-}
-
-
-void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
-{
-    // validate - compare yblk and yfull results
-    for(int i=0; i<dim; i++) {
-        if(isnan(cimag(v1[i]+v2[i])) || isnan(creal(v1[i]+v2[i]))) {
-            printf("nan in vector!\n");
-            continue;
-        }
-        if(fabs(cimag(v1[i]-v2[i]))>1e-8) fprintf(stderr, "v1 %e v2 %e diff %e i\n",
-                                                  cimag(v1[i]), cimag(v2[i]), cimag(v1[i]) - cimag(v2[i]));
-        if(fabs(creal(v1[i]-v2[i]))>1e-8) fprintf(stderr, "v1 %e v3 %e diff %e\n",
-                                                  creal(v1[i]), creal(v2[i]), creal(v1[i]) - creal(v2[i]));
-    }
-}
-
 
 typedef struct {
     sparse_csr_t *H, *S;
@@ -136,17 +91,17 @@ typedef struct {
     gpu_sparse_csr_t *gpuH, *gpuS;
 } gpu_HS_matrices;
 
-void gpu_HS_spmv_fun(const void *mat, gpu_dense_vec_t *x, gpu_dense_vec_t *out)
+void gpu_HS_spmv_fun(const void *mat, gpu_dense_vec_t *x, gpu_dense_vec_t *out, csr_data_t alpha, csr_data_t beta)
 {
     gpu_HS_matrices *hsptr = (gpu_HS_matrices*)mat;
 
     // Setup the communication for H: this is cheap - just sets up recv pointers for x
-    csr_init_communication(hsptr->H, x->x, rank, nranks);
+    csr_init_communication(hsptr->H, (csr_data_t*)x->x, rank, nranks);
     csr_comm(hsptr->H, rank, nranks);
-    gpu_spmv(hsptr->gpuH, x, out);
+    gpu_spmv(hsptr->gpuH, x, out, alpha, beta);
 
     // S has only local vector entries - x has to be shifted compared to H
-    gpu_spmv_local(hsptr->gpuS, x, out);
+    gpu_spmv_local(hsptr->gpuS, x, out, alpha, CMPLX(1,0));
 }
 
 
@@ -155,9 +110,10 @@ void LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
     slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
 }
 
-void gpu_LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
+void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_dense_vec_t *x)
 {
-    // slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
+    gpu_lu_t *precond = (gpu_lu_t*)_precond;
+    gpu_lu_solve(precond->L, precond->U, rhs, x, precond->temp);
 }
 
 
@@ -459,10 +415,11 @@ int main(int argc, char *argv[])
                 x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
             
             gpu_sparse_init();
+            gpu_blas_init();
             gpu_spmv_test(Hfull, x, ydev);
             
-            // validate - compare yblk and yfull results
-            compare_vectors(yfull, ydev, csr_nrows(&Hfull));
+            // compare with CPU results
+            compare_vectors(ydev, yfull, csr_nrows(&Hfull));
             
             // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
         }
@@ -495,12 +452,13 @@ int main(int argc, char *argv[])
             gpu_put_csr(&gpuS, &S);
             
             tic(); PRINTF0("GPU S spmv ");
-            gpu_spmv_local(&gpuS, &xgpu, &ygpu);
+            gpu_spmv_local(&gpuS, &xgpu, &ygpu, CMPLX(1,0), CMPLX(0,0));
             toc();
 
             gpu_get_vec(ydev, &ygpu);
 
-            compare_vectors(yfull, ydev, csr_nrows(&Hfull));
+            // compare with CPU results
+            compare_vectors(ydev, yfull, csr_nrows(&Hfull));
 
             // cleanup
             gpu_free_vec(&xgpu);
@@ -553,9 +511,10 @@ int main(int argc, char *argv[])
             gpu_lu_solve(&gpuL, &gpuU, &xgpu, &ygpu, &tempgpu);
             toc();
 
-            gpu_get_vec(yfull, &ygpu);
+            gpu_get_vec(ydev, &ygpu);
 
-            compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+            // compare with CPU results
+            compare_vectors(ydev, yblk, csr_nrows(&Hfull));
 
             // cleanup
             gpu_free_vec(&xgpu);
@@ -586,8 +545,10 @@ int main(int argc, char *argv[])
         HS_matrices mat;
         mat.H = &Hfull;
         mat.S = &S;
+        printf("CPU BICGSTAB\n"); tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
+        toc();
 
 #if defined USE_CUDA | defined USE_HIP
         {
@@ -602,11 +563,51 @@ int main(int argc, char *argv[])
             gpumat.gpuS = &gpuS;
 
             gpu_sparse_csr_t gpuL, gpuU;
+            gpu_dense_vec_t tempgpu;
+            gpu_lu_t gpuLU;
             gpu_put_csr(&gpuL, &hostL);
             gpu_put_csr(&gpuU, &hostU);
+            gpuLU.L = &gpuL;
+            gpuLU.U = &gpuU;
+            gpu_put_vec(&tempgpu, NULL, csr_nrows(&Hfull));
+            gpuLU.temp = &tempgpu;
 
-            /* gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, const gpu_complex_t *rhs, gpu_complex_t *x, int nrow, int ncol, int local_col_beg, */
-            /*          gpu_precond_fun psolve, const void *precond, solver_workspace_t *wsp, int *iters, double *tol_error); */
+            // store the CPU result for comparison
+            for(int i=0; i<csr_nrows(&Hfull); i++) yblk[i] = x[csr_local_rowoffset(&Hfull) + i];
+            
+            // initial state
+            for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
+            for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i];
+            
+            gpu_dense_vec_t xgpu = {0}, rhsgpu = {0};
+            gpu_put_vec(&xgpu, x, csr_ncols(&Hfull));
+            gpu_vec_local_part(&xgpu, csr_nrows(&Hfull), csr_local_rowoffset(&Hfull));
+            gpu_put_vec(&rhsgpu, NULL, csr_nrows(&Hfull));
+
+            gpu_lu_analyze(&gpuL, &gpuU, &rhsgpu, &xgpu);
+
+            // rhs = (S-H)*psi(n-1)
+            csr_init_communication(&Hfull, (csr_data_t*)xgpu.x, rank, nranks);
+            csr_comm(&Hfull, rank, nranks);
+            gpu_spmv(&gpuHfull, &xgpu, &rhsgpu, CMPLX(-1,0), CMPLX(0,0));
+            gpu_spmv_local(&gpuS, &xgpu, &rhsgpu, CMPLX(1,0), CMPLX(1,0));
+
+            gpu_get_vec(ydev, &rhsgpu);
+
+            compare_vectors(ydev, rhs, csr_nrows(&Hfull));
+
+            gpu_solver_workspace_t gpuwsp = {0};
+            int iters = 500;
+            double tol_error = 1e-16;
+            printf("GPU BICGSTAB\n"); tic();
+            gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
+                         gpu_LU_precond_fun, &gpuLU, &gpuwsp, &iters, &tol_error);
+            toc();
+
+            gpu_get_vec(ydev, &xgpu);
+
+            // compare with CPU results
+            compare_vectors(ydev, yblk, csr_nrows(&Hfull));
         }
 #endif
     }

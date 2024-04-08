@@ -5,7 +5,7 @@
 
 void csr_coo2csr(const int *rowidx, const int *colidx, const doublecomplex *val, int dim, int nnz);
 
-void write_ijk(const char *fname, int *I, int *J, doublecomplex *X, int nnz, int n)
+void write_ijk(const char *fname, int *Ai, int *Aj, doublecomplex *Ax, int nnz, int n)
 {
     printf("write file %s\n", fname);
     FILE *fd = fopen(fname, "w+");
@@ -14,9 +14,9 @@ void write_ijk(const char *fname, int *I, int *J, doublecomplex *X, int nnz, int
     // storage format: dim, nnz, Ai, Aj, Ax
     fwrite(&n, sizeof(int), 1, fd);
     fwrite(&nnz, sizeof(int), 1, fd);
-    fwrite(I, sizeof(int), nnz, fd);
-    fwrite(J, sizeof(int), nnz, fd);
-    fwrite(X, sizeof(doublecomplex), nnz, fd);
+    fwrite(Ai, sizeof(int), nnz, fd);
+    fwrite(Aj, sizeof(int), nnz, fd);
+    fwrite(Ax, sizeof(doublecomplex), nnz, fd);
 
     fclose(fd);
 }

@@ -42,7 +42,12 @@ static void rankprint(char *fname, cdouble_t *v, int n)
             else
                 fd = fopen(fname, "a+");                
             for(int i=0; i<n; i++){
-                fprintf(fd, "%e %e\n", creal(v[i]), cimag(v[i]));
+                double r, j;
+                r = creal(v[i]);
+                if(r == -0.0) r = 0.0;
+                j = cimag(v[i]);
+                if(j == -0.0) j = 0.0;
+                fprintf(fd, "%.10e %.10e\n", r, j);
             }
             fclose(fd);
         }
@@ -127,11 +132,14 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
 
   /* VectorType r  = rhs - mat * x; */
   /* VectorType r0 = r; */
+  for(int i=0; i<nrow; i++) r[i] = 0;
   spmv(mat, x, r);
   for(int i=0; i<nrow; i++) {
       r[i] = rhs[i] - r[i];
       r0[i] = r[i];
   }
+  /* rankprint("cpur.txt", r, nrow); */
+  /* return; */
 
   /* RealScalar r0_sqnorm = r0.squaredNorm(); */
   double r0_sqnorm = dreduce(squarednorm(r0, nrow));
@@ -240,9 +248,7 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
           w = 0;
 
       /*   x += alpha * y + w * z; */
-      blasa = alpha;
-      blasb = w;
-      zaxpby_(&nrow, &blasa, y+local_col_beg, &incx, &blasb, z+local_col_beg, &incx);
+      zaxpby_(&nrow, &alpha, y+local_col_beg, &incx, &w, z+local_col_beg, &incx);
       blasa = 1;
       zaxpy_(&nrow, &blasa, z+local_col_beg, &incx, x+local_col_beg, &incx);
 

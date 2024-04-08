@@ -76,17 +76,23 @@ void gpu_put_vec(gpu_dense_vec_t *xgpu, const csr_data_t *xhost, csr_index_t dim
     CHECK_GPUSPARSE(gpusparseCreateDnVec(&xgpu->desc, dim, xgpu->x, GPU_C_64F));
     xgpu->dim = dim;
     xgpu->desc_local = NULL;
+    xgpu->local_offset = 0;
 }
 
 void gpu_vec_local_part(gpu_dense_vec_t *xgpu, csr_index_t dim, csr_index_t local_offset)
 {
     CHECK_GPUSPARSE(gpusparseCreateDnVec(&xgpu->desc_local, dim, xgpu->x + local_offset, GPU_C_64F));
     xgpu->local_offset = local_offset;
+    xgpu->local_dim = dim;
 }
 
 void gpu_get_vec(csr_data_t *xhost, const gpu_dense_vec_t *xgpu)
 {
-    CHECK_GPU(gpuMemcpy(xhost, xgpu->x, xgpu->dim*sizeof(csr_data_t), gpuMemcpyDeviceToHost));
+    if(xgpu->local_offset){
+        CHECK_GPU(gpuMemcpy(xhost, xgpu->x + xgpu->local_offset, xgpu->local_dim*sizeof(csr_data_t), gpuMemcpyDeviceToHost));
+    } else {
+        CHECK_GPU(gpuMemcpy(xhost, xgpu->x, xgpu->dim*sizeof(csr_data_t), gpuMemcpyDeviceToHost));
+    }
 }
 
 void gpu_free_vec(gpu_dense_vec_t *xgpu)
@@ -157,7 +163,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                     U->cuBuffer));
 }
 
-void gpu_lu_solve(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, gpu_dense_vec_t *y, gpu_dense_vec_t *temp) {
+void gpu_lu_solve(const gpu_sparse_csr_t *L, const gpu_sparse_csr_t *U, const gpu_dense_vec_t *x, gpu_dense_vec_t *y, gpu_dense_vec_t *temp) {
     csr_data_t alpha = 1;
     CHECK_GPU(cusparseSpSV_solve(sparseHandle,
                                  CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -168,21 +174,32 @@ void gpu_lu_solve(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x, 
                                  CUDA_C_64F,
                                  CUSPARSE_SPSV_ALG_DEFAULT,
                                  L->spsvDescr));
-    CHECK_GPU(cusparseSpSV_solve(sparseHandle,
-                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                 &alpha,
-                                 U->desc,
-                                 temp->desc,
-                                 y->desc,
-                                 CUDA_C_64F,
-                                 CUSPARSE_SPSV_ALG_DEFAULT,
-                                 U->spsvDescr));
+    if(y->desc_local){
+        CHECK_GPU(cusparseSpSV_solve(sparseHandle,
+                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                     &alpha,
+                                     U->desc,
+                                     temp->desc,
+                                     y->desc_local,
+                                     CUDA_C_64F,
+                                     CUSPARSE_SPSV_ALG_DEFAULT,
+                                     U->spsvDescr));
+    } else {
+        CHECK_GPU(cusparseSpSV_solve(sparseHandle,
+                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                     &alpha,
+                                     U->desc,
+                                     temp->desc,
+                                     y->desc,
+                                     CUDA_C_64F,
+                                     CUSPARSE_SPSV_ALG_DEFAULT,
+                                     U->spsvDescr));
+    }
 }
 
 
 // Function for performing sparse matrix-vector multiplication on GPU.
-void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y) {
-    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
+void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y, csr_data_t alpha, csr_data_t beta) {
     if(NULL == Hfull->cuBuffer){
         // Analyze matrix and calculate buffer size for the SpMV operation
         size_t bufferSize;
@@ -203,8 +220,7 @@ void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y) {
 
 
 // Function for performing sparse matrix-vector multiplication on GPU: local vector part
-void gpu_spmv_local(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y) {
-    csr_data_t alpha = CMPLX(1,0), beta = CMPLX(1,0);
+void gpu_spmv_local(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y, csr_data_t alpha, csr_data_t beta) {
     if(NULL == Hfull->cuBuffer){
         // Analyze matrix and calculate buffer size for the SpMV operation
         size_t bufferSize;
@@ -359,12 +375,12 @@ void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull) {
     // Perform the matrix-vector multiplication on the GPU
 
     PRINTF0("Device comm: "); tic();
-    csr_init_communication(&Hfull, xgpu.x, rank, nranks);
+    csr_init_communication(&Hfull, (csr_data_t*)xgpu.x, rank, nranks);
     csr_comm(&Hfull, rank, nranks);
     toc();
 
     PRINTF0("Device spmv: "); tic();
-    gpu_spmv(&gpuHfull, &xgpu, &ygpu);
+    gpu_spmv(&gpuHfull, &xgpu, &ygpu, CMPLX(1,0), CMPLX(1,0));
     toc();
 
     gpu_get_vec(yfull, &ygpu);
