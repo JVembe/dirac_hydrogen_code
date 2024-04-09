@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
     csr_block_params(&Hst_blk, blkdim, csr_nnz(&s0[0]));
 
     // allocate storage for Hfull_blk.Ax - testing
-    Hfull_blk.Ax = malloc(sizeof(csr_data_t)*Hfull_blk.nnz*Hfull_blk.blk_nnz);
+    // Hfull_blk.Ax = malloc(sizeof(csr_data_t)*Hfull_blk.nnz*Hfull_blk.blk_nnz);
 
     // each submatrix will have the same non-zero structure as the base g matrices
     sparse_csr_t submatrix;
@@ -340,7 +340,7 @@ int main(int argc, char *argv[])
     yblk  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
     yfull = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
     ydev  = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
-    
+
     { // Compute
         csr_index_t row, col, colp;
 
@@ -354,43 +354,46 @@ int main(int argc, char *argv[])
 
         // time-dependent part of the Hamiltonian
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-        
+
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
         // as Ax arrays in a template submatrix csr structure, e.g.
         // csr_block_link(&submatrix, &Hfull_blk, row, col);
 
-        // initialize input vector. non-local parts are set to nan to verify communication:
-        // all non-local entries are received from peers, hence set to non-nan during communication
-        for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
-        for(int i=0; i<csr_nrows(&Hfull); i++)
-            x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
+        if(Hfull_blk.Ax){
 
-        tic(); PRINTF0("blocked spmv ");
-        csr_init_communication(&Hfull_blk, x, rank, nranks);
-        csr_comm(&Hfull_blk, rank, nranks);
-        for(row = 0; row < Hfull_blk.nrows; row++){
+            // initialize input vector. non-local parts are set to nan to verify communication:
+            // all non-local entries are received from peers, hence set to non-nan during communication
+            for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
+            for(int i=0; i<csr_nrows(&Hfull); i++)
+                x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
 
-            // for non-zero blocks in each row
-            for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
+            tic(); PRINTF0("blocked spmv ");
+            csr_init_communication(&Hfull_blk, x, rank, nranks);
+            csr_comm(&Hfull_blk, rank, nranks);
+            for(row = 0; row < Hfull_blk.nrows; row++){
 
-                // NOTE: rows and cols are remapped wrt. the original numbering in H
-                col = Hfull_blk.Ai[colp];
+                // for non-zero blocks in each row
+                for(colp = Hfull_blk.Ap[row]; colp < Hfull_blk.Ap[row+1]; colp++){
 
-                csr_block_link(&submatrix, &Hfull_blk, row, col);
+                    // NOTE: rows and cols are remapped wrt. the original numbering in H
+                    col = Hfull_blk.Ai[colp];
 
-                csr_data_t *xin, *yout;
-                xin  = x + col*blkdim;
-                yout = yblk + row*blkdim;
+                    csr_block_link(&submatrix, &Hfull_blk, row, col);
 
-                // perform spmv
-                csr_spmv(0, csr_nrows(&submatrix), &submatrix, xin, yout);
+                    csr_data_t *xin, *yout;
+                    xin  = x + col*blkdim;
+                    yout = yblk + row*blkdim;
 
-                // remember that at this stage xin and yout are renumbered wrt. the original node numbering
+                    // perform spmv
+                    csr_spmv(0, csr_nrows(&submatrix), &submatrix, xin, yout);
+
+                    // remember that at this stage xin and yout are renumbered wrt. the original node numbering
+                }
             }
+            toc();
         }
-        toc();
 
         // initialize input vector. non-local parts are set to nan to verify communication:
         // all non-local entries are received from peers, hence set to non-nan during communication
@@ -406,7 +409,9 @@ int main(int argc, char *argv[])
         toc();
 
         // validate - compare yblk and yfull results
-        compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+        if(Hfull_blk.Ax){
+            compare_vectors(yfull, yblk, csr_nrows(&Hfull));
+        }
 
 #if defined USE_CUDA | defined USE_HIP
         {
@@ -415,14 +420,14 @@ int main(int argc, char *argv[])
             for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
             for(int i=0; i<csr_nrows(&Hfull); i++)
                 x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
-            
+
             gpu_sparse_init();
             gpu_blas_init();
             gpu_spmv_test(Hfull, x, ydev);
-            
+
             // compare with CPU results
             compare_vectors(ydev, yfull, csr_nrows(&Hfull));
-            
+
             // gpu_spmb_block_test(Hfull_blk, x, yfull, g);
         }
 #endif
@@ -452,7 +457,7 @@ int main(int argc, char *argv[])
 
             gpu_sparse_csr_t gpuS;
             gpu_put_csr(&gpuS, &S);
-            
+
             tic(); PRINTF0("GPU S spmv ");
             gpu_spmv_local(&gpuS, &xgpu, &ygpu, CMPLX(1,0), CMPLX(0,0));
             toc();
@@ -468,17 +473,17 @@ int main(int argc, char *argv[])
             gpu_free_csr(&gpuS);
         }
 #endif
-        
+
         // compute the preconditioner once - based on the stationary part
         slu_LU_t sluLU = compute_preconditioner(&S, &Hst);
-        
+
         // CPU solve using SuperLU
         slu_lu_solve(&sluLU, (doublecomplex*)x + csr_local_rowoffset(&Hfull), (doublecomplex*)yblk);
-        
+
 #if defined USE_CUDA | defined USE_HIP
         // compare SuperLU solve with cusparse / hipsparse solve
         sparse_csr_t hostL, hostU;
-        {        
+        {
             csr_index_t *LAi, *LAj;
             csr_index_t *UAi, *UAj;
             csr_data_t *LAx, *UAx;
@@ -558,7 +563,9 @@ int main(int argc, char *argv[])
             gpu_sparse_csr_t gpuS, gpuHfull;
 
             gpu_put_csr(&gpuS, &S);
+            PRINTF0("host to device H"); tic();
             gpu_put_csr(&gpuHfull, &Hfull);
+            toc();
             gpumat.H = &Hfull;
             gpumat.gpuH = &gpuHfull;
             gpumat.S = &S;
@@ -576,11 +583,11 @@ int main(int argc, char *argv[])
 
             // store the CPU result for comparison
             for(int i=0; i<csr_nrows(&Hfull); i++) yblk[i] = x[csr_local_rowoffset(&Hfull) + i];
-            
+
             // initial state
             for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
             for(int i=0; i<csr_nrows(&Hfull); i++) x[csr_local_rowoffset(&Hfull) + i] = psi0[i];
-            
+
             gpu_dense_vec_t xgpu = {0}, rhsgpu = {0};
             gpu_put_vec(&xgpu, x, csr_ncols(&Hfull));
             gpu_vec_local_part(&xgpu, csr_nrows(&Hfull), csr_local_rowoffset(&Hfull));
