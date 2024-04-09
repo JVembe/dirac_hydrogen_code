@@ -26,6 +26,7 @@
 #include "superlu.h"
 #include "bicgstab.h"
 #include "solver.h"
+#include "utils.h"
 #include "../src/tictoc.h"
 //#include "../src/potential.h"
 
@@ -81,53 +82,6 @@ void vec_read_perm(const char *fname, csr_index_t **out)
     nread = fread(*out, sizeof(csr_index_t), n, fd);
     if(nread!=n) ERROR("wrong file format in %s\n", fname);
     fclose(fd);
-}
-
-// simple C-fied beyondDipolePulse implementation
-typedef struct
-{
-    double E0;
-    double omega;
-    double T;
-} beyondDipolePulse_t;
-
-
-void beyondDipolePulse_init(beyondDipolePulse_t *this, double E0, double omega, double N)
-{
-    this->E0 = E0;
-    this->omega = omega;
-    this->T = (double)N*2*M_PI / omega;
-}
-
-
-void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t *out)
-{
-    cdouble_t phi = CMPLX(-M_PI/2, 0);
-    double E0 = this->E0;
-    double omega = this->omega;
-    double T = this->T;
-    out[0] = ( -E0/(4*omega) * cos( phi + t * (2 * M_PI / T + omega)));
-    out[1] = ( -E0/(4*omega) * sin( phi + t * (2 * M_PI / T + omega)));
-    out[2] = ( -E0/(4*omega) * cos(-phi + t * (2 * M_PI / T - omega)));
-    out[3] = (  E0/(4*omega) * sin(-phi + t * (2 * M_PI / T - omega)));
-    out[4] = (  E0/(2*omega) * cos( phi + t * omega));
-    out[5] = (  E0/(2*omega) * sin( phi + t * omega));
-}
-
-
-void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim)
-{
-    // validate - compare yblk and yfull results
-    for(int i=0; i<dim; i++) {
-        if(isnan(cimag(v1[i]+v2[i])) || isnan(creal(v1[i]+v2[i]))) {
-            printf("nan in vector!\n");
-            continue;
-        }
-        if(fabs(cimag(v1[i]-v2[i]))>1e-8) fprintf(stderr, "v1 %e v2 %e diff %e i\n",
-                                                  cimag(v1[i]), cimag(v2[i]), cimag(v1[i]) - cimag(v2[i]));
-        if(fabs(creal(v1[i]-v2[i]))>1e-8) fprintf(stderr, "v1 %e v3 %e diff %e\n",
-                                                  creal(v1[i]), creal(v2[i]), creal(v1[i]) - creal(v2[i]));
-    }
 }
 
 
@@ -427,9 +381,6 @@ int main(int argc, char *argv[])
 
         // time-dependent part of the Hamiltonian
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-
-        csr_ijk_write("Hds.ijk", &Hfull);
-        exit(0);
 
         if(rank==0){
             tic(); printf("solve iteration %d\n", iter);

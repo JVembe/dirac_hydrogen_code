@@ -25,19 +25,18 @@ void gpu_blas_init()
     }                                                                   \
     v = &wsp->v;
 
-static inline double squarednorm(gpu_complex_t *v, int n)
+static inline double squarednorm(int n, const gpu_dense_vec_t *v, int incx)
 {
     cuDoubleComplex result;
-    CHECK_GPU_BLAS(gpuZdotc(handle, n, v, 1, v, 1, &result));
+    CHECK_GPU_BLAS(_gpuZdotc(handle, n, v->x, incx, v->x, incx, &result));
     return cuCreal(result);
 }
 
-static inline cuDoubleComplex zdotc(int n, gpu_complex_t *x, gpu_complex_t *y)
-{
-    cuDoubleComplex result = {0};
-    CHECK_GPU_BLAS(gpuZdotc(handle, n, x, 1, y, 1, &result));
-    return result;
-}
+/* static inline  */
+/*   CHECK_GPU_BLAS(cublasZcopy(handle, nrow, rhs->x, 1, r->x, 1)); */
+/*   spmv(mat, x, r0, CMPLX(1,0), CMPLX(0,0)); */
+/*   CHECK_GPU_BLAS(cublasZaxpy(handle, nrow, &gpuMone, r0->x, 1, r->x, 1)); */
+
 
 
 #ifdef USE_MPI
@@ -121,9 +120,9 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
   int maxIters = *iters;
   int incx = 1;
   
-  gpu_complex_t gpuOne  = gpuMakeComplex(1,0);
+  gpu_complex_t gpuOne   = gpuMakeComplex(1,0);
   gpu_complex_t gpuMone  = gpuMakeComplex(-1,0);
-  gpu_complex_t gpuZero = gpuMakeComplex(0,0);
+  gpu_complex_t gpuZero  = gpuMakeComplex(0,0);
 
   gpu_complex_t rho    = gpuOne;
   gpu_complex_t alpha  = gpuOne;
@@ -150,21 +149,21 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
 
   /* VectorType r  = rhs - mat * x; */
   /* VectorType r0 = r; */
-  CHECK_GPU_BLAS(cublasZcopy(handle, nrow, rhs->x, 1, r->x, 1));
+  gpuZcopy(nrow, rhs->x, 1, r->x, 1);
   spmv(mat, x, r0, CMPLX(1,0), CMPLX(0,0));
-  CHECK_GPU_BLAS(cublasZaxpy(handle, nrow, &gpuMone, r0->x, 1, r->x, 1));
-  CHECK_GPU_BLAS(cublasZcopy(handle, nrow, r->x, 1, r0->x, 1));
+  gpuZaxpy(nrow, &gpuMone, r0->x, 1, r->x, 1);
+  gpuZcopy(nrow, r->x, 1, r0->x, 1);
   
   /* RealScalar r0_sqnorm = r0.squaredNorm(); */
-  double r0_sqnorm = dreduce(squarednorm(r0->x, nrow));
+  double r0_sqnorm = dreduce(squarednorm(nrow, r0, incx));
   /* printf("initial norm %e\n", sqrt(r0_sqnorm)); */
 
   /* RealScalar rhs_sqnorm = rhs.squaredNorm(); */
-  double rhs_sqnorm = dreduce(squarednorm(rhs->x, nrow));
+  double rhs_sqnorm = dreduce(squarednorm(nrow, rhs, incx));
   
   if(rhs_sqnorm == 0){
       // x.setZero();
-      gpuZscal(handle, ncol, &gpuZero, x->x, incx);
+      gpuZscal(ncol, &gpuZero, x->x, incx);
       *iters = 0;
       *tol_error = 0;
       return;
@@ -195,7 +194,7 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
       gpu_complex_t rho_old = rho;
 
       /*   rho = r0.dot(r); */
-      rho = zreduce(zdotc(nrow, r0->x, r->x));
+      rho = zreduce(gpuZdotc(nrow, r0->x, incx, r->x, incx));
 
       if (gpuCabs(rho) < eps2*r0_sqnorm) {
           /* printf("restart %e %e\n", fabs(rho), eps2*r0_sqnorm); */
@@ -206,13 +205,13 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
           */
           /*     r  = rhs - mat * x; */
           /*     r0 = r; */
-          CHECK_GPU_BLAS(cublasZcopy(handle, nrow, rhs->x, 1, r->x, 1));
+          gpuZcopy(nrow, rhs->x, 1, r->x, 1);
           spmv(mat, x, r0, CMPLX(1,0), CMPLX(0,0));
-          CHECK_GPU_BLAS(cublasZaxpy(handle, nrow, &gpuMone, r0->x, 1, r->x, 1));
-          CHECK_GPU_BLAS(cublasZcopy(handle, nrow, r->x, 1, r0->x, 1));
+          gpuZaxpy(nrow, &gpuMone, r0->x, 1, r->x, 1);
+          gpuZcopy(nrow, r->x, 1, r0->x, 1);
 
           /*     rho = r0_sqnorm = r.squaredNorm(); */
-          r0_sqnorm = dreduce(squarednorm(r->x, nrow));
+          r0_sqnorm = dreduce(squarednorm(nrow, r, incx));
           rho = gpuMakeComplex(r0_sqnorm, 0);
           /* if(restarts++ == 0) */
           /*     i = 0; */
@@ -223,7 +222,7 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
 
       /*   p = r + beta * (p - w * v); */
       blasa = gpuCmul(w, gpuMakeComplex(-1,0));
-      CHECK_GPU_BLAS(cublasZaxpy(handle, nrow, &blasa, v->x, 1, p->x, 1));
+      gpuZaxpy(nrow, &blasa, v->x, 1, p->x, 1);
       gpuZaxpby(nrow, gpuOne, r->x, incx, beta, p->x, incx);
 
       /*   y = precond.solve(p); */
@@ -233,10 +232,10 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
       spmv(mat, y, v, CMPLX(1,0), CMPLX(0,0));
 
       /*   alpha = rho / r0.dot(v); */
-      alpha = gpuCdiv(rho, zreduce(zdotc(nrow, r0->x, v->x)));
+      alpha = gpuCdiv(rho, zreduce(gpuZdotc(nrow, r0->x, incx, v->x, incx)));
 
       /*   s = r - alpha * v; */
-      CHECK_GPU_BLAS(cublasZcopy(handle, nrow, v->x, 1, s->x, 1));
+      gpuZcopy(nrow, v->x, 1, s->x, 1);
       blasa = gpuMakeComplex(1,0);
       blasb = gpuCmul(alpha, gpuMakeComplex(-1,0));
       gpuZaxpby(nrow, blasa, r->x, incx, blasb, s->x, incx);
@@ -248,27 +247,27 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
       spmv(mat, z, t, CMPLX(1,0), CMPLX(0,0));
 
       /*   RealScalar tmp = t.squaredNorm(); */
-      double tmp = dreduce(squarednorm(t->x, nrow)); //gpuZdotc(nrow, t, incx, t, incx);
+      double tmp = dreduce(squarednorm(nrow, t, incx));
 
       /*   if(tmp>RealScalar(0)) */
       /*     w = t.dot(s) / tmp; */
       /*   else */
       /*     w = Scalar(0); */
       if(tmp > 0)
-          w = gpuCdiv(zreduce(zdotc(nrow, t->x, s->x)), gpuMakeComplex(tmp, 0));
+          w = gpuCdiv(zreduce(gpuZdotc(nrow, t->x, incx, s->x, incx)), gpuMakeComplex(tmp, 0));
       else
           w = gpuMakeComplex(0,0);
 
       /*   x += alpha * y + w * z; */
       gpuZaxpby(nrow, alpha, y->x+local_col_beg, incx, w, z->x+local_col_beg, incx);
-      CHECK_GPU_BLAS(cublasZaxpy(handle, nrow, &gpuOne, z->x+local_col_beg, 1, x->x+local_col_beg, 1));
+      gpuZaxpy(nrow, &gpuOne, z->x+local_col_beg, 1, x->x+local_col_beg, 1);
 
       /*   r = s - w * t; */
-      CHECK_GPU_BLAS(cublasZcopy(handle, nrow, t->x, 1, r->x, 1));
+      gpuZcopy(nrow, t->x, 1, r->x, 1);
       blasb = gpuCmul(w, gpuMakeComplex(-1,0));
       gpuZaxpby(nrow, gpuOne, s->x, incx, blasb, r->x, incx);
 
-      tmp = dreduce(squarednorm(r->x, nrow));
+      tmp = dreduce(squarednorm(nrow, r, incx));
 #ifdef DEBUG
       if(rank==0) printf("%e\n", sqrt(tmp));
 #endif
@@ -277,7 +276,7 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
   }
 
   /* tol_error = sqrt(r.squaredNorm()/rhs_sqnorm); */
-  *tol_error = sqrt(dreduce(squarednorm(r->x, nrow))/rhs_sqnorm);
+  *tol_error = sqrt(dreduce(squarednorm(nrow, r, incx))/rhs_sqnorm);
   *iters = i;
   return;
 }
