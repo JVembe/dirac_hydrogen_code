@@ -176,10 +176,11 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                                 // g matrices all have the same nnz pattern,
                                 // so we can operate directly on the internal storage Ax
                                 for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                                    SoL*ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
-                                                          pgt1->Ax[i]*kj    +
-                                                          pgt2->Ax[i]*ki    +
-                                                          pgt3->Ax[i]*ki*kj);
+                                    submatrix->Ax[i] +=
+				      SoL*ihdt*ft[a]*H1[l]*(pgt0->Ax[i]       +
+							    pgt1->Ax[i]*kj    +
+							    pgt2->Ax[i]*ki    +
+							    pgt3->Ax[i]*ki*kj);
                                 }
                             }
                         }
@@ -193,7 +194,6 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 csr_full_insert(Hfull, row, col, submatrix);
             }
         }
-
         csr_free(submatrix);
     }
 
