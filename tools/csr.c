@@ -83,6 +83,12 @@ void csr_free(sparse_csr_t *sp)
 
 void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
 {
+    // simplified version - assume same pattern, simply copy the non-zeros
+    if(out->nnz == in->nnz){
+        memcpy(out->Ax, in->Ax, sizeof(csr_data_t)*out->nnz*out->blk_nnz);
+        return;
+    }
+    
     out->nnz = in->nnz;
     out->nrows = in->nrows;
     out->ncols = in->ncols;

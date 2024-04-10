@@ -255,7 +255,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-
+   
     h0 = malloc(sizeof(sparse_csr_t)*4);
     cnt = 0;
     for(int hi = 0; hi < 4; hi++) {
@@ -351,10 +351,11 @@ int main(int argc, char *argv[])
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
         PRINTF0("f(t)\n");
         for(int i=0; i<6; i++) PRINTF0("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
-
+        
         // time-dependent part of the Hamiltonian
-        compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-
+        compute_timedep_matrices2(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
+        compute_timedep_matrices2(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
+        
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
         // meaning that the relevant Ax parts can be used directly
