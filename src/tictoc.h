@@ -12,6 +12,9 @@ static void tic()
     gettimeofday(&tb, NULL);
 }
 
+#ifndef PRINTF0
+#define PRINTF0 printf
+#endif
 static void toc()
 {
     long s,u;

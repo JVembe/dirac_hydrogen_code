@@ -27,6 +27,7 @@
 #include "bicgstab.h"
 #include "solver.h"
 #include "utils.h"
+#include "gpu_bicgstab.h"
 #include "../src/tictoc.h"
 //#include "../src/potential.h"
 
@@ -89,8 +90,6 @@ typedef struct {
     sparse_csr_t *H, *S;
 } HS_matrices;
 
-int cnt = 0;
-
 void HS_spmv_fun(const void *mat, cdouble_t *x, cdouble_t *out)
 {
     HS_matrices *hsptr = (HS_matrices*)mat;
@@ -104,11 +103,39 @@ void HS_spmv_fun(const void *mat, cdouble_t *x, cdouble_t *out)
     csr_spmv(0, csr_nrows(hsptr->S), hsptr->S, x + csr_local_rowoffset(hsptr->H), out);
 }
 
-
 void LU_precond_fun(const void *precond, const cdouble_t *rhs, cdouble_t *x)
 {
     slu_lu_solve((slu_LU_t*)precond, (doublecomplex*)rhs, (doublecomplex*)x);
 }
+
+
+#if defined USE_CUDA | defined USE_HIP
+
+typedef struct {
+    sparse_csr_t *H, *S;
+    gpu_sparse_csr_t *gpuH, *gpuS;
+} gpu_HS_matrices;
+
+void gpu_HS_spmv_fun(const void *mat, gpu_dense_vec_t *x, gpu_dense_vec_t *out, csr_data_t alpha, csr_data_t beta)
+{
+    gpu_HS_matrices *hsptr = (gpu_HS_matrices*)mat;
+
+    // Setup the communication for H: this is cheap - just sets up recv pointers for x
+    csr_init_communication(hsptr->H, (csr_data_t*)x->x, rank, nranks);
+    csr_comm(hsptr->H, rank, nranks);
+    gpu_spmv(hsptr->gpuH, x, out, alpha, beta);
+
+    // S has only local vector entries - x has to be shifted compared to H
+    gpu_spmv_local(hsptr->gpuS, x, out, alpha, CMPLX(1,0));
+}
+
+void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_dense_vec_t *x)
+{
+    gpu_lu_t *precond = (gpu_lu_t*)_precond;
+    gpu_lu_solve(precond->L, precond->U, rhs, x, precond->temp);
+}
+
+#endif
 
 
 int main(int argc, char *argv[])
@@ -343,49 +370,113 @@ int main(int argc, char *argv[])
     // compute the preconditioner once - based on the stationary part
     slu_LU_t sluLU = compute_preconditioner(&S, &Hst);
 
-    if(0){
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+#if defined USE_CUDA | defined USE_HIP
+    sparse_csr_t hostL, hostU;
+    gpu_sparse_csr_t gpuL = {}, gpuU = {};
+    gpu_lu_t gpuLU;
+    gpu_sparse_csr_t gpuS = {}, gpuHfull = {};
+    gpu_dense_vec_t xgpu = {}, rhsgpu = {}, tempgpu = {};
+
+    // initialization of the GPU modules
+    gpu_sparse_init();
+    gpu_blas_init();
+
+    {
+        // convert the ILU preconditioner to CSR format
+        // and send it to the GPU
         csr_index_t *LAi, *LAj;
         csr_index_t *UAi, *UAj;
         csr_data_t *LAx, *UAx;
         csr_index_t Lnnz, Unnz;
         sparse_csr_t spL, spU;
-        
+
         slu_LU2coo(sluLU.L, sluLU.U,
                    &LAi, &LAj, (doublecomplex**)&LAx, &Lnnz,
                    &UAi, &UAj, (doublecomplex**)&UAx, &Unnz);
-        
-        csr_coo2csr(&spU, UAi, UAj, UAx, csr_nrows(&Hfull), Unnz);
-        csr_coo2csr(&spL, LAi, LAj, LAx, csr_nrows(&Hfull), Lnnz);
+
+        csr_coo2csr(&hostU, UAi, UAj, UAx, csr_nrows(&Hfull), Unnz);
+        csr_coo2csr(&hostL, LAi, LAj, LAx, csr_nrows(&Hfull), Lnnz);
 
         free(LAi); free(LAj); free(LAx);
         free(UAi); free(UAj); free(UAx);
+
+        gpu_put_csr(&gpuL, &hostL);
+        gpu_put_csr(&gpuU, &hostU);
+        gpuLU.L = &gpuL;
+        gpuLU.U = &gpuU;
+        gpu_put_vec(&tempgpu, NULL, csr_nrows(&Hfull));
+        gpuLU.temp = &tempgpu;
+
+        gpu_put_vec(&xgpu, x, csr_ncols(&Hfull));
+        gpu_vec_local_part(&xgpu, csr_nrows(&Hfull), csr_local_rowoffset(&Hfull));
+        gpu_put_vec(&rhsgpu, NULL, csr_nrows(&Hfull));
+        gpu_put_vec(&tempgpu, NULL, csr_nrows(&Hfull));
+
+        // GPU solve using cusparse / hipsparse
+        tic(); PRINTF0("GPU LU analyze ");
+        gpu_lu_analyze(&gpuL, &gpuU, &rhsgpu, &xgpu, &tempgpu);
+        toc();
+
+        gpu_put_csr(&gpuS, &S);
     }
-    
+#endif
+
+#ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
     // time iterations
     int iter = 0;
+#if defined USE_CUDA | defined USE_HIP
+    gpu_solver_workspace_t gpuwsp = {0};
+#else
     solver_workspace_t wsp = {0};
+#endif
     time = 0;
     while(time <= maxtime){
         csr_data_t ft[6] = {0};
         complex ihdt = I*h*dt/2;
-        time = time + dt;
+        int iters = 500;
+        double tol_error = 1e-16;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
 
-        if(rank==0) {
-            printf("------- simulation time %e\n", time);
-            printf("f(t)\n");
-            for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
-        }
+        PRINTF0("iteration %d simulation time %lf\n", iter, time);
+
+        /* if(rank==0) { */
+        /*     printf("f(t)\n"); */
+        /*     for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i])); */
+        /* } */
 
         // time-dependent part of the Hamiltonian
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
 
-        if(rank==0){
-            tic(); printf("solve iteration %d\n", iter);
-        }
+#if defined USE_CUDA | defined USE_HIP
+        PRINTF0("host to device H"); tic();
+        gpu_put_csr(&gpuHfull, &Hfull);
+        toc();
 
+        // rhs = (S-H)*psi(n-1)
+        csr_init_communication(&Hfull, (csr_data_t*)xgpu.x, rank, nranks);
+        csr_comm(&Hfull, rank, nranks);
+        gpu_spmv(&gpuHfull, &xgpu, &rhsgpu, CMPLX(-1,0), CMPLX(0,0));
+        gpu_spmv_local(&gpuS, &xgpu, &rhsgpu, CMPLX(1,0), CMPLX(1,0));
+
+        gpu_HS_matrices gpumat;
+        gpumat.H = &Hfull;
+        gpumat.gpuH = &gpuHfull;
+        gpumat.S = &S;
+        gpumat.gpuS = &gpuS;
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        PRINTF0("GPU BICGSTAB\n"); tic();
+        gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
+                     gpu_LU_precond_fun, &gpuLU, &gpuwsp, &iters, &tol_error);
+        MPI_Barrier(MPI_COMM_WORLD); toc();
+#else
         // rhs = (S-H)*psi(n-1)
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = 0;
         csr_init_communication(&Hfull, x, rank, nranks);
@@ -394,55 +485,57 @@ int main(int argc, char *argv[])
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = -1*rhs[i];
         csr_spmv(0, csr_nrows(&S), &S, x + csr_local_rowoffset(&Hfull), rhs);
 
-        int iters = 500;
-        double tol_error = 1e-16;
         HS_matrices mat;
         mat.H = &Hfull;
         mat.S = &S;
+        MPI_Barrier(MPI_COMM_WORLD);
+        PRINTF0("GPU BICGSTAB\n"); tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
-
-        if(rank==0) toc();
+        MPI_Barrier(MPI_COMM_WORLD); toc();
+#endif
 
         // collect the results on rank 0 for un-permuting and printing
-        if(0 == rank){
+        if(0){
+            if(0 == rank){
 
-            // submit recv requests on solution vector parts
-            MPI_Request comm_requests[nranks];
-            comm_requests[0] = MPI_REQUEST_NULL;
-            for(int r=1; r<nranks; r++){
-                csr_index_t row_beg = Hall.row_cpu_dist[r]*blkdim;
-                csr_index_t row_end = Hall.row_cpu_dist[r+1]*blkdim;
-                CHECK_MPI(MPI_Irecv(xall+row_beg, 2*(row_end-row_beg), MPI_DOUBLE, r, 0, MPI_COMM_WORLD, comm_requests+r));
+                // submit recv requests on solution vector parts
+                MPI_Request comm_requests[nranks];
+                comm_requests[0] = MPI_REQUEST_NULL;
+                for(int r=1; r<nranks; r++){
+                    csr_index_t row_beg = Hall.row_cpu_dist[r]*blkdim;
+                    csr_index_t row_end = Hall.row_cpu_dist[r+1]*blkdim;
+                    CHECK_MPI(MPI_Irecv(xall+row_beg, 2*(row_end-row_beg), MPI_DOUBLE, r, 0, MPI_COMM_WORLD, comm_requests+r));
+                }
+
+                // copy local vector part
+                for(int i=0; i<csr_nrows(&Hfull); i++) xall[i] = x[i];
+
+                // progress communication
+                CHECK_MPI(MPI_Waitall(nranks, comm_requests, MPI_STATUSES_IGNORE));
+
+                // un-permute the solution vector
+                for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
+                    xorig[xperm[i]] = xall[i];
+                }
+
+                // write to file
+                FILE *fd;
+                char fname[256];
+                snprintf(fname, 255, "x%d.out", iter);
+                fd = fopen(fname, "w+");
+                for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
+                    fprintf(fd, "%e %e\n", creal(xorig[i]), cimag(xorig[i]));
+                }
+                /* fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd); */
+                fclose(fd);
+
+            } else {
+                CHECK_MPI(MPI_Send(x + csr_local_rowoffset(&Hfull), 2*csr_nrows(&Hfull), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD));
             }
-
-            // copy local vector part
-            for(int i=0; i<csr_nrows(&Hfull); i++) xall[i] = x[i];
-
-            // progress communication
-            CHECK_MPI(MPI_Waitall(nranks, comm_requests, MPI_STATUSES_IGNORE));
-
-            // un-permute the solution vector
-            for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
-                xorig[xperm[i]] = xall[i];
-            }            
-
-            // write to file
-            FILE *fd;
-            char fname[256];
-            snprintf(fname, 255, "x%d.out", iter);
-            fd = fopen(fname, "w+");
-            for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
-                fprintf(fd, "%e %e\n", creal(xorig[i]), cimag(xorig[i]));
-            }
-            /* fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd); */
-            fclose(fd);
-
-        } else {
-            CHECK_MPI(MPI_Send(x + csr_local_rowoffset(&Hfull), 2*csr_nrows(&Hfull), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD));
         }
-
         iter++;
+        time = time + dt;
     }
 
 #ifdef USE_MPI

@@ -12,16 +12,26 @@ static gpusparseHandle_t sparseHandle;
 extern int rank, nranks;
 
 void gpu_sparse_init()
-{ 
+{
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
     // Print device info
-    int deviceCount;
-    CHECK_GPU(gpuGetDeviceCount(&deviceCount));
-    printf("Device count: %d\n", deviceCount);
-    CHECK_GPUSPARSE(gpusparseCreate(&sparseHandle));   
+    int device;
+    struct cudaDeviceProp prop;
+    CHECK_GPU(gpuGetDevice(&device));    
+    CHECK_GPU(gpuGetDeviceProperties(&prop, device));
+    printf("rank %d: device %s pciBusID %d\n", rank, prop.name, prop.pciBusID);
+    CHECK_GPUSPARSE(gpusparseCreate(&sparseHandle));
+    fflush(stdout);
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
 }
 
 void gpu_sparse_fini()
-{ 
+{
     CHECK_GPUSPARSE(gpusparseDestroy(sparseHandle));
 }
 
@@ -32,28 +42,34 @@ void gpu_put_csr(gpu_sparse_csr_t *Agpu, const sparse_csr_t *Ahost)
     csr_index_t *dAp, *dAi;
     csr_data_t  *dAx;
 
-    CHECK_GPU(gpuMalloc((void**) &dAp, (1+csr_nrows(Ahost))*sizeof(csr_index_t)));
-    CHECK_GPU(gpuMalloc((void**) &dAi, csr_nnz(Ahost)*sizeof(csr_index_t)));
-    CHECK_GPU(gpuMalloc((void**) &dAx, csr_nnz(Ahost)*sizeof(csr_data_t)));
+    if(NULL != Agpu->Ax){
+        dAp = Agpu->Ap;
+        dAi = Agpu->Ai;
+        dAx = Agpu->Ax;
+    } else {
+        CHECK_GPU(gpuMalloc((void**) &dAp, (1+csr_nrows(Ahost))*sizeof(csr_index_t)));
+        CHECK_GPU(gpuMalloc((void**) &dAi, csr_nnz(Ahost)*sizeof(csr_index_t)));
+        CHECK_GPU(gpuMalloc((void**) &dAx, csr_nnz(Ahost)*sizeof(csr_data_t)));
+        
+        // Create CSR matrix and vectors
+        gpusparseSpMatDescr_t Adevice;
+        CHECK_GPUSPARSE(gpusparseCreateCsr(&Adevice, csr_nrows(Ahost), csr_ncols(Ahost), csr_nnz(Ahost),
+                                           dAp, dAi, dAx,
+                                           GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_BASE_ZERO, GPU_C_64F));
+        Agpu->desc = Adevice;
+        Agpu->Ap = dAp;
+        Agpu->Ai = dAi;
+        Agpu->Ax = dAx;
+        Agpu->nnz = csr_nnz(Ahost);
+        Agpu->nrows = csr_nrows(Ahost);
+        Agpu->ncols = csr_ncols(Ahost);
+        Agpu->cuBuffer = NULL;
+    }
 
     // Copy the CSR matrix and vectors from host to device
     CHECK_GPU(gpuMemcpy(dAp, Ahost->Ap, (1+csr_nrows(Ahost))*sizeof(csr_index_t), gpuMemcpyHostToDevice));
     CHECK_GPU(gpuMemcpy(dAi, Ahost->Ai, csr_nnz(Ahost)*sizeof(csr_index_t), gpuMemcpyHostToDevice));
     CHECK_GPU(gpuMemcpy(dAx, Ahost->Ax, csr_nnz(Ahost)*sizeof(csr_data_t),  gpuMemcpyHostToDevice));
-
-    // Create CSR matrix and vectors
-    gpusparseSpMatDescr_t Adevice;
-    CHECK_GPUSPARSE(gpusparseCreateCsr(&Adevice, csr_nrows(Ahost), csr_ncols(Ahost), csr_nnz(Ahost),
-                                       dAp, dAi, dAx,
-                                       GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_32I, GPUSPARSE_INDEX_BASE_ZERO, GPU_C_64F));
-    Agpu->desc = Adevice;
-    Agpu->Ap = dAp;
-    Agpu->Ai = dAi;
-    Agpu->Ax = dAx;
-    Agpu->nnz = csr_nnz(Ahost);
-    Agpu->nrows = csr_nrows(Ahost);
-    Agpu->ncols = csr_ncols(Ahost);
-    Agpu->cuBuffer = NULL;
 }
 
 void gpu_free_csr(gpu_sparse_csr_t *Agpu)
@@ -143,7 +159,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
 
     gpusparseDnVecDescr_t outdesc = y->desc;
     if(y->desc_local) outdesc = y->desc_local;
-      
+
     CHECK_GPU(cusparseSpSV_bufferSize(sparseHandle,
                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
                                       &alpha,
@@ -181,7 +197,7 @@ void gpu_lu_solve(const gpu_sparse_csr_t *L, const gpu_sparse_csr_t *U, const gp
 
     gpusparseDnVecDescr_t outdesc = y->desc;
     if(y->desc_local) outdesc = y->desc_local;
-    
+
     CHECK_GPU(cusparseSpSV_solve(sparseHandle,
 				 CUSPARSE_OPERATION_NON_TRANSPOSE,
 				 &alpha,
@@ -207,7 +223,7 @@ void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y, c
         // Allocate buffer for the SpMV operation
         CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize*sizeof(csr_data_t)));
     }
-    
+
     CHECK_GPUSPARSE(gpusparseSpMV(sparseHandle,
                                   GPUSPARSE_OPERATION_NON_TRANSPOSE, (const void*)&alpha, Hfull->desc, x->desc,
                                   (const void*)&beta, y->desc,

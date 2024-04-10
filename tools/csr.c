@@ -958,7 +958,6 @@ void csr_coo2csr(sparse_csr_t *sp, const csr_index_t *rowidx, const csr_index_t 
     for(csr_index_t i=0; i<matrix_dim; i++) {
         Ap_out[i+1] = Ap_out[i] + n_list_elems_dynamic[i];
     }
-    printf("number of non-zeros %d / %d\n", Ap_out[matrix_dim], nnz);
 
     /* allocate CSR data structures: Ai and Ax */
     csr_index_t csr_nnz = Ap_out[matrix_dim];

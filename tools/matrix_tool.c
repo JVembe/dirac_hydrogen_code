@@ -353,8 +353,7 @@ int main(int argc, char *argv[])
         for(int i=0; i<6; i++) PRINTF0("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
         
         // time-dependent part of the Hamiltonian
-        compute_timedep_matrices2(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-        compute_timedep_matrices2(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
+        compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
         
         // The Hfull_blk matrix contains all computed submatrices.
         // The submatrices are stored as a sub-block in the csr storage
@@ -553,9 +552,12 @@ int main(int argc, char *argv[])
         HS_matrices mat;
         mat.H = &Hfull;
         mat.S = &S;
+
+        MPI_Barrier(MPI_COMM_WORLD);
         PRINTF0("CPU BICGSTAB\n"); tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
+        MPI_Barrier(MPI_COMM_WORLD);
         toc();
 
 #if defined USE_CUDA | defined USE_HIP
@@ -564,9 +566,13 @@ int main(int argc, char *argv[])
             gpu_sparse_csr_t gpuS, gpuHfull;
 
             gpu_put_csr(&gpuS, &S);
+
+            MPI_Barrier(MPI_COMM_WORLD);
             PRINTF0("host to device H"); tic();
             gpu_put_csr(&gpuHfull, &Hfull);
+            MPI_Barrier(MPI_COMM_WORLD);
             toc();
+            
             gpumat.H = &Hfull;
             gpumat.gpuH = &gpuHfull;
             gpumat.S = &S;
@@ -609,9 +615,12 @@ int main(int argc, char *argv[])
             gpu_solver_workspace_t gpuwsp = {0};
             int iters = 500;
             double tol_error = 1e-16;
+
+            MPI_Barrier(MPI_COMM_WORLD);
             PRINTF0("GPU BICGSTAB\n"); tic();
             gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                          gpu_LU_precond_fun, &gpuLU, &gpuwsp, &iters, &tol_error);
+            MPI_Barrier(MPI_COMM_WORLD);
             toc();
 
             gpu_get_vec(ydev, &xgpu);

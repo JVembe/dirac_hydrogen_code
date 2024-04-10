@@ -44,9 +44,9 @@ void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t 
     out[5] = (  E0/(2*omega) * sin( phi + t * omega));
 }
 
-void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr_data_t *ft, int lmax,
-                              sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
-                              const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt)
+void compute_timedep_matrices_slow(double h, double dt, sparse_csr_t *_submatrix, csr_data_t *ft, int lmax,
+                                   sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
+                                   const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt)
 {
     if(NULL == ikarr){
         // precompute ik indices
@@ -187,8 +187,8 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                     }
                 }
 
-                // store the submatrix in the global Hfull_blk
-                if(Hfull_blk->Ax) csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
+                /* // store the submatrix in the global Hfull_blk */
+                /* if(Hfull_blk->Ax) csr_block_insert(Hfull_blk, row, col, submatrix->Ax); */
 
                 // store immediately in non-blocked Hfull matrix
                 csr_full_insert(Hfull, row, col, submatrix);
@@ -197,6 +197,9 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
         csr_free(submatrix);
     }
 
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
     if(rank==0){
         toc();
     }
@@ -208,7 +211,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
 static sparse_csr_t *pgsum = NULL;
 static sparse_csr_t *pgtsum = NULL;
 
-void compute_timedep_matrices2(double h, double dt, sparse_csr_t *_submatrix, csr_data_t *ft, int lmax,
+void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
                               const sparse_csr_t *h0, const sparse_csr_t *H, const sparse_csr_t *g, const sparse_csr_t *gt)
 {
@@ -230,7 +233,7 @@ void compute_timedep_matrices2(double h, double dt, sparse_csr_t *_submatrix, cs
     if(NULL == envar) envar = getenv("OMP_NUM_THREADS");
     if(NULL != envar) nthr = atoi(envar);
     if(0 == nthr) nthr = 1;
-    tic(); PRINTF0("############## compute Ht on %d threads ", nthr);
+    tic(); PRINTF0("compute Ht on %d threads ", nthr);
 
 #pragma omp parallel num_threads(nthr)
     {
@@ -391,7 +394,13 @@ void compute_timedep_matrices2(double h, double dt, sparse_csr_t *_submatrix, cs
         }
         csr_free(submatrix);
     }
-    toc();
+
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    if(rank==0){
+        toc();
+    }
 }
 
 void compute_stationary_matrices(double h, double dt, sparse_csr_t *submatrix,

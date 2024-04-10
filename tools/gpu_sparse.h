@@ -15,6 +15,8 @@ typedef cuDoubleComplex gpu_complex_t;
 
 // Device management
 #define gpuGetDeviceCount                         cudaGetDeviceCount
+#define gpuGetDeviceProperties                    cudaGetDeviceProperties
+#define gpuGetDevice                              cudaGetDevice
 #define gpuSetDevice                              cudaSetDevice
 #define gpuDeviceSynchronize                      cudaDeviceSynchronize
 
