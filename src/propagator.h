@@ -82,7 +82,7 @@ class Propagator {
 			auto starttime = std::chrono::system_clock::now();
 			
 			for(int i = 1; i < Nt; i++) {
-				t = i*dt;
+				
 				if (i%10 == 0) {
 					cdouble iprod = (psi*wft)(0,0);
 					
@@ -112,6 +112,7 @@ class Propagator {
 					
 					break;
 				}
+				t = i*dt;
 			}
 			
 			//wf = wavefunc<basistype>(H->getBasis(),wfcoefs);
