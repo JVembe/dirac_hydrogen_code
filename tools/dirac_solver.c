@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
 
     int opt;
     int lmax;
-    double intensity, omega, cycles, maxtime = 0, time = 0;
+    double intensity, omega, cycles, maxtime = 0, time = 0, iterations = 0;
     double dt, h;
     int cnt;
 
@@ -158,20 +158,22 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    while ((opt = getopt(argc, argv, "t:l:i:o:c:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:")) != -1) {
         switch (opt) {
         case 't': maxtime = atof(optarg); break;
         case 'l': lmax = atoi(optarg); break;
         case 'i': intensity = atof(optarg); break;
         case 'o': omega = atof(optarg); break;
         case 'c': cycles = atof(optarg); break;
+        case 'n': iterations = atof(optarg); break;
         default:
             fprintf(stderr, "Usage: %s [-lioc]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
 
-    dt = 0.125;
+    dt = maxtime/iterations;
+    // dt = 0.000117750000000; //0.125;
     h  = 1;
 
     // time-dependent part
@@ -205,13 +207,14 @@ int main(int argc, char *argv[])
 
     if(0 == rank){
         printf("Parameters:\n");
-        printf(" - time      %f\n", maxtime);
-        printf(" - lmax      %d\n", lmax);
-        printf(" - intensity %lf\n", intensity);
-        printf(" - omega     %lf\n", omega);
-        printf(" - cycles    %lf\n", cycles);
-        printf(" - dt        %lf\n", dt);
-        printf(" - h         %lf\n", h);
+        printf(" - time       %f\n", maxtime);
+        printf(" - lmax       %d\n", lmax);
+        printf(" - intensity  %lf\n", intensity);
+        printf(" - omega      %lf\n", omega);
+        printf(" - cycles     %lf\n", cycles);
+        printf(" - iterations %lf\n", iterations);
+        printf(" - dt         %.15lf\n", dt);
+        printf(" - h          %lf\n", h);
     }
 
     // get local partition of the global H matrix
@@ -430,7 +433,7 @@ int main(int argc, char *argv[])
 #endif
 
     // time iterations
-    int iter = 0;
+    int iter = 1;
 #if defined USE_CUDA | defined USE_HIP
     gpu_solver_workspace_t gpuwsp = {0};
 #else
@@ -442,6 +445,7 @@ int main(int argc, char *argv[])
         complex ihdt = I*h*dt/2;
         int iters = 500;
         double tol_error = 1e-16;
+        time = time + dt;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
 
         PRINTF0("iteration %d simulation time %lf\n", iter, time);
@@ -496,7 +500,12 @@ int main(int argc, char *argv[])
 #endif
 
         // collect the results on rank 0 for un-permuting and printing
-        if(0){
+        if(iter%10==0){
+
+#if defined USE_CUDA | defined USE_HIP
+            // get result from the GPU
+            gpu_get_vec(x + csr_local_rowoffset(&Hfull), &xgpu);
+#endif
             if(0 == rank){
 
                 // submit recv requests on solution vector parts
@@ -523,11 +532,16 @@ int main(int argc, char *argv[])
                 FILE *fd;
                 char fname[256];
                 snprintf(fname, 255, "x%d.out", iter);
+                PRINTF0("saving output file %s\n", fname);
                 fd = fopen(fname, "w+");
-                for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){
-                    fprintf(fd, "%e %e\n", creal(xorig[i]), cimag(xorig[i]));
-                }
-                /* fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd); */
+                /* for(int i=0; i<csr_nrows(&Hall)*blkdim; i++){ */
+                /*     fprintf(fd, "%e %e\n", creal(xorig[i]), cimag(xorig[i])); */
+                /* } */
+                int nrows = csr_nrows(&Hall)*blkdim;
+                int ncols = 1;
+                fwrite(&nrows, sizeof(int), 1, fd);
+                fwrite(&ncols, sizeof(int), 1, fd);
+                fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd);
                 fclose(fd);
 
             } else {
@@ -535,7 +549,6 @@ int main(int argc, char *argv[])
             }
         }
         iter++;
-        time = time + dt;
     }
 
 #ifdef USE_MPI
