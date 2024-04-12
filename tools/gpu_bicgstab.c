@@ -114,8 +114,6 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
                   gpu_precond_fun psolve, const void *precond, gpu_solver_workspace_t *wsp, int *iters, double *tol_error)
 {
 
-  gpu_complex_t *xdev = malloc(sizeof(gpu_complex_t)*nrow);
-
   double tol = *tol_error;
   int maxIters = *iters;
   int incx = 1;
