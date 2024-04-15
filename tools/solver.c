@@ -167,8 +167,8 @@ void compute_timedep_matrices_slow(double h, double dt, sparse_csr_t *_submatrix
     // csr_blocked_to_full(Hfull, Hfull_blk, submatrix);
 }
 
-static sparse_csr_t *pgsum = NULL;
-static sparse_csr_t *pgtsum = NULL;
+static csr_data_t **pgsum = NULL;
+static csr_data_t **pgtsum = NULL;
 
 void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr_data_t *ft, int lmax,
                               sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull,
@@ -206,62 +206,63 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
 
         int nrows = csr_nrowblocks(Hfull_blk);
 
+        const csr_data_t *pg0, *pg1, *pg2, *pg3;
+        const csr_data_t *pgt0, *pgt1, *pgt2, *pgt3;
+
         // precopute G-sums and Gt-sums
-        if(NULL == pgsum){
-            pgsum = calloc(lmax*4, sizeof(sparse_csr_t));
-            pgtsum = calloc(lmax*4, sizeof(sparse_csr_t));
-            csr_zero(submatrix);
-            for(int i=0; i<lmax*4; i++){
-                csr_copy(pgsum + i, submatrix);
-                csr_copy(pgtsum + i, submatrix);
-            }
-        }
-        const sparse_csr_t *pg0, *pg1, *pg2, *pg3;
-        const sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
-
 #pragma omp master
-        for(int l=0; l<lmax; l++){
-            csr_zero(pgsum + l*4 + 0);
-            csr_zero(pgsum + l*4 + 1);
-            csr_zero(pgsum + l*4 + 2);
-            csr_zero(pgsum + l*4 + 3);
+        {
+            if(NULL == pgsum){
+                pgsum = calloc(lmax*4, sizeof(csr_data_t*));
+                pgtsum = calloc(lmax*4, sizeof(csr_data_t*));
+                for(int i=0; i<lmax*4; i++){
+                    pgsum[i]  = calloc(submatrix->nnz, sizeof(csr_data_t));
+                    pgtsum[i] = calloc(submatrix->nnz, sizeof(csr_data_t));
+                }
+            }
+            for(int l=0; l<lmax; l++){
+                memset(pgsum[l*4 + 0], 0, sizeof(csr_data_t)*submatrix->nnz);
+                memset(pgsum[l*4 + 1], 0, sizeof(csr_data_t)*submatrix->nnz);
+                memset(pgsum[l*4 + 2], 0, sizeof(csr_data_t)*submatrix->nnz);
+                memset(pgsum[l*4 + 3], 0, sizeof(csr_data_t)*submatrix->nnz);
 
-            csr_zero(pgtsum + l*4 + 0);
-            csr_zero(pgtsum + l*4 + 1);
-            csr_zero(pgtsum + l*4 + 2);
-            csr_zero(pgtsum + l*4 + 3);
-            for(int a=0; a<6; a++){
-                if((a%2!=l%2)) { //Skip redundant matrices
+                memset(pgtsum[l*4 + 0], 0, sizeof(csr_data_t)*submatrix->nnz);
+                memset(pgtsum[l*4 + 1], 0, sizeof(csr_data_t)*submatrix->nnz);
+                memset(pgtsum[l*4 + 2], 0, sizeof(csr_data_t)*submatrix->nnz);
+                memset(pgtsum[l*4 + 3], 0, sizeof(csr_data_t)*submatrix->nnz);
+                for(int a=0; a<6; a++){
+                    if((a%2!=l%2)) { //Skip redundant matrices
 
-                    // G-sums
-                    pg0 = g + a*4*lmax + l*4;
-                    pg1 = pg0 + 1;
-                    pg2 = pg0 + 2;
-                    pg3 = pg0 + 3;
+                        // G-sums
+                        pg0 = g[a*4*lmax + l*4 + 0].Ax;
+                        pg1 = g[a*4*lmax + l*4 + 1].Ax;
+                        pg2 = g[a*4*lmax + l*4 + 2].Ax;
+                        pg3 = g[a*4*lmax + l*4 + 3].Ax;
 
-                    // Gt-sums
-                    pgt0 = gt + a*4*lmax + l*4;
-                    pgt1 = pgt0 + 1;
-                    pgt2 = pgt0 + 2;
-                    pgt3 = pgt0 + 3;
+                        // Gt-sums
+                        pgt0 = gt[a*4*lmax + l*4 + 0].Ax;
+                        pgt1 = gt[a*4*lmax + l*4 + 1].Ax;
+                        pgt2 = gt[a*4*lmax + l*4 + 2].Ax;
+                        pgt3 = gt[a*4*lmax + l*4 + 3].Ax;
 
-                    // g matrices all have the same nnz pattern,
-                    // so we can operate directly on the internal storage Ax
-                    for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                        pgsum[l*4 + 0].Ax[i]  += SoL*ihdt*ft[a]*pg0->Ax[i];  //
-                        pgsum[l*4 + 1].Ax[i]  += SoL*ihdt*ft[a]*pg1->Ax[i];  // ki
-                        pgsum[l*4 + 2].Ax[i]  += SoL*ihdt*ft[a]*pg2->Ax[i];  // kj
-                        pgsum[l*4 + 3].Ax[i]  += SoL*ihdt*ft[a]*pg3->Ax[i];  // ki*kj
+                        // g matrices all have the same nnz pattern,
+                        // so we can operate directly on the internal storage Ax
+                        for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                            pgsum[l*4 + 0][i]  += SoL*ihdt*ft[a]*pg0[i];  //
+                            pgsum[l*4 + 1][i]  += SoL*ihdt*ft[a]*pg1[i];  // ki
+                            pgsum[l*4 + 2][i]  += SoL*ihdt*ft[a]*pg2[i];  // kj
+                            pgsum[l*4 + 3][i]  += SoL*ihdt*ft[a]*pg3[i];  // ki*kj
 
-                        pgtsum[l*4 + 0].Ax[i] += SoL*ihdt*ft[a]*pgt0->Ax[i]; //
-                        pgtsum[l*4 + 1].Ax[i] += SoL*ihdt*ft[a]*pgt1->Ax[i]; // kj
-                        pgtsum[l*4 + 2].Ax[i] += SoL*ihdt*ft[a]*pgt2->Ax[i]; // ki
-                        pgtsum[l*4 + 3].Ax[i] += SoL*ihdt*ft[a]*pgt3->Ax[i]; // ki*kj
+                            pgtsum[l*4 + 0][i] += SoL*ihdt*ft[a]*pgt0[i]; //
+                            pgtsum[l*4 + 1][i] += SoL*ihdt*ft[a]*pgt1[i]; // kj
+                            pgtsum[l*4 + 2][i] += SoL*ihdt*ft[a]*pgt2[i]; // ki
+                            pgtsum[l*4 + 3][i] += SoL*ihdt*ft[a]*pgt3[i]; // ki*kj
+                        }
                     }
                 }
             }
         }
-
+        
 #pragma omp barrier
 #pragma omp for
         // for all rows
@@ -290,8 +291,6 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 int ki = ikarr[csr_local_rowoffset(Hfull_blk) + row];
                 int kj = ikarr[col];
 
-                const sparse_csr_t *pg0, *pg1, *pg2, *pg3;
-                const sparse_csr_t *pgt0, *pgt1, *pgt2, *pgt3;
                 csr_data_t H0[lmax], H1[lmax];
 
                 // prefetch the Hamiltonian values H0(l) and H1(l)
@@ -326,20 +325,20 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                     if(H0[l] != CMPLX(0,0)){
                         for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                             submatrix->Ax[i] +=
-                                H0[l]*(pgsum[l*4 + 0].Ax[i]        +
-                                       pgsum[l*4 + 1].Ax[i]*ki     +
-                                       pgsum[l*4 + 2].Ax[i]*kj     +
-                                       pgsum[l*4 + 3].Ax[i]*ki*kj) ;
+                                H0[l]*(pgsum[l*4 + 0][i]        +
+                                       pgsum[l*4 + 1][i]*ki     +
+                                       pgsum[l*4 + 2][i]*kj     +
+                                       pgsum[l*4 + 3][i]*ki*kj) ;
                         }
                     }
 
                     if(H1[l] != CMPLX(0,0)){
                         for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                             submatrix->Ax[i] +=
-                                H1[l]*(pgtsum[l*4 + 0].Ax[i]        +
-                                       pgtsum[l*4 + 1].Ax[i]*kj     +
-                                       pgtsum[l*4 + 2].Ax[i]*ki     +
-                                       pgtsum[l*4 + 3].Ax[i]*ki*kj) ;
+                                H1[l]*(pgtsum[l*4 + 0][i]        +
+                                       pgtsum[l*4 + 1][i]*kj     +
+                                       pgtsum[l*4 + 2][i]*ki     +
+                                       pgtsum[l*4 + 3][i]*ki*kj) ;
                         }
                     }
                 }
