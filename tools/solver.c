@@ -337,7 +337,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                                            pgtsum[l*4 + 2][i]*ki     +
                                            pgtsum[l*4 + 3][i]*ki*kj) ;
                             }
-                    } else{
+                    } else {
                         if(H0[l] != CMPLX(0,0)){
                             for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                                 submatrix->Ax[i] +=
