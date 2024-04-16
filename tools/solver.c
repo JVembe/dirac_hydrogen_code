@@ -326,17 +326,17 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 for(int l=0; l<lmax; l++){
 
                     if(H0[l]!=0 && H1[l]!=0) {
-                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                                submatrix->Ax[i] +=
-                                    H0[l]*(pgsum[l*4 + 0][i]         +
-                                           pgsum[l*4 + 1][i]*ki      +
-                                           pgsum[l*4 + 2][i]*kj      +
-                                           pgsum[l*4 + 3][i]*ki*kj)  +
-                                    H1[l]*(pgtsum[l*4 + 0][i]        +
-                                           pgtsum[l*4 + 1][i]*kj     +
-                                           pgtsum[l*4 + 2][i]*ki     +
-                                           pgtsum[l*4 + 3][i]*ki*kj) ;
-                            }
+                        for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                            submatrix->Ax[i] +=
+                                H0[l]*(pgsum[l*4 + 0][i]         +
+                                       pgsum[l*4 + 1][i]*ki      +
+                                       pgsum[l*4 + 2][i]*kj      +
+                                       pgsum[l*4 + 3][i]*ki*kj)  +
+                                H1[l]*(pgtsum[l*4 + 0][i]        +
+                                       pgtsum[l*4 + 1][i]*kj     +
+                                       pgtsum[l*4 + 2][i]*ki     +
+                                       pgtsum[l*4 + 3][i]*ki*kj) ;
+                        }
                     } else {
                         if(H0[l] != CMPLX(0,0)){
                             for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
