@@ -269,7 +269,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
         for(row = 0; row < nrows; row++){
 
             csr_index_t loc = Hfull_blk->Ap[row]*Hfull_blk->blk_nnz;
-            
+
             // for non-zeros in each row
             for(colp = Hfull_blk->Ap[row]; colp < Hfull_blk->Ap[row+1]; colp++){
 
@@ -324,23 +324,38 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
 
                 // the H matrix is still updated with Hst, so do not clear the submatrix
                 for(int l=0; l<lmax; l++){
-                    if(H0[l] != CMPLX(0,0)){
-                        for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                            submatrix->Ax[i] +=
-                                H0[l]*(pgsum[l*4 + 0][i]        +
-                                       pgsum[l*4 + 1][i]*ki     +
-                                       pgsum[l*4 + 2][i]*kj     +
-                                       pgsum[l*4 + 3][i]*ki*kj) ;
-                        }
-                    }
 
-                    if(H1[l] != CMPLX(0,0)){
-                        for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
-                            submatrix->Ax[i] +=
-                                H1[l]*(pgtsum[l*4 + 0][i]        +
-                                       pgtsum[l*4 + 1][i]*kj     +
-                                       pgtsum[l*4 + 2][i]*ki     +
-                                       pgtsum[l*4 + 3][i]*ki*kj) ;
+                    if(H0[l]!=0 && H1[l]!=0) {
+                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                submatrix->Ax[i] +=
+                                    H0[l]*(pgsum[l*4 + 0][i]         +
+                                           pgsum[l*4 + 1][i]*ki      +
+                                           pgsum[l*4 + 2][i]*kj      +
+                                           pgsum[l*4 + 3][i]*ki*kj)  +
+                                    H1[l]*(pgtsum[l*4 + 0][i]        +
+                                           pgtsum[l*4 + 1][i]*kj     +
+                                           pgtsum[l*4 + 2][i]*ki     +
+                                           pgtsum[l*4 + 3][i]*ki*kj) ;
+                            }
+                    } else{
+                        if(H0[l] != CMPLX(0,0)){
+                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                submatrix->Ax[i] +=
+                                    H0[l]*(pgsum[l*4 + 0][i]        +
+                                           pgsum[l*4 + 1][i]*ki     +
+                                           pgsum[l*4 + 2][i]*kj     +
+                                           pgsum[l*4 + 3][i]*ki*kj) ;
+                            }
+                        }
+
+                        if(H1[l] != CMPLX(0,0)){
+                            for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                                submatrix->Ax[i] +=
+                                    H1[l]*(pgtsum[l*4 + 0][i]        +
+                                           pgtsum[l*4 + 1][i]*kj     +
+                                           pgtsum[l*4 + 2][i]*ki     +
+                                           pgtsum[l*4 + 3][i]*ki*kj) ;
+                            }
                         }
                     }
                 }
@@ -353,7 +368,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                     csr_index_t dst = Hfull->Ai_sub_map[loc++];
                     Hfull->Ax[dst] = submatrix->Ax[i];
-                }                
+                }
             }
         }
         csr_free(submatrix);
