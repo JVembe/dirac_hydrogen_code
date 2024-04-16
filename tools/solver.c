@@ -262,12 +262,14 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 }
             }
         }
-        
+
 #pragma omp barrier
 #pragma omp for
         // for all rows
         for(row = 0; row < nrows; row++){
 
+            csr_index_t loc = Hfull_blk->Ap[row]*Hfull_blk->blk_nnz;
+            
             // for non-zeros in each row
             for(colp = Hfull_blk->Ap[row]; colp < Hfull_blk->Ap[row+1]; colp++){
 
@@ -347,7 +349,11 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 if(Hfull_blk->Ax) csr_block_insert(Hfull_blk, row, col, submatrix->Ax);
 
                 // store immediately in non-blocked Hfull matrix
-                csr_full_insert(Hfull, row, col, submatrix);
+                // csr_full_insert(Hfull, row, col, submatrix);
+                for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
+                    csr_index_t dst = Hfull->Ai_sub_map[loc++];
+                    Hfull->Ax[dst] = submatrix->Ax[i];
+                }                
             }
         }
         csr_free(submatrix);

@@ -39,6 +39,7 @@ void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_i
     out->Ai = (csr_index_t*)calloc(out->nnz, sizeof(csr_index_t));
     out->Ax = (csr_data_t*)calloc(out->nnz*out->blk_nnz, sizeof(csr_data_t));
 
+    out->Ai_sub_map         = NULL;
     out->row_cpu_dist       = NULL;
     out->comm_pattern       = NULL;
     out->comm_pattern_size  = NULL;
@@ -58,6 +59,7 @@ void csr_free(sparse_csr_t *sp)
     free(sp->perm);    sp->perm = NULL;
     free(sp->Ap);      sp->Ap  = NULL;
     free(sp->Ai);      sp->Ai  = NULL;
+    free(sp->Ai_sub_map); sp->Ai_sub_map  = NULL;
     if(!sp->is_link) free(sp->Ax);  sp->Ax = NULL;
     sp->nnz = 0;
     sp->nrows = 0;
@@ -110,6 +112,7 @@ void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
     }
 
     /* TODO: reallocate and copy */
+    out->Ai_sub_map         = in->Ai_sub_map;
     out->row_cpu_dist       = in->row_cpu_dist;
     out->comm_pattern       = in->comm_pattern;
     out->comm_pattern_size  = in->comm_pattern_size;
@@ -619,8 +622,8 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
     csr_index_t row_blk, colp_blk;
 
     // iterators over non-blocked Hfull
-    csr_index_t col_dst, rowp_dst;
-    rowp_dst = 1;
+    csr_index_t col_dst, row_dst;
+    row_dst = 1;
 
     // allocate memory for the unblocked matrix
     csr_allocate(out, csr_nrows(in), csr_ncols(in), csr_nnz(in));
@@ -648,16 +651,58 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
                     col_dst = col*in->blk_dim + sp_blk->Ai[colp_blk];
 
                     // update out->Ai and out->Ap
-                    out->Ai[out->Ap[rowp_dst]] = col_dst;
-                    out->Ap[rowp_dst]++;
+                    out->Ai[out->Ap[row_dst]] = col_dst;
+                    out->Ap[row_dst]++;
                 }
             }
 
             // next Hfull row - start where the last one ends
-            out->Ap[rowp_dst+1] = out->Ap[rowp_dst];
-            rowp_dst++;
+            out->Ap[row_dst+1] = out->Ap[row_dst];
+            row_dst++;
         }
     }
+
+    csr_index_t *Aptmp = malloc((csr_nrows(in)+1)*sizeof(csr_index_t));
+    memcpy(Aptmp, out->Ap, (csr_nrows(in)+1)*sizeof(csr_index_t));
+
+    csr_index_t loc = 0;
+    out->Ai_sub_map = (csr_index_t *)malloc(csr_nnz(in)*sizeof(csr_index_t));
+    
+    // map each sub-block non-zeros onto destination location in out->Ax
+    // for all rows
+    for(row = 0; row < in->nrows; row++){
+
+        // for non-zeros in each Hpart row - fill the expanded row
+        for(colp = in->Ap[row]; colp < in->Ap[row+1]; colp++){
+            col = in->Ai[colp];
+
+            // each row and each column are expanded into submatrices of size in->blk_dim
+            for(row_blk=0; row_blk<in->blk_dim; row_blk++){
+
+                // row in the expanded matrix
+                row_dst = row*in->blk_dim + row_blk;
+                
+                for(colp_blk=sp_blk->Ap[row_blk]; colp_blk<sp_blk->Ap[row_blk+1]; colp_blk++){
+                    
+                    csr_index_t cp = Aptmp[row_dst];
+                    Aptmp[row_dst]++;
+                    out->Ai_sub_map[loc++] = cp;
+
+                    // Validation done, but not needed in production
+                    /* column in the expanded matrix */
+                    /* col_dst = col*in->blk_dim + sp_blk->Ai[colp_blk]; */
+                    /* if(cp==out->Ap[row_dst+1] || out->Ai[cp]!=col_dst) fprintf(stderr, "error %d %d\n", row_dst, col_dst); */
+                    
+                    /* csr_index_t  cp = out->Ap[row_dst] + */
+                    /*     sorted_list_locate(out->Ai+out->Ap[row_dst], out->Ap[row_dst+1]-out->Ap[row_dst], col_dst); */
+                    /* if(cp==out->Ap[row_dst+1] || out->Ai[cp]!=col_dst) fprintf(stderr, "error %d %d\n", row_dst, col_dst); */
+                }
+            }
+        }
+    }
+
+    // cleanup
+    free(Aptmp);
 }
 
 void csr_blocked_to_full(sparse_csr_t *Afull, sparse_csr_t *Ablk, sparse_csr_t *submatrix)

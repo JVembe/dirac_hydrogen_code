@@ -3,16 +3,17 @@ OBJS=sorted_list.o \
 	gpu_sparse.o \
 	solver.o \
 	bicgstab.o \
+	solver_common.o \
 	gpu_bicgstab.o \
 	utils.o \
 	superlu.o
 
-CFLAGS_CUDA = -DUSE_CUDA
+CFLAGS_CUDA = -DUSE_CUDA0
 CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
-CFLAGS = -DDEBUG -g -lm -DUSE_MPI -I/home/angainor/work/institution/usit/aus/dirac_gpu/install/include -I/cluster/home/marcink/software/superlu/include $(CFLAGS_CUDA)
+CFLAGS = -DDEBUG -g -lm -DUSE_MPI -I/home/angainor/work/institution/usit/aus/dirac_gpu/install/include -I/cluster/home/marcink/software/superlu/include $(CFLAGS_CUDA) -fopenmp
 
-LDFLAGS_CUDA = -lcublas -lcusparse -lcudart
-LDFLAGS = $(LDFLAGS_CUDA) -L/home/angainor/work/institution/usit/aus/dirac_gpu/install/lib -L/cluster/home/marcink/software/superlu/lib64 -lsuperlu -lopenblas
+LDFLAGS_CUDA0 = -lcublas -lcusparse -lcudart
+LDFLAGS = $(LDFLAGS_CUDA) -L/home/angainor/work/institution/usit/aus/dirac_gpu/install/lib -L/cluster/home/marcink/software/superlu/lib64 -lsuperlu -lopenblas -fopenmp
 
 CC?=gcc
 CC_CUDA = nvcc

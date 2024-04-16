@@ -24,6 +24,7 @@ typedef struct {
     csr_index_t *Ap;
     csr_index_t *Ai;
     csr_data_t  *Ax;
+    csr_index_t *Ai_sub_map;
     int is_link;
 } sparse_csr_t;
 
