@@ -77,8 +77,8 @@ csmat cachedglintmat(const csmat& M0, const csmat& Mk, const csmat& Mkk, int kap
 
 
 dkbbasis::dkbbasis(vec &t, int splinedeg): splineHandler(t,splinedeg) {
-	dropfirst = 1;
-	droplast = 1;
+	dropfirst = 1; //More than 1 makes for very inaccurate energy levels
+	droplast = 1; //Less than 2 causes boundary issues with derivatives
 	//dkbCache(glpts(),1);
 	//cout << radqN() << "\n";
 }
@@ -254,7 +254,7 @@ clsmat dkbbasis::dDkbCache(lvec& x,int ul) {
 					kappapot.insert(i,i) = 1.0 / x[i];
 					kappasqpot.insert(i,i) = 1.0 / pow(x[i],2);
 				}
-				ddkbUk.rightCols(Ns) =  1/(2*SoL) * (kappapot * dsplines - kappasqpot * splines);
+				ddkbUk.rightCols(Ns) = 1/(2*SoL) * (kappapot * dsplines - kappasqpot * splines);
 			}
 			
 			out = ddkbU0 + ddkbUk;
@@ -451,6 +451,16 @@ csmat& dkbbasis::ddmat(int dn) {
 	ddm = factorisedglintmat(dd0, ddk, ddkk,
 							P0, Q0, dP0, dQ0, Pk, Qk, dPk, dQk,
 							splinedeg+1, wts, kappa, &dkbcrossglintmat, 0, -1);
+    /*
+	Constructing these matrices properly results in an
+	undesirable asymmetry caused by the boundary B-splines.
+	To work aroun this we simply cheat a little and take the 
+	average of each matrix with its adjoint
+	*/
+	
+	dd0 = (dd0 + csmat(dd0.adjoint()))/2;
+	ddk = (ddk + csmat(ddk.adjoint()))/2;
+	ddkk = (ddkk + csmat(ddkk.adjoint()))/2;
 	
 	return ddm;
 }
