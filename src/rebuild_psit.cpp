@@ -8,6 +8,9 @@
 
 #include <fstream>
 
+// Third-Party Libraries
+#include "nlohmann/json.hpp" // for JSON parsing
+
 #define INTENSITY 400
 #define Z 1
 
@@ -149,22 +152,48 @@ cmat loadPsievs(std::string filename) {
 }
 
 int main(int argc, char** argv) {
+	// Check argument count
+	if(argc != 3) {
+		std::cerr << "Usage: " << argv[0] << " <path/to/parameters.json>\n";
+		return 1;
+	}
+
+	// Get the JSON file path from command line arguments
+	std::string json_file_path = argv[1];
+
+	// Open and read the JSON file
+	std::ifstream input_file(json_file_path);
+	if (!input_file.is_open()) {
+		std::cerr << "Could not open the file " << json_file_path << "\n";
+		return 1;
+	}
+
+	// Parse JSON parameters
+	nlohmann::json json_params;
+	input_file >> json_params;
+	//Define types for basis and wave function from templates
+	//rthphbasis "R, theta, phi basis" combines dkbbasis and spnrbasis to model system in spherical coordinates
 	using dirbs = rthphbasis<dkbbasis,spnrbasis>;
 	using dirwf = wavefunc<dirbs>;
-	//Load wavefunction from txt
+
+	// Simulation parameters
+	int Nsplines = json_params["Nsplines"]; // Radial resolution, typical values: 200-250
+	int Ntime = json_params["Ntime"]; // Number of time steps, typical values: 8000-20000
+	int Nkappa = json_params["Nkappa"]; // Maximum absolute value of kappa quantum number, typical values: >= 16
+	int Nmu = json_params["Nmu"]; // Typically 10 for nondipole simulations, as higher values of mu are suppressed by orders of magnitude
+	int Nl = json_params["Nl"]; // Optimal value depends on radius of the box, typically 10 is sufficient
+	double rBox = json_params["rBox"]; // Radius of the system in atomic units; 30 is usually sufficient
+	int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
+	int omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
+	int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
 	
-	int Nsplines = 250;
-	int Ntime = 16000;
-	int Nkappa = 20;
-	int Nmu = 10;
-	int Nl = 10;
-	double rBox = 30.0;
+	
 	
 	Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 	Eigen::IOFormat partformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),","","",' ');
 	Eigen::IOFormat outformatLine(Eigen::FullPrecision,Eigen::DontAlignCols,", "," ","(","),"," = npy.array((\n","\n))\n",' ');
 	
-	string fname = argv[1];
+	string fname = argv[2];
 	
 	cmat psievs = loadPsievs(fname);
 	// cout << psievs;
@@ -179,7 +208,7 @@ int main(int argc, char** argv) {
 	
 	std::stringstream fnpstream;
 	
-	fnpstream << "dirBdp_E" << INTENSITY << "R" << Nsplines << "K" << Nkappa << "Mu" << Nmu << "r" << rBox << "T" << Ntime;
+	fnpstream << "dirBdp_E" << Intensity << "R" << Nsplines << "K" << Nkappa << "Mu" << Nmu << "r" << rBox << "T" << Ntime;
 	
 	string filenamePrefix = fnpstream.str();
 
@@ -189,7 +218,7 @@ int main(int argc, char** argv) {
 		t[i] = rBox/(Nsplines)*i;
 	}
 	
-	beyondDipolePulse bdpp(INTENSITY,50,15);
+	beyondDipolePulse bdpp(Intensity,omega,cycles);
 	
 	dkbbasis dkbb(t,7);
 	dkbb.setState(-1);
@@ -280,14 +309,14 @@ int main(int argc, char** argv) {
 		int kappaid = 2*abs(kappa) + (sgn(kappa) - 1)/2 - 1;
 		cout << i <<"," << kappaid << endl;
 		cmat evcs = H.getevecs(ik(rthphb.angids[i]),imu(rthphb.angids[i]));
-		cvec freeEvlPos = cvec(((evls[kappaid].array() > 0) /* (evls[kappaid].array() < 0)*/).cast<double>());
-		cvec freeEvlNeg = 0*cvec((evls[kappaid].array() < -pow(SoL,2)).cast<double>());
-		cmat evcsFree = evcs.array().rowwise()*(freeEvlPos.array() + freeEvlNeg.array()).array().transpose();
-		// cmat evcsFree = evcs;
+		cvec freeEvlPos = cvec(((evls[kappaid].array() > 0) * (evls[kappaid].array() < 225)).cast<double>());
+		cvec freeEvlNeg = cvec(((evls[kappaid].array() < -2*pow(SoL,2) - 0) * (evls[kappaid].array() > -2*pow(SoL,2) - 225)).cast<double>());
+		// cmat evcsFree = evcs.array().rowwise()*(freeEvlPos.array() + freeEvlNeg.array()).array().transpose();
+		cmat evcsFree = evcs;
 		
 		// cout << "i" << evcs << "\n\n" << freeEvlPos.format(outformat) << "\n\n" << freeEvlNeg.format(outformat) << "\n\n" << evcsFree << endl;
 		
-		cvec psii =  evcsFree * psievs.col(i);
+		cvec psii =  evcsFree * psievs.col(i).conjugate();
 		psit.segment(i*psievs.rows(),psievs.rows()) = psii;
 	}
 	// return 0;
@@ -297,17 +326,17 @@ int main(int argc, char** argv) {
 	
 	dirwf psi1 = dirwf(rthphb,psit);
 	psi1.normalize();
-	// cout << "psi " << psi1.coefs.format(outformat)<<"\n";
+	cout << "psi " << psi1.coefs.format(outformat)<<"\n";
 	
 	cvec azv = rthphb.template matfree<dpa>(psi1.coefs);
 	
 	// cout << "azv "  << azv.format(outformat) << std::endl;
-	cout << "az" << SoL * cvec(psi1.coefs).dot(azv) << endl;
+	cout << "az" << -SoL * cvec(psi1.coefs).adjoint() * azv << endl;
 	
 	cvec axv = rthphb.dpaXmatvecMPIblock(cvec(psi1.coefs));
 	
 	// cout << "axv "  << axv.format(outformat) << std::endl;
-	cout << "ax" << SoL * cvec(psi1.coefs).dot(axv) << endl;
+	cout << "ax" << -SoL * cvec(psi1.coefs).adjoint() * axv << endl;
 	
 	// cout << "pIon" << abs((psi1 * psi1)(0,0));
 	

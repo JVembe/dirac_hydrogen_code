@@ -265,14 +265,15 @@ int main(int argc, char* argv[]) {
 
 	// cnp.setDumpfile((filenamePrefix + "_dump"));
 
-	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
+	cnp.propagate(psi1,(0.6*PI)/Ntime,Ntime,1);
 
 	dirwf wft = cnp.wft;
 
 	if(wrank==0)
 	cout << "wft" << wft.coefs.format(outformat);
 
-	H.savePsievs(wft,"psiev");
+	wft.save(filenamePrefix + "_psit",0);
+	H.savePsievs(wft,filenamePrefix + "_psiev");
 	
 	MPI_Finalize();
 	return 0;

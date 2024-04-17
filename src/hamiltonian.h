@@ -1060,13 +1060,13 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		int lth0, lNth, ll0,lNl;
 		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
-		for(int i = 0; i < wsize; i++) {
+		for(int w = 0; w < wsize; w++) {
 			ofstream psievf(filename,ofstream::app);
-			if(wrank==i) {
-				
+			if(wrank==w) { 
+				cout << "Saving at rank " << w << endl;
 				for(int i = 0; i < psievs.size(); i++) {
 					int j = -1;
-					
+					cout << "Save index " << i << ", channel index " << lth0 + i << endl;
 					for(int k = 0; k < kappas.size(); k++) {
 						if(kappas[k] == ik(this->bs->indexTransform(lth0 + i))) j = k;
 					}
