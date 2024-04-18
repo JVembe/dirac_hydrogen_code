@@ -122,18 +122,25 @@ void gpu_HS_spmv_fun(const void *mat, gpu_dense_vec_t *x, gpu_dense_vec_t *out, 
     gpu_HS_matrices *hsptr = (gpu_HS_matrices*)mat;
 
     // Setup the communication for H: this is cheap - just sets up recv pointers for x
+    /* printf("spmv1 "); tic(); */
     csr_init_communication(hsptr->H, (csr_data_t*)x->x, rank, nranks);
     csr_comm(hsptr->H, rank, nranks);
     gpu_spmv(hsptr->gpuH, x, out, alpha, beta);
+    cudaDeviceSynchronize();
+    /* toc(); */
 
     // S has only local vector entries - x has to be shifted compared to H
     gpu_spmv_local(hsptr->gpuS, x, out, alpha, CMPLX(1,0));
+    cudaDeviceSynchronize();
 }
 
 void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_dense_vec_t *x)
 {
     gpu_lu_t *precond = (gpu_lu_t*)_precond;
+    /* printf("lu solve "); tic(); */
     gpu_lu_solve(precond->L, precond->U, rhs, x, precond->temp);
+    cudaDeviceSynchronize();
+    /* toc(); */
 }
 
 #endif
@@ -441,7 +448,7 @@ int main(int argc, char *argv[])
     // time iterations
     int iter = 1;
 #if defined USE_CUDA | defined USE_HIP
-    gpu_solver_workspace_t gpuwsp = {0};
+    gpu_solver_workspace_t wsp = {0};
 #else
     solver_workspace_t wsp = {0};
 #endif
@@ -488,7 +495,7 @@ int main(int argc, char *argv[])
         MPI_Barrier(MPI_COMM_WORLD);
         PRINTF0("GPU BICGSTAB\n"); tic();
         gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
-                     gpu_LU_precond_fun, &gpuLU, &gpuwsp, &iters, &tol_error);
+                     gpu_LU_precond_fun, &gpuLU, &wsp, &iters, &tol_error);
         MPI_Barrier(MPI_COMM_WORLD); toc();
 #else
         // time-dependent part of the Hamiltonian

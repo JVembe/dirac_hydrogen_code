@@ -5,6 +5,7 @@
 #include <mpi.h>
 #endif
 
+#define USE_PREFETCHING
 #ifdef USE_PREFETCHING
 #include <xmmintrin.h>
 #endif
