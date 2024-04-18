@@ -259,6 +259,7 @@ void csr_read(const char *fname, sparse_csr_t *sp)
     sp->row_beg = 0;
     sp->row_end = sp->nrows;
     sp->local_offset = 0;
+    sp->Ai_sub_map = NULL;
 
     sp->Ap = (csr_index_t*)malloc(sizeof(csr_index_t)*(sp->nrows+1));
     nread = fread(sp->Ap, sizeof(csr_index_t), (sp->nrows+1), fd);

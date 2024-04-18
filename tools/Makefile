@@ -8,11 +8,13 @@ OBJS=sorted_list.o \
 	utils.o \
 	superlu.o
 
-CFLAGS_CUDA = -DUSE_CUDA0
-CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
-CFLAGS = -DDEBUG -g -lm -DUSE_MPI -I/home/angainor/work/institution/usit/aus/dirac_gpu/install/include -I/cluster/home/marcink/software/superlu/include $(CFLAGS_CUDA) -fopenmp
+CUOBJS = cuda_solver.o
 
-LDFLAGS_CUDA0 = -lcublas -lcusparse -lcudart
+CFLAGS_CUDA = -DUSE_CUDA
+CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -lhipsparse
+CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I/home/angainor/work/institution/usit/aus/dirac_gpu/install/include -I/cluster/home/marcink/software/superlu/include $(CFLAGS_CUDA) -fopenmp
+
+LDFLAGS_CUDA = -lcublas -lcusparse -lcudart
 LDFLAGS = $(LDFLAGS_CUDA) -L/home/angainor/work/institution/usit/aus/dirac_gpu/install/lib -L/cluster/home/marcink/software/superlu/lib64 -lsuperlu -lopenblas -fopenmp
 
 CC?=gcc
@@ -22,17 +24,20 @@ CC_HIP = hipcc
 %.o : %.c
 	$(CC) -O3 -march=native -c $(CFLAGS) $< -o $@
 
-matrix_tool: $(OBJS) matrix_tool.o
-	$(CC) -O3 $(OBJS) $@.o -o matrix_tool -lm $(LDFLAGS)
+%.o : %.cu
+	$(CC_CUDA) -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80 -g -O3 -c $< -o $@
 
-dirac_solver: $(OBJS) dirac_solver.o
-	$(CC) -O3 $(OBJS) $@.o -o dirac_solver -lm $(LDFLAGS)
+matrix_tool: $(OBJS) $(CUOBJS) matrix_tool.o
+	$(CC) -O3 $(OBJS) $(CUOBJS) $@.o -o matrix_tool -lm $(LDFLAGS)
+
+dirac_solver: $(OBJS) $(CUOBJS) dirac_solver.o
+	$(CC) -O3 $(OBJS) $(CUOBJS) $@.o -o dirac_solver -lm $(LDFLAGS)
 
 clean:
 	rm *.o
 
 cuda:
-	nvcc -O3 $(OBJS) -o matrix_tool -lm -DUSE_CUDA -lcusparse
+	nvcc -g -O3 $(OBJS) -o matrix_tool -lm -DUSE_CUDA -lcusparse
 
 
 #matrix_tool_cuda.o: matrix_tool.c

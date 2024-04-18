@@ -37,6 +37,7 @@
 #if defined USE_CUDA | defined USE_HIP
 #include "gpu_sparse.h"
 #include "gpu_bicgstab.h"
+#include "cuda_solver.h"
 #endif
 
 #define max(a,b) ((a)>(b)?(a):(b))
@@ -122,8 +123,8 @@ void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_de
 int main(int argc, char *argv[])
 {
     char fname[256];
-    sparse_csr_t Hall, Hfull, Hfull_blk, Sdiag, S, S_blk;
-    sparse_csr_t Hst, Hst_blk;
+    sparse_csr_t Hall = {}, Hfull = {}, Hfull_blk = {}, Sdiag = {}, S = {}, S_blk = {};
+    sparse_csr_t Hst = {}, Hst_blk = {};
     sparse_csr_t *g, *gt, *h0, *s0;
     sparse_csr_t *H;
     cdouble_t *psi0;
@@ -134,8 +135,8 @@ int main(int argc, char *argv[])
     double dt, h;
     int cnt;
 
-    slu_matrix_t sluA;
-    slu_LU_t sluLU;
+    slu_matrix_t sluA = {};
+    slu_LU_t sluLU = {};
 
     if(argc<5){
         fprintf(stderr, "Usage: %s -l time -l lmax -i intensity -o omega -c cycles\n", argv[0]);
@@ -242,7 +243,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-
+    
     // compute conjugate transpose of all g matrices
     gt = malloc(sizeof(sparse_csr_t)*6*lmax*4);
     cnt = 0;
@@ -301,12 +302,31 @@ int main(int argc, char *argv[])
     csr_unblock_matrix(&Hfull, &Hfull_blk, &submatrix);
     csr_unblock_matrix(&S, &S_blk, &submatrix);
     csr_unblock_matrix(&Hst, &Hst_blk, &submatrix);
-
+    
     // Hfull_blk has the comm info copied from Hfull_blk,
     // but Hfull doesnt - it has to be modified by the block size.
     // At this point there is no comm info in Hfull - so copy it.
     csr_unblock_comm_info(&Hfull, &Hfull_blk, rank, nranks);
 
+#if defined USE_CUDA
+    cuda_init_model_matrices(6*lmax*4, g, gt, h0);
+    cuda_compute_row_col(lmax, H, &Hfull_blk, &Hfull);
+
+    csr_data_t ft[6];
+    beoyndDipolePulse_axialPart(&bdpp, dt, ft);
+    PRINTF0("f(t)\n");
+    for(int i=0; i<6; i++) PRINTF0("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
+
+    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull);
+    printf("CUDA compute timedep matrix "); tic();
+    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull);
+    toc();
+
+    /* csr_ijk_write("gpu.ijk", &Hfull); */
+    /* MPI_Finalize(); */
+    /* exit(0); */
+#endif
+    
     // block-diagonal matrices - no communication
     // csr_unblock_comm_info(&S, &S_blk, rank, nranks);
     // csr_unblock_comm_info(&Hst, &Hst_blk, rank, nranks);
@@ -348,7 +368,7 @@ int main(int argc, char *argv[])
         csr_data_t ft[6];
         complex ihdt = I*h*dt/2;
         time = time + dt;
-        beoyndDipolePulse_axialPart(&bdpp, time, ft);
+        beoyndDipolePulse_axialPart(&bdpp, dt, ft);
         PRINTF0("f(t)\n");
         for(int i=0; i<6; i++) PRINTF0("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
         
@@ -455,7 +475,7 @@ int main(int argc, char *argv[])
             gpu_vec_local_part(&xgpu, csr_nrows(&Hfull), csr_local_rowoffset(&Hfull));
             gpu_put_vec(&ygpu, NULL, csr_nrows(&S));
 
-            gpu_sparse_csr_t gpuS;
+            gpu_sparse_csr_t gpuS = {};
             gpu_put_csr(&gpuS, &S);
 
             tic(); PRINTF0("GPU S spmv ");
@@ -479,10 +499,10 @@ int main(int argc, char *argv[])
 
         // CPU solve using SuperLU
         slu_lu_solve(&sluLU, (doublecomplex*)x + csr_local_rowoffset(&Hfull), (doublecomplex*)yblk);
-
+        
 #if defined USE_CUDA | defined USE_HIP
         // compare SuperLU solve with cusparse / hipsparse solve
-        sparse_csr_t hostL, hostU;
+        sparse_csr_t hostL = {}, hostU = {};
         {
             csr_index_t *LAi, *LAj;
             csr_index_t *UAi, *UAj;
@@ -500,7 +520,7 @@ int main(int argc, char *argv[])
             free(LAi); free(LAj); free(LAx);
             free(UAi); free(UAj); free(UAx);
 
-            gpu_sparse_csr_t gpuL, gpuU;
+            gpu_sparse_csr_t gpuL = {}, gpuU = {};
             gpu_put_csr(&gpuL, &hostL);
             gpu_put_csr(&gpuU, &hostU);
 
@@ -562,8 +582,8 @@ int main(int argc, char *argv[])
 
 #if defined USE_CUDA | defined USE_HIP
         {
-            gpu_HS_matrices gpumat;
-            gpu_sparse_csr_t gpuS, gpuHfull;
+            gpu_HS_matrices gpumat = {};
+            gpu_sparse_csr_t gpuS = {}, gpuHfull = {};
 
             gpu_put_csr(&gpuS, &S);
 
@@ -578,9 +598,9 @@ int main(int argc, char *argv[])
             gpumat.S = &S;
             gpumat.gpuS = &gpuS;
 
-            gpu_sparse_csr_t gpuL, gpuU;
-            gpu_dense_vec_t tempgpu;
-            gpu_lu_t gpuLU;
+            gpu_sparse_csr_t gpuL = {}, gpuU = {};
+            gpu_dense_vec_t tempgpu = {};
+            gpu_lu_t gpuLU = {};
             gpu_put_csr(&gpuL, &hostL);
             gpu_put_csr(&gpuU, &hostU);
             gpuLU.L = &gpuL;

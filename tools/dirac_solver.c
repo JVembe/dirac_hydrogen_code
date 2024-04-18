@@ -37,6 +37,7 @@
 
 #if defined USE_CUDA | defined USE_HIP
 #include "gpu_sparse.h"
+#include "cuda_solver.h"
 #endif
 
 int rank = 0, nranks = 1;
@@ -326,6 +327,11 @@ int main(int argc, char *argv[])
     // csr_unblock_comm_info(&S, &S_blk, rank, nranks);
     // csr_unblock_comm_info(&Hst, &Hst_blk, rank, nranks);
 
+#if defined USE_CUDA
+    cuda_init_model_matrices(6*lmax*4, g, gt, h0);
+    cuda_compute_row_col(lmax, H, &Hfull_blk, &Hfull);
+#endif
+    
     // read initial state
     snprintf(fname, 255, "psi0.vec");
     vec_read(fname, Hfull.row_beg, Hfull.row_end, &psi0);
@@ -378,9 +384,9 @@ int main(int argc, char *argv[])
 #endif
 
 #if defined USE_CUDA | defined USE_HIP
-    sparse_csr_t hostL, hostU;
+    sparse_csr_t hostL = {}, hostU = {};
     gpu_sparse_csr_t gpuL = {}, gpuU = {};
-    gpu_lu_t gpuLU;
+    gpu_lu_t gpuLU = {};
     gpu_sparse_csr_t gpuS = {}, gpuHfull = {};
     gpu_dense_vec_t xgpu = {}, rhsgpu = {}, tempgpu = {};
 
@@ -455,19 +461,23 @@ int main(int argc, char *argv[])
         /*     for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i])); */
         /* } */
 
-        // time-dependent part of the Hamiltonian
-        compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
-
 #if defined USE_CUDA | defined USE_HIP
-        PRINTF0("host to device H"); tic();
-        gpu_put_csr(&gpuHfull, &Hfull);
+        /* PRINTF0("host to device H"); tic(); */
+        /* gpu_put_csr(&gpuHfull, &Hfull); */
+        /* toc(); */
+
+        // time-dependent part of the Hamiltonian
+        PRINTF0("GPU matrix assembly "); tic();
+        cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpuHfull);
         toc();
 
+        PRINTF0("rhs vector "); tic();
         // rhs = (S-H)*psi(n-1)
         csr_init_communication(&Hfull, (csr_data_t*)xgpu.x, rank, nranks);
         csr_comm(&Hfull, rank, nranks);
         gpu_spmv(&gpuHfull, &xgpu, &rhsgpu, CMPLX(-1,0), CMPLX(0,0));
         gpu_spmv_local(&gpuS, &xgpu, &rhsgpu, CMPLX(1,0), CMPLX(1,0));
+        toc();
 
         gpu_HS_matrices gpumat;
         gpumat.H = &Hfull;
@@ -481,6 +491,9 @@ int main(int argc, char *argv[])
                      gpu_LU_precond_fun, &gpuLU, &gpuwsp, &iters, &tol_error);
         MPI_Barrier(MPI_COMM_WORLD); toc();
 #else
+        // time-dependent part of the Hamiltonian
+        compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
+
         // rhs = (S-H)*psi(n-1)
         for(int i=0; i<csr_nrows(&Hfull); i++) rhs[i] = 0;
         csr_init_communication(&Hfull, x, rank, nranks);
@@ -500,7 +513,7 @@ int main(int argc, char *argv[])
 #endif
 
         // collect the results on rank 0 for un-permuting and printing
-        if(iter%10==0){
+        if(iter%100==0){
 
 #if defined USE_CUDA | defined USE_HIP
             // get result from the GPU

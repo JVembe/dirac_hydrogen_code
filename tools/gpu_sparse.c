@@ -35,22 +35,26 @@ void gpu_sparse_fini()
     CHECK_GPUSPARSE(gpusparseDestroy(sparseHandle));
 }
 
+size_t total_bytes = 0;
+
 // copy sparse matrix from host to device
 void gpu_put_csr(gpu_sparse_csr_t *Agpu, const sparse_csr_t *Ahost)
 {
-    // Allocate device memory for CSR matrix and vectors
-    csr_index_t *dAp, *dAi;
     csr_data_t  *dAx;
+    size_t bytes = 0;
 
     if(NULL != Agpu->Ax){
-        dAp = Agpu->Ap;
-        dAi = Agpu->Ai;
         dAx = Agpu->Ax;
     } else {
+        // Allocate device memory for CSR matrix and vectors
+        csr_index_t *dAp, *dAi;
         CHECK_GPU(gpuMalloc((void**) &dAp, (1+csr_nrows(Ahost))*sizeof(csr_index_t)));
         CHECK_GPU(gpuMalloc((void**) &dAi, csr_nnz(Ahost)*sizeof(csr_index_t)));
         CHECK_GPU(gpuMalloc((void**) &dAx, csr_nnz(Ahost)*sizeof(csr_data_t)));
-        
+        bytes += (1+csr_nrows(Ahost))*sizeof(csr_index_t);
+        bytes += csr_nnz(Ahost)*sizeof(csr_index_t);
+        bytes += csr_nnz(Ahost)*sizeof(csr_data_t);
+               
         // Create CSR matrix and vectors
         gpusparseSpMatDescr_t Adevice;
         CHECK_GPUSPARSE(gpusparseCreateCsr(&Adevice, csr_nrows(Ahost), csr_ncols(Ahost), csr_nnz(Ahost),
@@ -64,11 +68,24 @@ void gpu_put_csr(gpu_sparse_csr_t *Agpu, const sparse_csr_t *Ahost)
         Agpu->nrows = csr_nrows(Ahost);
         Agpu->ncols = csr_ncols(Ahost);
         Agpu->cuBuffer = NULL;
+
+        CHECK_GPU(gpuMemcpy(dAp, Ahost->Ap, (1+csr_nrows(Ahost))*sizeof(csr_index_t), gpuMemcpyHostToDevice));
+        CHECK_GPU(gpuMemcpy(dAi, Ahost->Ai, csr_nnz(Ahost)*sizeof(csr_index_t), gpuMemcpyHostToDevice));
+
+        Agpu->Ai_sub_map = NULL;
+        if(Ahost->Ai_sub_map) {
+            csr_index_t *dAi_sub_map;
+            CHECK_GPU(gpuMalloc((void**) &dAi_sub_map, csr_nnz(Ahost)*sizeof(csr_index_t)));
+            CHECK_GPU(gpuMemcpy(dAi_sub_map, Ahost->Ai_sub_map, csr_nnz(Ahost)*sizeof(csr_index_t), gpuMemcpyHostToDevice));
+            Agpu->Ai_sub_map = dAi_sub_map;
+            bytes += csr_nnz(Ahost)*sizeof(csr_index_t);
+        }
+
+        total_bytes += bytes;
+        PDEBUG("gpu_put_csr: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
     }
 
-    // Copy the CSR matrix and vectors from host to device
-    CHECK_GPU(gpuMemcpy(dAp, Ahost->Ap, (1+csr_nrows(Ahost))*sizeof(csr_index_t), gpuMemcpyHostToDevice));
-    CHECK_GPU(gpuMemcpy(dAi, Ahost->Ai, csr_nnz(Ahost)*sizeof(csr_index_t), gpuMemcpyHostToDevice));
+    // Copy the CSR matrix values from host to device
     CHECK_GPU(gpuMemcpy(dAx, Ahost->Ax, csr_nnz(Ahost)*sizeof(csr_data_t),  gpuMemcpyHostToDevice));
 }
 
@@ -83,7 +100,11 @@ void gpu_free_csr(gpu_sparse_csr_t *Agpu)
 
 void gpu_put_vec(gpu_dense_vec_t *xgpu, const csr_data_t *xhost, csr_index_t dim)
 {
+    size_t bytes = dim*sizeof(csr_data_t);
     CHECK_GPU(gpuMalloc((void**) &xgpu->x, dim*sizeof(csr_data_t)));
+    total_bytes += bytes;
+    PDEBUG("gpu_put_vec: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
+    
     if(xhost) {
         CHECK_GPU(gpuMemcpy(xgpu->x, xhost, dim*sizeof(csr_data_t), gpuMemcpyHostToDevice));
     } else {
@@ -123,6 +144,7 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
     csr_data_t alpha = 1;
     size_t bufferSize;
     int value;
+    size_t bytes;
 
     cusparseSpSV_createDescr(&L->spsvDescr);
     value = CUSPARSE_FILL_MODE_LOWER;
@@ -140,6 +162,8 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                       L->spsvDescr,
                                       &bufferSize));
     CHECK_GPU(gpuMalloc((void**) &L->cuBuffer, bufferSize));
+    bytes += bufferSize;
+
     CHECK_GPU(cusparseSpSV_analysis(sparseHandle,
                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha,
@@ -171,6 +195,8 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                       U->spsvDescr,
                                       &bufferSize));
     CHECK_GPU(gpuMalloc((void**) &U->cuBuffer, bufferSize));
+    bytes += bufferSize;
+
     CHECK_GPU(cusparseSpSV_analysis(sparseHandle,
                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha,
@@ -181,6 +207,9 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
                                     CUSPARSE_SPSV_ALG_DEFAULT,
                                     U->spsvDescr,
                                     U->cuBuffer));
+    
+    total_bytes += bytes;    
+    PDEBUG("gpu_lu_analyze: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
 }
 
 void gpu_lu_solve(const gpu_sparse_csr_t *L, const gpu_sparse_csr_t *U, const gpu_dense_vec_t *x, gpu_dense_vec_t *y, gpu_dense_vec_t *temp) {
@@ -221,7 +250,10 @@ void gpu_spmv(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t *y, c
                                                  GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize));
 
         // Allocate buffer for the SpMV operation
-        CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize*sizeof(csr_data_t)));
+        CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize));
+        size_t bytes = bufferSize;
+        total_bytes += bytes;    
+        PDEBUG("gpu_spmv: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
     }
 
     CHECK_GPUSPARSE(gpusparseSpMV(sparseHandle,
@@ -242,7 +274,10 @@ void gpu_spmv_local(gpu_sparse_csr_t *Hfull, gpu_dense_vec_t *x, gpu_dense_vec_t
                                                  GPU_C_64F, GPUSPARSE_SPMV_CSR_ALG1, (size_t*)&bufferSize));
 
         // Allocate buffer for the SpMV operation
-        CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize*sizeof(csr_data_t)));
+        CHECK_GPU(gpuMalloc((void**) &Hfull->cuBuffer, bufferSize));
+        size_t bytes = bufferSize;
+        total_bytes += bytes;    
+        PDEBUG("gpu_spmv_local: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
     }
 
     CHECK_GPUSPARSE(gpusparseSpMV(sparseHandle,
@@ -377,10 +412,10 @@ void gpu_spmb_block_test(sparse_csr_t H_blk, csr_data_t *x, csr_data_t *yfull, s
 // Function for testing the result of the sparse matrix-vector multiplication.
 void gpu_spmv_test(sparse_csr_t Hfull, csr_data_t *x, csr_data_t *yfull) {
 
-    gpu_sparse_csr_t gpuHfull;
+    gpu_sparse_csr_t gpuHfull = {};
     gpu_put_csr(&gpuHfull, &Hfull);
 
-    gpu_dense_vec_t xgpu, ygpu;
+    gpu_dense_vec_t xgpu = {}, ygpu = {};
     gpu_put_vec(&xgpu, x, csr_ncols(&Hfull));
     gpu_put_vec(&ygpu, NULL, csr_nrows(&Hfull));
 
