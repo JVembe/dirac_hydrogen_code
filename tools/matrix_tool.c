@@ -317,9 +317,10 @@ int main(int argc, char *argv[])
     PRINTF0("f(t)\n");
     for(int i=0; i<6; i++) PRINTF0("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
 
-    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull);
+    gpu_sparse_csr_t gpu_Hfull = {};
+    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpu_Hfull);
     printf("CUDA compute timedep matrix "); tic();
-    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull);
+    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpu_Hfull);
     toc();
 
     /* csr_ijk_write("gpu.ijk", &Hfull); */

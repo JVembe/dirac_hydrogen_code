@@ -9,6 +9,7 @@ typedef cuDoubleComplex gpu_complex_t;
 // Error types and constants
 #define gpuError_t                                cudaError_t
 #define gpuSuccess                                cudaSuccess
+#define gpuDeviceProp                             struct cudaDeviceProp
 
 // Device management
 #define gpuGetDeviceCount                         cudaGetDeviceCount
@@ -67,7 +68,7 @@ typedef cuDoubleComplex gpu_complex_t;
 #define GPUSPARSE_SPMAT_FILL_MODE                 CUSPARSE_SPMAT_FILL_MODE
 #define GPUSPARSE_SPMAT_DIAG_TYPE                 CUSPARSE_SPMAT_DIAG_TYPE
 #define GPUSPARSE_DIAG_TYPE_NON_UNIT              CUSPARSE_DIAG_TYPE_NON_UNIT
-#define GPUSPARSE_FILL_MODE_LOWER                 CUSPSPARSE_FILL_MODE_LOWER
+#define GPUSPARSE_FILL_MODE_LOWER                 CUSPARSE_FILL_MODE_LOWER
 #define GPUSPARSE_FILL_MODE_UPPER                 CUSPARSE_FILL_MODE_UPPER
 #define GPUSPARSE_SPSV_ALG_DEFAULT                CUSPARSE_SPSV_ALG_DEFAULT
 

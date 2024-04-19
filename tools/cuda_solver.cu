@@ -171,37 +171,37 @@ extern "C" {
             size_t bytes = 0;
 
             // Ai_orig
-            CHECK_GPU(gpuMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
+            CHECK_GPU(cudaMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
             CHECK_GPU(cudaMemcpyToSymbol(Ai_orig, &devp, sizeof(csr_index_t*), 0, cudaMemcpyHostToDevice));
             CHECK_GPU(cudaMemcpy(devp, cpu_Ai_orig, sizeof(csr_index_t)*Hfull_nnz, cudaMemcpyHostToDevice));
             bytes += sizeof(csr_index_t)*Hfull_nnz;
 
             // Aj_orig
-            CHECK_GPU(gpuMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
+            CHECK_GPU(cudaMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
             CHECK_GPU(cudaMemcpyToSymbol(Aj_orig, &devp, sizeof(csr_index_t*), 0, cudaMemcpyHostToDevice));
             CHECK_GPU(cudaMemcpy(devp, cpu_Aj_orig, sizeof(csr_index_t)*Hfull_nnz, cudaMemcpyHostToDevice));
             bytes += sizeof(csr_index_t)*Hfull_nnz;
 
             // Ki
-            CHECK_GPU(gpuMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
+            CHECK_GPU(cudaMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
             CHECK_GPU(cudaMemcpyToSymbol(Ki, &devp, sizeof(csr_index_t*), 0, cudaMemcpyHostToDevice));
             CHECK_GPU(cudaMemcpy(devp, cpu_Ki, sizeof(csr_index_t)*Hfull_nnz, cudaMemcpyHostToDevice));
             bytes += sizeof(csr_index_t)*Hfull_nnz;
 
             // Kj
-            CHECK_GPU(gpuMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
+            CHECK_GPU(cudaMalloc((void**) &devp, sizeof(csr_index_t)*Hfull_nnz));
             CHECK_GPU(cudaMemcpyToSymbol(Kj, &devp, sizeof(csr_index_t*), 0, cudaMemcpyHostToDevice));
             CHECK_GPU(cudaMemcpy(devp, cpu_Kj, sizeof(csr_index_t)*Hfull_nnz, cudaMemcpyHostToDevice));
             bytes += sizeof(csr_index_t)*Hfull_nnz;
 
             // H0
-            CHECK_GPU(gpuMalloc((void**) &devp, sizeof(csr_data_t)*Hfull_nnz*lmax));
+            CHECK_GPU(cudaMalloc((void**) &devp, sizeof(csr_data_t)*Hfull_nnz*lmax));
             CHECK_GPU(cudaMemcpyToSymbol(H0, &devp, sizeof(csr_data_t*), 0, cudaMemcpyHostToDevice));
             CHECK_GPU(cudaMemcpy(devp, cpu_H0, sizeof(csr_data_t)*Hfull_nnz*lmax, cudaMemcpyHostToDevice));
             bytes += sizeof(csr_data_t)*Hfull_nnz*lmax;
 
             // H1
-            CHECK_GPU(gpuMalloc((void**) &devp, sizeof(csr_data_t)*Hfull_nnz*lmax));
+            CHECK_GPU(cudaMalloc((void**) &devp, sizeof(csr_data_t)*Hfull_nnz*lmax));
             CHECK_GPU(cudaMemcpyToSymbol(H1, &devp, sizeof(csr_data_t*), 0, cudaMemcpyHostToDevice));
             CHECK_GPU(cudaMemcpy(devp, cpu_H1, sizeof(csr_data_t)*Hfull_nnz*lmax, cudaMemcpyHostToDevice));
             bytes += sizeof(csr_data_t)*Hfull_nnz*lmax;
@@ -233,11 +233,11 @@ extern "C" {
             CHECK_GPU(cudaMemcpyToSymbol(Hfull, gpu_Hfull, sizeof(gpu_sparse_csr_t), 0, cudaMemcpyHostToDevice));
 
             csr_data_t *devp;
-            CHECK_GPU(gpuMalloc((void**) &devp, lmax*4*subsize*sizeof(csr_data_t)));
+            CHECK_GPU(cudaMalloc((void**) &devp, lmax*4*subsize*sizeof(csr_data_t)));
             bytes += lmax*4*subsize*sizeof(csr_data_t);
             CHECK_GPU(cudaMemcpyToSymbol(pgsum, &devp, sizeof(csr_data_t*), 0, cudaMemcpyHostToDevice));
 
-            CHECK_GPU(gpuMalloc((void**) &devp, lmax*4*subsize*sizeof(csr_data_t)));
+            CHECK_GPU(cudaMalloc((void**) &devp, lmax*4*subsize*sizeof(csr_data_t)));
             bytes += lmax*4*subsize*sizeof(csr_data_t);
             CHECK_GPU(cudaMemcpyToSymbol(pgtsum, &devp, sizeof(csr_data_t*), 0, cudaMemcpyHostToDevice));
 
@@ -271,7 +271,7 @@ extern "C" {
 
         submatrix_nnz = cpu_g[0].nnz;
 
-        CHECK_GPU(gpuMalloc((void**) &devp, nmatrices*sizeof(gpu_sparse_csr_t)));
+        CHECK_GPU(cudaMalloc((void**) &devp, nmatrices*sizeof(gpu_sparse_csr_t)));
         bytes += nmatrices*sizeof(gpu_sparse_csr_t);
         CHECK_GPU(cudaMemcpyToSymbol(g, &devp, sizeof(gpu_sparse_csr_t*), 0, cudaMemcpyHostToDevice));
         for(int i=0; i<nmatrices; i++){
@@ -280,7 +280,7 @@ extern "C" {
             CHECK_GPU(cudaMemcpy(devp+i, &gputemp, sizeof(gpu_sparse_csr_t), cudaMemcpyHostToDevice));
         }
 
-        CHECK_GPU(gpuMalloc((void**) &devp, nmatrices*sizeof(gpu_sparse_csr_t)));
+        CHECK_GPU(cudaMalloc((void**) &devp, nmatrices*sizeof(gpu_sparse_csr_t)));
         bytes += nmatrices*sizeof(gpu_sparse_csr_t);
         CHECK_GPU(cudaMemcpyToSymbol(gt, &devp, sizeof(gpu_sparse_csr_t*), 0, cudaMemcpyHostToDevice));
         for(int i=0; i<nmatrices; i++){
@@ -289,7 +289,7 @@ extern "C" {
             CHECK_GPU(cudaMemcpy(devp+i, &gputemp, sizeof(gpu_sparse_csr_t), cudaMemcpyHostToDevice));
         }
 
-        CHECK_GPU(gpuMalloc((void**) &devp, 4*sizeof(gpu_sparse_csr_t)));
+        CHECK_GPU(cudaMalloc((void**) &devp, 4*sizeof(gpu_sparse_csr_t)));
         bytes += nmatrices*sizeof(gpu_sparse_csr_t);
         CHECK_GPU(cudaMemcpyToSymbol(h0, &devp, sizeof(gpu_sparse_csr_t*), 0, cudaMemcpyHostToDevice));
         for(int i=0; i<4; i++){

@@ -8,17 +8,19 @@ OBJS=sorted_list.o \
 	utils.o \
 	superlu.o
 
-CUOBJS0 = cuda_solver.o
-CFLAGS_CUDA =
+SLU_HOME = /cluster/home/marcink/software/superlu
+
+CUOBJS = cuda_solver.o
+CFLAGS_CUDA = -DUSE_CUDA
+LDFLAGS_CUDA = -lcublas -lcusparse -lcudart
 
 ROCM_HOME=/opt/rocm-5.4.2
-CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -I$(ROCM_HOME)/include -DROCM_MATHLIBS_API_USE_HIP_COMPLEX
+CFLAGS_HIP0 = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -I$(ROCM_HOME)/include -DROCM_MATHLIBS_API_USE_HIP_COMPLEX
+LDFLAGS_HIP0 = -L$(ROCM_HOME)/lib -lhipsparse -lhipblas -lamdhip64
 
-SLU_HOME = /itf-fi-ml/home/marcink/software/superlu
-CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_HIP) -fopenmp
+CFLAGS_ACCEL = $(CFLAGS_HIP) $(CFLAGS_CUDA)
+CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp
 
-LDFLAGS_CUDA0 = -lcublas -lcusparse -lcudart
-LDFLAGS_HIP = -L$(ROCM_HOME)/lib -lhipsparse -lhipblas -lamdhip64
 LDFLAGS_ACCEL = $(LDFLAGS_HIP) $(LDFLAGS_CUDA)
 LDFLAGS = $(LDFLAGS_ACCEL) -L$(SLU_HOME)/lib64 -lsuperlu -lopenblas -fopenmp
 
