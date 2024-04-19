@@ -17,7 +17,7 @@ void gpu_sparse_init()
 
     // Print device info
     int device;
-    struct cudaDeviceProp prop;
+    gpuDeviceProp prop;
     CHECK_GPU(gpuGetDevice(&device));
     CHECK_GPU(gpuGetDeviceProperties(&prop, device));
     printf("rank %d: device %s pciBusID %d\n", rank, prop.name, prop.pciBusID);
@@ -145,65 +145,65 @@ void gpu_lu_analyze(gpu_sparse_csr_t *L, gpu_sparse_csr_t *U, gpu_dense_vec_t *x
     int value;
     size_t bytes;
 
-    cusparseSpSV_createDescr(&L->spsvDescr);
-    value = CUSPARSE_FILL_MODE_LOWER;
-    CHECK_GPU(cusparseSpMatSetAttribute(L->desc, CUSPARSE_SPMAT_FILL_MODE, &value, sizeof(value)));
-    value = CUSPARSE_DIAG_TYPE_NON_UNIT;
-    CHECK_GPU(cusparseSpMatSetAttribute(L->desc, CUSPARSE_SPMAT_DIAG_TYPE, &value, sizeof(value)));
-    CHECK_GPU(cusparseSpSV_bufferSize(sparseHandle,
-                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
+    gpusparseSpSV_createDescr(&L->spsvDescr);
+    value = GPUSPARSE_FILL_MODE_LOWER;
+    CHECK_GPU(gpusparseSpMatSetAttribute(L->desc, GPUSPARSE_SPMAT_FILL_MODE, &value, sizeof(value)));
+    value = GPUSPARSE_DIAG_TYPE_NON_UNIT;
+    CHECK_GPU(gpusparseSpMatSetAttribute(L->desc, GPUSPARSE_SPMAT_DIAG_TYPE, &value, sizeof(value)));
+    CHECK_GPU(gpusparseSpSV_bufferSize(sparseHandle,
+                                      GPUSPARSE_OPERATION_NON_TRANSPOSE,
                                       &alpha,
                                       L->desc,
                                       x->desc,
                                       temp->desc,
-                                      CUDA_C_64F,
-                                      CUSPARSE_SPSV_ALG_DEFAULT,
+                                      GPU_C_64F,
+                                      GPUSPARSE_SPSV_ALG_DEFAULT,
                                       L->spsvDescr,
                                       &bufferSize));
     CHECK_GPU(gpuMalloc((void**) &L->cuBuffer, bufferSize));
     bytes += bufferSize;
 
-    CHECK_GPU(cusparseSpSV_analysis(sparseHandle,
-                                    CUSPARSE_OPERATION_NON_TRANSPOSE,
+    CHECK_GPU(gpusparseSpSV_analysis(sparseHandle,
+                                    GPUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha,
                                     L->desc,
                                     x->desc,
                                     temp->desc,
-                                    CUDA_C_64F,
-                                    CUSPARSE_SPSV_ALG_DEFAULT,
+                                    GPU_C_64F,
+                                    GPUSPARSE_SPSV_ALG_DEFAULT,
                                     L->spsvDescr,
                                     L->cuBuffer));
 
-    cusparseSpSV_createDescr(&U->spsvDescr);
-    value = CUSPARSE_FILL_MODE_UPPER;
-    CHECK_GPU(cusparseSpMatSetAttribute(U->desc, CUSPARSE_SPMAT_FILL_MODE, &value, sizeof(value)));
-    value = CUSPARSE_DIAG_TYPE_NON_UNIT;
-    CHECK_GPU(cusparseSpMatSetAttribute(U->desc, CUSPARSE_SPMAT_DIAG_TYPE, &value, sizeof(value)));
+    gpusparseSpSV_createDescr(&U->spsvDescr);
+    value = GPUSPARSE_FILL_MODE_UPPER;
+    CHECK_GPU(gpusparseSpMatSetAttribute(U->desc, GPUSPARSE_SPMAT_FILL_MODE, &value, sizeof(value)));
+    value = GPUSPARSE_DIAG_TYPE_NON_UNIT;
+    CHECK_GPU(gpusparseSpMatSetAttribute(U->desc, GPUSPARSE_SPMAT_DIAG_TYPE, &value, sizeof(value)));
 
     gpusparseDnVecDescr_t outdesc = y->desc;
     if(y->desc_local) outdesc = y->desc_local;
 
-    CHECK_GPU(cusparseSpSV_bufferSize(sparseHandle,
-                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
+    CHECK_GPU(gpusparseSpSV_bufferSize(sparseHandle,
+                                      GPUSPARSE_OPERATION_NON_TRANSPOSE,
                                       &alpha,
                                       U->desc,
                                       x->desc,
                                       outdesc,
-                                      CUDA_C_64F,
-                                      CUSPARSE_SPSV_ALG_DEFAULT,
+                                      GPU_C_64F,
+                                      GPUSPARSE_SPSV_ALG_DEFAULT,
                                       U->spsvDescr,
                                       &bufferSize));
     CHECK_GPU(gpuMalloc((void**) &U->cuBuffer, bufferSize));
     bytes += bufferSize;
 
-    CHECK_GPU(cusparseSpSV_analysis(sparseHandle,
-                                    CUSPARSE_OPERATION_NON_TRANSPOSE,
+    CHECK_GPU(gpusparseSpSV_analysis(sparseHandle,
+                                    GPUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha,
                                     U->desc,
                                     x->desc,
                                     outdesc,
-                                    CUDA_C_64F,
-                                    CUSPARSE_SPSV_ALG_DEFAULT,
+                                    GPU_C_64F,
+                                    GPUSPARSE_SPSV_ALG_DEFAULT,
                                     U->spsvDescr,
                                     U->cuBuffer));
 
@@ -215,28 +215,36 @@ void gpu_lu_solve(const gpu_sparse_csr_t *L, const gpu_sparse_csr_t *U, const gp
                   gpu_dense_vec_t *y, gpu_dense_vec_t *temp)
 {
     csr_data_t alpha = 1;
-    CHECK_GPU(cusparseSpSV_solve(sparseHandle,
-                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+    (gpusparseSpSV_solve(sparseHandle,
+                                 GPUSPARSE_OPERATION_NON_TRANSPOSE,
                                  &alpha,
                                  L->desc,
                                  x->desc,
                                  temp->desc,
-                                 CUDA_C_64F,
-                                 CUSPARSE_SPSV_ALG_DEFAULT,
-                                 L->spsvDescr));
+                                 GPU_C_64F,
+                                 GPUSPARSE_SPSV_ALG_DEFAULT,
+                                 L->spsvDescr
+#ifdef USE_HIP
+			         ,L->cuBuffer
+#endif
+			 ));
 
     gpusparseDnVecDescr_t outdesc = y->desc;
     if(y->desc_local) outdesc = y->desc_local;
 
-    CHECK_GPU(cusparseSpSV_solve(sparseHandle,
-				 CUSPARSE_OPERATION_NON_TRANSPOSE,
+    (gpusparseSpSV_solve(sparseHandle,
+				 GPUSPARSE_OPERATION_NON_TRANSPOSE,
 				 &alpha,
 				 U->desc,
 				 temp->desc,
 				 outdesc,
-				 CUDA_C_64F,
-				 CUSPARSE_SPSV_ALG_DEFAULT,
-				 U->spsvDescr));
+				 GPU_C_64F,
+				 GPUSPARSE_SPSV_ALG_DEFAULT,
+				 U->spsvDescr
+#ifdef USE_HIP
+			         ,U->cuBuffer
+#endif
+			 ));
 }
 
 

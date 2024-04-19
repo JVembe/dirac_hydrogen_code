@@ -1,9 +1,10 @@
 #ifndef _GPU_BICGSTAB_H
 #define _GPU_BICGSTAB_H
 
+#include "gpu_sparse.h"
+
 #ifdef USE_CUDA
 #include <cublas_v2.h>
-#include "gpu_sparse.h"
 
 #define CHECK_GPU_BLAS(func) {						\
         cublasStatus_t status = (func);					\
@@ -14,7 +15,10 @@
         }                                                               \
     }
 
-#define gpucublasHandle_t  cublasHandle_t
+typedef cuDoubleComplex gpu_complex_t;
+
+#define gpublasHandle_t  cublasHandle_t
+#define gpublasCreate    cublasCreate
 
 #define gpuMakeComplex make_cuDoubleComplex
 #define gpuCsub cuCsub
@@ -22,17 +26,41 @@
 #define gpuCabs cuCabs
 #define gpuCdiv cuCdiv
 #define gpuCmul cuCmul
+#define gpuCreal cuCreal
+#define gpuCimag cuCimag
 
 #define _gpuZdotc  cublasZdotc
 #define _gpuZaxpy  cublasZaxpy
 #define _gpuZscal  cublasZscal
 #define _gpuZcopy  cublasZcopy
 
-extern gpucublasHandle_t handle;
+#endif
 
-static inline cuDoubleComplex gpuZdotc(int n, const gpu_complex_t *x, int incx, const gpu_complex_t *y, int incy)
+#ifdef USE_HIP
+#define gpublasHandle_t  hipblasHandle_t
+#define gpublasCreate    hipblasCreate
+
+#define gpuMakeComplex make_hipDoubleComplex
+#define gpuCsub hipCsub
+#define gpuCadd hipCadd
+#define gpuCabs hipCabs
+#define gpuCdiv hipCdiv
+#define gpuCmul hipCmul
+#define gpuCreal hipCreal
+#define gpuCimag hipCimag
+
+#define _gpuZdotc  hipblasZdotc
+#define _gpuZaxpy  hipblasZaxpy
+#define _gpuZscal  hipblasZscal
+#define _gpuZcopy  hipblasZcopy
+
+#endif
+
+extern gpublasHandle_t handle;
+
+static inline gpu_complex_t gpuZdotc(int n, const gpu_complex_t *x, int incx, const gpu_complex_t *y, int incy)
 {
-    cuDoubleComplex result = {0};
+    gpu_complex_t result = {0};
     CHECK_GPU_BLAS(_gpuZdotc(handle, n, x, incx, y, incy, &result));
     return result;
 }
@@ -64,6 +92,5 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
                   int nrow, int ncol, int local_col_beg,
                   gpu_precond_fun psolve, const void *precond, gpu_solver_workspace_t *wsp, int *iters, double *tol_error);
 
-#endif
 
 #endif

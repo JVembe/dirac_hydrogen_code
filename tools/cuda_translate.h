@@ -44,12 +44,18 @@ typedef cuDoubleComplex gpu_complex_t;
 // Sparse matrix-vector (SpMV) specific
 #define gpusparseSpMatDescr_t                     cusparseSpMatDescr_t
 #define gpusparseDnVecDescr_t                     cusparseDnVecDescr_t
+#define gpusparseSpSVDescr_t                      cusparseSpSVDescr_t
+#define gpusparseSpSV_createDescr                 cusparseSpSV_createDescr
 #define gpusparseCreateCsr                        cusparseCreateCsr
 #define gpusparseCreateDnVec                      cusparseCreateDnVec
 #define gpusparseDestroyDnVec                     cusparseDestroyDnVec
 #define gpusparseDestroySpMat                     cusparseDestroySpMat
 #define gpusparseSpMV_bufferSize                  cusparseSpMV_bufferSize
 #define gpusparseSpMV                             cusparseSpMV
+#define gpusparseSpMatSetAttribute                cusparseSpMatSetAttribute
+#define gpusparseSpSV_bufferSize                  cusparseSpSV_bufferSize
+#define gpusparseSpSV_analysis                    cusparseSpSV_analysis
+#define gpusparseSpSV_solve                       cusparseSpSV_solve
 
 // Sparse library constants
 #define GPUSPARSE_INDEX_32I                       CUSPARSE_INDEX_32I
@@ -57,6 +63,13 @@ typedef cuDoubleComplex gpu_complex_t;
 #define GPU_C_64F                                 CUDA_C_64F
 #define GPUSPARSE_OPERATION_NON_TRANSPOSE         CUSPARSE_OPERATION_NON_TRANSPOSE
 #define GPUSPARSE_SPMV_CSR_ALG1                   CUSPARSE_SPMV_CSR_ALG1
+#define GPUPARSE_FILL_MODE_LOWER                  CUSPARSE_FILL_MODE_LOWER
+#define GPUSPARSE_SPMAT_FILL_MODE                 CUSPARSE_SPMAT_FILL_MODE
+#define GPUSPARSE_SPMAT_DIAG_TYPE                 CUSPARSE_SPMAT_DIAG_TYPE
+#define GPUSPARSE_DIAG_TYPE_NON_UNIT              CUSPARSE_DIAG_TYPE_NON_UNIT
+#define GPUSPARSE_FILL_MODE_LOWER                 CUSPSPARSE_FILL_MODE_LOWER
+#define GPUSPARSE_FILL_MODE_UPPER                 CUSPARSE_FILL_MODE_UPPER
+#define GPUSPARSE_SPSV_ALG_DEFAULT                CUSPARSE_SPSV_ALG_DEFAULT
 
 #define CHECK_GPU(func) {						\
         cudaError_t status = (func);					\

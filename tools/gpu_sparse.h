@@ -18,7 +18,7 @@ typedef struct {
     csr_data_t  *Ax;
     csr_index_t *Ai_sub_map;
     gpusparseSpMatDescr_t desc;
-    cusparseSpSVDescr_t spsvDescr;
+    gpusparseSpSVDescr_t spsvDescr;
     void *cuBuffer;
 } gpu_sparse_csr_t;
 
