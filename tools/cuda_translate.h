@@ -1,7 +1,7 @@
 #ifndef _CUDA_TRANSLATE_H
 #define _CUDA_TRANSLATE_H
 
-#if defined USE_CUDA or defined __CUDAPCC__
+#if defined USE_CUDA || defined __CUDACC__
 
 #include <cuda_runtime_api.h>
 #include <cusparse.h>
@@ -94,8 +94,6 @@ typedef cuDoubleComplex gpu_complex_t;
         }                                                               \
     }
 
-#endif
-
 #define CHECK_GPU_BLAS(func) {						\
         cublasStatus_t status = (func);					\
         if (status != CUBLAS_STATUS_SUCCESS) {                          \
@@ -123,5 +121,7 @@ typedef cuDoubleComplex gpu_complex_t;
 #define _gpuZaxpy  cublasZaxpy
 #define _gpuZscal  cublasZscal
 #define _gpuZcopy  cublasZcopy
+
+#endif
 
 #endif /* _CUDA_TRANSLATE_H */

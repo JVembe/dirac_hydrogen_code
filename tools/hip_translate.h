@@ -105,7 +105,6 @@
     }
 
 typedef hipDoubleComplex gpu_complex_t;
-#define make_gpu_complex_t                        make_hipDoubleComplex
 #define gpublasHandle_t  hipblasHandle_t
 #define gpublasCreate    hipblasCreate
 

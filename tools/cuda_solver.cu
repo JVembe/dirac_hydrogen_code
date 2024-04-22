@@ -30,7 +30,7 @@ extern "C" {
                                           csr_data_t ft0, csr_data_t ft1, csr_data_t ft2,
                                           csr_data_t ft3, csr_data_t ft4, csr_data_t ft5)
     {
-        const uint ix = hipBlockIdx_x*blockDim.x + threadIdx.x;
+        const uint ix = blockIdx.x*blockDim.x + threadIdx.x;
         const uint gx = blockIdx.y;
         const uint lx = blockIdx.z;
         csr_data_t ft[6] = {ft0, ft1, ft2, ft3, ft4, ft5};
@@ -70,8 +70,8 @@ extern "C" {
         const uint map_loc = nnzid*submatrix_nnz + submatrix_loc; // id of the global non-zero entry this thread computes
 
         // multipliers
-        const gpu_complex_t ki = make_gpu_complex_t(Ki[nnzid], 0);
-        const gpu_complex_t kj = make_gpu_complex_t(Kj[nnzid], 0);
+        const gpu_complex_t ki = gpuMakeComplex(Ki[nnzid], 0);
+        const gpu_complex_t kj = gpuMakeComplex(Kj[nnzid], 0);
         const gpu_complex_t ki2 = gpuCmul(ki, ki);
         const gpu_complex_t ki3 = gpuCmul(ki2, ki);
         const gpu_complex_t kikj = gpuCmul(ki, kj);
@@ -82,7 +82,7 @@ extern "C" {
         if(submatrix_loc < submatrix_nnz){
 
             // diagonal part
-            result = make_gpu_complex_t(0.0, 0.0);
+            result = gpuMakeComplex(0.0, 0.0);
             if(Ai_orig[nnzid] == Aj_orig[nnzid]){
                 tmp = gpuCadd(gpuCmul(h0[1].Ax[submatrix_loc], ki), h0[0].Ax[submatrix_loc]);
                 tmp = gpuCadd(gpuCmul(h0[2].Ax[submatrix_loc], ki2), tmp);
@@ -251,14 +251,14 @@ extern "C" {
         // precompute G-sums and Gt-sums
         {
             dim3 blocks(nblocks, 4, lmax);
-            csr_data_t cihdt = make_gpu_complex_t(0.0, SoL*h*dt/2);
+            csr_data_t cihdt = gpuMakeComplex(0.0, SoL*h*dt/2);
             device_compute_pgsums<<<blocks, nthreads>>>(cihdt, lmax, subsize, ft[0], ft[1], ft[2], ft[3], ft[4], ft[5]);
         }
 
         // assemble Ht
         {
             dim3 blocks(cpu_Hfull_blk->nnz, nblocks);
-            csr_data_t ihdt = make_gpu_complex_t(0.0, h*dt/2);
+            csr_data_t ihdt = gpuMakeComplex(0.0, h*dt/2);
             device_compute_timedep_matrices<<<blocks, nthreads>>>(lmax, ihdt, submatrix_nnz, subsize);
         }
         gpuDeviceSynchronize();
