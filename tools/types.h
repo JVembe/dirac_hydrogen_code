@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <strings.h>
 
-#if defined __CUDACC__ || defined __HIPCC__
+#if defined __CUDACC__ | defined __HIPCC__
 typedef gpu_complex_t cdouble_t;
 typedef gpu_complex_t csr_data_t;
 #else

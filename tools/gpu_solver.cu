@@ -113,8 +113,8 @@ extern "C" {
         }
     }
 
-    void cuda_compute_row_col(int lmax, const sparse_csr_t *H,
-                              sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull)
+    void gpu_compute_row_col(int lmax, const sparse_csr_t *H,
+                             sparse_csr_t *Hfull_blk, sparse_csr_t *Hfull)
     {
         csr_index_t nrows = csr_nrowblocks(Hfull_blk);
         csr_index_t row, col, colp;
@@ -208,18 +208,18 @@ extern "C" {
             bytes += sizeof(csr_data_t)*Hfull_nnz*lmax;
 
             total_bytes += bytes;
-            PDEBUG("cuda_compute_row_col: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
+            PDEBUG("gpu_compute_row_col: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
 
-            printf("CUDA copied auxiliary arrays to GPU\n");
+            printf("GPU copied auxiliary arrays to GPU\n");
         }
     }
 
     static int is_timedep_initialized = 0;
-    void cuda_compute_timedep_matrices(double h, double dt, csr_data_t *ft, int lmax,
-                                       const sparse_csr_t *cpu_Hfull_blk, sparse_csr_t *cpu_Hfull,
-                                       gpu_sparse_csr_t *gpu_Hfull)
+    void gpu_compute_timedep_matrices(double h, double dt, csr_data_t *ft, int lmax,
+                                      const sparse_csr_t *cpu_Hfull_blk, sparse_csr_t *cpu_Hfull,
+                                      gpu_sparse_csr_t *gpu_Hfull)
     {
-        int nthreads = 64;
+        int nthreads = 512;
         int nblocks = submatrix_nnz/nthreads;
         if(nblocks*nthreads<submatrix_nnz) nblocks++;
         int subsize = nblocks*nthreads;
@@ -245,7 +245,7 @@ extern "C" {
             is_timedep_initialized = 1;
 
             total_bytes += bytes;
-            PDEBUG("cuda_compute_timedep_matrices: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
+            PDEBUG("gpu_compute_timedep_matrices: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
         }
 
         // precompute G-sums and Gt-sums
@@ -264,7 +264,7 @@ extern "C" {
         gpuDeviceSynchronize();
     }
 
-    void cuda_init_model_matrices(int nmatrices, const sparse_csr_t *cpu_g, const sparse_csr_t *cpu_gt, const sparse_csr_t *cpu_h0)
+    void gpu_init_model_matrices(int nmatrices, const sparse_csr_t *cpu_g, const sparse_csr_t *cpu_gt, const sparse_csr_t *cpu_h0)
     {
         gpu_sparse_csr_t gputemp = {};
         gpu_sparse_csr_t *devp;
@@ -300,8 +300,8 @@ extern "C" {
         }
 
         total_bytes += bytes;
-        PDEBUG("cuda_init_model_matrices: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
+        PDEBUG("gpu_init_model_matrices: allocated %li bytes on GPU (total %li)\n", bytes, total_bytes);
         
-        printf("CUDA model matrices initialized\n");
+        printf("GPU model matrices initialized\n");
     }
 }

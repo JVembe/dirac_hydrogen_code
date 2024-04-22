@@ -1,22 +1,28 @@
 OBJS=sorted_list.o \
 	csr.o \
-	gpu_sparse.o \
 	solver.o \
 	bicgstab.o \
 	solver_common.o \
-	gpu_bicgstab.o \
 	utils.o \
 	superlu.o
 
-SLU_HOME = /cluster/home/marcink/software/superlu
+SLU_HOME = $(HOME)/software/superlu
 
-CUOBJS = cuda_solver.o
+ifdef USE_CUDA
+CUOBJS = gpu_solver.o gpu_sparse.o gpu_bicgstab.o
 CFLAGS_CUDA = -DUSE_CUDA
 LDFLAGS_CUDA = -lcublas -lcusparse -lcudart
+CC_DEVICE = nvcc
+CFLAGS_DEVICE = -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80
+endif
 
+ifdef USE_HIP
 ROCM_HOME=/opt/rocm-5.4.2
-CFLAGS_HIP0 = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -I$(ROCM_HOME)/include -DROCM_MATHLIBS_API_USE_HIP_COMPLEX
-LDFLAGS_HIP0 = -L$(ROCM_HOME)/lib -lhipsparse -lhipblas -lamdhip64
+HIPOBJS = gpu_solver.o gpu_sparse.o gpu_bicgstab.o
+CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -I$(ROCM_HOME)/include -DROCM_MATHLIBS_API_USE_HIP_COMPLEX
+LDFLAGS_HIP = -L$(ROCM_HOME)/lib -lhipsparse -lhipblas -lamdhip64
+CC_DEVICE = hipcc
+endif
 
 CFLAGS_ACCEL = $(CFLAGS_HIP) $(CFLAGS_CUDA)
 CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp
@@ -24,21 +30,21 @@ CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenm
 LDFLAGS_ACCEL = $(LDFLAGS_HIP) $(LDFLAGS_CUDA)
 LDFLAGS = $(LDFLAGS_ACCEL) -L$(SLU_HOME)/lib64 -lsuperlu -lopenblas -fopenmp
 
+ACCELOBJS = $(CUOBJS) $(HIPOBJS)
+
 CC?=gcc
-CC_CUDA = nvcc
-CC_HIP = hipcc
 
 %.o : %.c
 	$(CC) -O3 -march=native -c $(CFLAGS) $< -o $@
 
 %.o : %.cu
-	$(CC_CUDA) -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80 -g -O3 -c $< -o $@
+	$(CC_DEVICE) $(CFLAGS_DEVICE) -g -O3 -c $< -o $@
 
-matrix_tool: $(OBJS) $(CUOBJS) matrix_tool.o
-	$(CC) -O3 $(OBJS) $(CUOBJS) $@.o -o matrix_tool -lm $(LDFLAGS)
+matrix_tool: $(OBJS) $(ACCELOBJS) matrix_tool.o
+	$(CC) -O3 $(OBJS) $(ACCELOBJS) $@.o -o matrix_tool -lm $(LDFLAGS)
 
-dirac_solver: $(OBJS) $(CUOBJS) dirac_solver.o
-	$(CC) -O3 $(OBJS) $(CUOBJS) $@.o -o dirac_solver -lm $(LDFLAGS)
+dirac_solver: $(OBJS) $(ACCELOBJS) dirac_solver.o
+	$(CC) -O3 $(OBJS) $(ACCELOBJS) $@.o -o dirac_solver -lm $(LDFLAGS)
 
 clean:
 	rm *.o

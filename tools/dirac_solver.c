@@ -27,7 +27,6 @@
 #include "bicgstab.h"
 #include "solver.h"
 #include "utils.h"
-#include "gpu_bicgstab.h"
 #include "../src/tictoc.h"
 //#include "../src/potential.h"
 
@@ -37,7 +36,8 @@
 
 #if defined USE_CUDA | defined USE_HIP
 #include "gpu_sparse.h"
-#include "cuda_solver.h"
+#include "gpu_bicgstab.h"
+#include "gpu_solver.h"
 #endif
 
 int rank = 0, nranks = 1;
@@ -334,9 +334,9 @@ int main(int argc, char *argv[])
     // csr_unblock_comm_info(&S, &S_blk, rank, nranks);
     // csr_unblock_comm_info(&Hst, &Hst_blk, rank, nranks);
 
-#if defined USE_CUDA
-    cuda_init_model_matrices(6*lmax*4, g, gt, h0);
-    cuda_compute_row_col(lmax, H, &Hfull_blk, &Hfull);
+#if defined USE_CUDA | defined USE_HIP
+    gpu_init_model_matrices(6*lmax*4, g, gt, h0);
+    gpu_compute_row_col(lmax, H, &Hfull_blk, &Hfull);
 #endif
     
     // read initial state
@@ -474,7 +474,7 @@ int main(int argc, char *argv[])
 
         // time-dependent part of the Hamiltonian
         PRINTF0("GPU matrix assembly "); tic();
-        cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpuHfull);
+        gpu_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpuHfull);
         toc();
 
         PRINTF0("rhs vector "); tic();

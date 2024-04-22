@@ -1,7 +1,7 @@
 #ifndef _HIP_TRANSLATE_H
 #define _HIP_TRANSLATE_H
 
-#if defined USE_HIP || defined __HIPCC__
+#if defined USE_HIP | defined __HIPCC__
 
 #include <hip/hip_runtime.h>
 #include <hip/hip_runtime_api.h>

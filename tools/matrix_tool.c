@@ -37,7 +37,7 @@
 #if defined USE_CUDA | defined USE_HIP
 #include "gpu_sparse.h"
 #include "gpu_bicgstab.h"
-#include "cuda_solver.h"
+#include "gpu_solver.h"
 #endif
 
 #define max(a,b) ((a)>(b)?(a):(b))
@@ -309,8 +309,8 @@ int main(int argc, char *argv[])
     csr_unblock_comm_info(&Hfull, &Hfull_blk, rank, nranks);
 
 #if defined USE_CUDA
-    cuda_init_model_matrices(6*lmax*4, g, gt, h0);
-    cuda_compute_row_col(lmax, H, &Hfull_blk, &Hfull);
+    gpu_init_model_matrices(6*lmax*4, g, gt, h0);
+    gpu_compute_row_col(lmax, H, &Hfull_blk, &Hfull);
 
     csr_data_t ft[6];
     beoyndDipolePulse_axialPart(&bdpp, dt, ft);
@@ -318,9 +318,9 @@ int main(int argc, char *argv[])
     for(int i=0; i<6; i++) PRINTF0("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i]));
 
     gpu_sparse_csr_t gpu_Hfull = {};
-    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpu_Hfull);
+    gpu_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpu_Hfull);
     printf("CUDA compute timedep matrix "); tic();
-    cuda_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpu_Hfull);
+    gpu_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpu_Hfull);
     toc();
 
     /* csr_ijk_write("gpu.ijk", &Hfull); */

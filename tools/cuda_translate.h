@@ -1,7 +1,7 @@
 #ifndef _CUDA_TRANSLATE_H
 #define _CUDA_TRANSLATE_H
 
-#if defined USE_CUDA || defined __CUDACC__
+#if defined USE_CUDA | defined __CUDACC__
 
 #include <cuda_runtime_api.h>
 #include <cusparse.h>
