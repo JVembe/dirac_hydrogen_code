@@ -13,13 +13,13 @@ CUOBJS = gpu_solver.o gpu_sparse.o gpu_bicgstab.o
 CFLAGS_CUDA = -DUSE_CUDA
 LDFLAGS_CUDA = -lcublas -lcusparse -lcudart
 CC_DEVICE = nvcc
-CFLAGS_DEVICE = -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80
+CFLAGS_DEVICE = -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80 -DGPU_THREADS_PER_BLOCK=64
 endif
 
 ifdef USE_HIP
 ROCM_HOME=/opt/rocm-5.4.2
 HIPOBJS = gpu_solver.o gpu_sparse.o gpu_bicgstab.o
-CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -I$(ROCM_HOME)/include -DROCM_MATHLIBS_API_USE_HIP_COMPLEX
+CFLAGS_HIP = -march=native -I hipsparse -std=c99 -D__HIP_PLATFORM_AMD__ -DUSE_HIP -I$(ROCM_HOME)/include -DROCM_MATHLIBS_API_USE_HIP_COMPLEX -DGPU_THREADS_PER_BLOCK=512
 LDFLAGS_HIP = -L$(ROCM_HOME)/lib -lhipsparse -lhipblas -lamdhip64
 CC_DEVICE = hipcc
 endif

@@ -219,7 +219,7 @@ extern "C" {
                                       const sparse_csr_t *cpu_Hfull_blk, sparse_csr_t *cpu_Hfull,
                                       gpu_sparse_csr_t *gpu_Hfull)
     {
-        int nthreads = 512;
+        int nthreads = GPU_THREADS_PER_BLOCK;
         int nblocks = submatrix_nnz/nthreads;
         if(nblocks*nthreads<submatrix_nnz) nblocks++;
         int subsize = nblocks*nthreads;
