@@ -1,8 +1,11 @@
 #ifndef _CUDA_TRANSLATE_H
 #define _CUDA_TRANSLATE_H
 
+#if defined USE_CUDA or defined __CUDAPCC__
+
 #include <cuda_runtime_api.h>
 #include <cusparse.h>
+#include <cublas_v2.h>
 
 typedef cuDoubleComplex gpu_complex_t;
 
@@ -23,6 +26,7 @@ typedef cuDoubleComplex gpu_complex_t;
 #define gpuFree                                   cudaFree
 #define gpuMemcpy                                 cudaMemcpy
 #define gpuMemset                                 cudaMemset
+#define gpuMemcpyToSymbol                         cudaMemcpyToSymbol
 #define gpuMemcpyHostToDevice                     cudaMemcpyHostToDevice
 #define gpuMemcpyDeviceToHost                     cudaMemcpyDeviceToHost
 
@@ -89,5 +93,35 @@ typedef cuDoubleComplex gpu_complex_t;
             exit(1);                                                    \
         }                                                               \
     }
+
+#endif
+
+#define CHECK_GPU_BLAS(func) {						\
+        cublasStatus_t status = (func);					\
+        if (status != CUBLAS_STATUS_SUCCESS) {                          \
+            printf("cublas API failed at line %d error: %s\n", __LINE__, \
+                   cublasGetStatusString(status));                      \
+            exit(1);                                                    \
+        }                                                               \
+    }
+
+typedef cuDoubleComplex gpu_complex_t;
+
+#define gpublasHandle_t  cublasHandle_t
+#define gpublasCreate    cublasCreate
+
+#define gpuMakeComplex make_cuDoubleComplex
+#define gpuCsub cuCsub
+#define gpuCadd cuCadd
+#define gpuCabs cuCabs
+#define gpuCdiv cuCdiv
+#define gpuCmul cuCmul
+#define gpuCreal cuCreal
+#define gpuCimag cuCimag
+
+#define _gpuZdotc  cublasZdotc
+#define _gpuZaxpy  cublasZaxpy
+#define _gpuZscal  cublasZscal
+#define _gpuZcopy  cublasZcopy
 
 #endif /* _CUDA_TRANSLATE_H */

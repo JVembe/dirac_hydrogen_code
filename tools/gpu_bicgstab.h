@@ -3,59 +3,6 @@
 
 #include "gpu_sparse.h"
 
-#ifdef USE_CUDA
-#include <cublas_v2.h>
-
-#define CHECK_GPU_BLAS(func) {						\
-        cublasStatus_t status = (func);					\
-        if (status != CUBLAS_STATUS_SUCCESS) {                          \
-            printf("cublas API failed at line %d error: %s\n", __LINE__, \
-                   cublasGetStatusString(status));                      \
-            exit(1);                                                    \
-        }                                                               \
-    }
-
-typedef cuDoubleComplex gpu_complex_t;
-
-#define gpublasHandle_t  cublasHandle_t
-#define gpublasCreate    cublasCreate
-
-#define gpuMakeComplex make_cuDoubleComplex
-#define gpuCsub cuCsub
-#define gpuCadd cuCadd
-#define gpuCabs cuCabs
-#define gpuCdiv cuCdiv
-#define gpuCmul cuCmul
-#define gpuCreal cuCreal
-#define gpuCimag cuCimag
-
-#define _gpuZdotc  cublasZdotc
-#define _gpuZaxpy  cublasZaxpy
-#define _gpuZscal  cublasZscal
-#define _gpuZcopy  cublasZcopy
-
-#endif
-
-#ifdef USE_HIP
-#define gpublasHandle_t  hipblasHandle_t
-#define gpublasCreate    hipblasCreate
-
-#define gpuMakeComplex make_hipDoubleComplex
-#define gpuCsub hipCsub
-#define gpuCadd hipCadd
-#define gpuCabs hipCabs
-#define gpuCdiv hipCdiv
-#define gpuCmul hipCmul
-#define gpuCreal hipCreal
-#define gpuCimag hipCimag
-
-#define _gpuZdotc  hipblasZdotc
-#define _gpuZaxpy  hipblasZaxpy
-#define _gpuZscal  hipblasZscal
-#define _gpuZcopy  hipblasZcopy
-
-#endif
-
 extern gpublasHandle_t handle;
 
 static inline gpu_complex_t gpuZdotc(int n, const gpu_complex_t *x, int incx, const gpu_complex_t *y, int incy)

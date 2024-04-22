@@ -1,6 +1,8 @@
 #ifndef _HIP_TRANSLATE_H
 #define _HIP_TRANSLATE_H
 
+#if defined USE_HIP || defined __HIPCC__
+
 #include <hip/hip_runtime.h>
 #include <hip/hip_runtime_api.h>
 #include <hipsparse/hipsparse.h>
@@ -11,6 +13,7 @@
 #define gpuError_t                                hipError_t
 #define gpuSuccess                                hipSuccess
 #define gpuDeviceProp                             hipDeviceProp_t
+
 // Device management
 #define gpuGetDeviceCount                         hipGetDeviceCount
 #define gpuGetDeviceProperties                    hipGetDeviceProperties
@@ -22,9 +25,11 @@
 #define gpuMalloc                                 hipMalloc
 #define gpuFree                                   hipFree
 #define gpuMemcpy                                 hipMemcpy
+#define gpuMemcpyToSymbol                         hipMemcpyToSymbol
 #define gpuMemset                                 hipMemset
 #define gpuMemcpyHostToDevice                     hipMemcpyHostToDevice
 #define gpuMemcpyDeviceToHost                     hipMemcpyDeviceToHost
+#define gpuDeviceSynchronize                      hipDeviceSynchronize
 
 // Error handling
 #define gpuGetLastError                           hipGetLastError
@@ -100,5 +105,24 @@
     }
 
 typedef hipDoubleComplex gpu_complex_t;
+#define make_gpu_complex_t                        make_hipDoubleComplex
+#define gpublasHandle_t  hipblasHandle_t
+#define gpublasCreate    hipblasCreate
+
+#define gpuMakeComplex make_hipDoubleComplex
+#define gpuCsub hipCsub
+#define gpuCadd hipCadd
+#define gpuCabs hipCabs
+#define gpuCdiv hipCdiv
+#define gpuCmul hipCmul
+#define gpuCreal hipCreal
+#define gpuCimag hipCimag
+
+#define _gpuZdotc  hipblasZdotc
+#define _gpuZaxpy  hipblasZaxpy
+#define _gpuZscal  hipblasZscal
+#define _gpuZcopy  hipblasZcopy
+
+#endif
 
 #endif /* _HIP_TRANSLATE_H */

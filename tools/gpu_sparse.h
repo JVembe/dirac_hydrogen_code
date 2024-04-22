@@ -9,7 +9,7 @@
 #include "hip_translate.h"
 #endif
 
-#if defined USE_CUDA | defined USE_HIP | defined __CUDACC__
+#if defined USE_CUDA | defined USE_HIP | defined __CUDACC__ || defined __HIPCC__
 
 typedef struct {
     csr_index_t nrows, ncols, nnz;    

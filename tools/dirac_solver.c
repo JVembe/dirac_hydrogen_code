@@ -126,12 +126,12 @@ void gpu_HS_spmv_fun(const void *mat, gpu_dense_vec_t *x, gpu_dense_vec_t *out, 
     csr_init_communication(hsptr->H, (csr_data_t*)x->x, rank, nranks);
     csr_comm(hsptr->H, rank, nranks);
     gpu_spmv(hsptr->gpuH, x, out, alpha, beta);
-    cudaDeviceSynchronize();
+    gpuDeviceSynchronize();
     /* toc(); */
 
     // S has only local vector entries - x has to be shifted compared to H
     gpu_spmv_local(hsptr->gpuS, x, out, alpha, CMPLX(1,0));
-    cudaDeviceSynchronize();
+    gpuDeviceSynchronize();
 }
 
 void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_dense_vec_t *x)
@@ -139,7 +139,7 @@ void gpu_LU_precond_fun(const void *_precond, const gpu_dense_vec_t *rhs, gpu_de
     gpu_lu_t *precond = (gpu_lu_t*)_precond;
     /* printf("lu solve "); tic(); */
     gpu_lu_solve(precond->L, precond->U, rhs, x, precond->temp);
-    cudaDeviceSynchronize();
+    gpuDeviceSynchronize();
     /* toc(); */
 }
 
@@ -385,7 +385,6 @@ int main(int argc, char *argv[])
 
     // compute the preconditioner once - based on the stationary part
     slu_LU_t sluLU = compute_preconditioner(&S, &Hst);
-
 #ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
