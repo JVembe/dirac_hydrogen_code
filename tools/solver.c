@@ -325,7 +325,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
                 // the H matrix is still updated with Hst, so do not clear the submatrix
                 for(int l=0; l<lmax; l++){
 
-                    if(H0[l]!=0 && H1[l]!=0) {
+                    if(H0[l] != CMPLX(0,0) && H1[l] != CMPLX(0,0)) {
                         for(csr_index_t i=0; i<csr_nnz(submatrix); i++){
                             submatrix->Ax[i] +=
                                 H0[l]*(pgsum[l*4 + 0][i]         +
