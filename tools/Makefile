@@ -13,7 +13,7 @@ CUOBJS = gpu_solver.o gpu_sparse.o gpu_bicgstab.o
 CFLAGS_CUDA = -DUSE_CUDA
 LDFLAGS_CUDA = -lcublas -lcusparse -lcudart
 CC_DEVICE = nvcc
-CFLAGS_DEVICE = -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80 -DGPU_THREADS_PER_BLOCK=64 -allow-unsupported-compiler
+CFLAGS_DEVICE = -Xptxas -O3,-v -arch=sm_80 -gencode=arch=compute_80,code=sm_80 -DGPU_THREADS_PER_BLOCK=64 
 endif
 
 ifdef USE_HIP
