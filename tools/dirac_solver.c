@@ -346,12 +346,12 @@ int main(int argc, char *argv[])
     for(int r=0; r<nranks; r++){
         if(rank == r){
             printf("%d: All matrices read correctly. System info:\n", rank);
-            printf(" - H dim:         %u x %u\n", csr_nrows(&H[0]), csr_ncols(&H[0]));
-            printf(" - Hall dim:      %u x %u\n", csr_nrows(&Hall), csr_ncols(&Hall));
-            printf(" - Hall nnz:      %u\n", csr_nnz(&Hall));
-            printf(" - Hfull_blk dim: %u x %u\n", csr_nrowblocks(&Hfull_blk), csr_ncolblocks(&Hfull_blk));
-            printf(" - Hfull dim:     %u x %u\n", csr_nrows(&Hfull_blk), csr_ncols(&Hfull_blk));
-            printf(" - Hfull nnz:     %u\n", csr_nnz(&Hfull_blk));
+            printf(" - H dim:         %d x %d\n", csr_nrows(&H[0]), csr_ncols(&H[0]));
+            printf(" - Hall dim:      %d x %d\n", csr_nrows(&Hall), csr_ncols(&Hall));
+            printf(" - Hall nnz:      %d\n", csr_nnz(&Hall));
+            printf(" - Hfull_blk dim: %d x %d\n", csr_nrowblocks(&Hfull_blk), csr_ncolblocks(&Hfull_blk));
+            printf(" - Hfull dim:     %d x %d\n", csr_nrows(&Hfull_blk), csr_ncols(&Hfull_blk));
+            printf(" - Hfull nnz:     %d\n", csr_nnz(&Hfull_blk));
             fflush(stdout);
         }
 #ifdef USE_MPI

@@ -13,7 +13,7 @@ typedef double complex cdouble_t;
 typedef double complex csr_data_t;
 #endif
 
-typedef unsigned int csr_index_t;
+typedef int csr_index_t;
 typedef csr_index_t dimType;
 typedef csr_index_t indexType;
 
