@@ -99,7 +99,7 @@ blknnz = g0.nnz
 res = res_orig[nzc[:, None], nzc]
 
 # print partitioning statistics
-if nparts > 1
+if nparts > 1:
     print('nnz vector: ', res.indptr, res.indptr.size)
     part_nnz = res.indptr[part_Ap[1:]] - res.indptr[part_Ap[:-1]]
     print('part nnz: ', part_nnz*blknnz)
