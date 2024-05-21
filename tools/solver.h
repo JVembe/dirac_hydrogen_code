@@ -3,21 +3,10 @@
 
 #include <stdlib.h>
 #include "types.h"
+#include "solver_common.h"
 #include "csr.h"
 #include "superlu.h"
 #include "../src/tictoc.h"
-
-#define SoL 137.035999084
-
-int ik(int i);
-
-// simple C-fied beyondDipolePulse implementation
-typedef struct
-{
-    double E0;
-    double omega;
-    double T;
-} beyondDipolePulse_t;
 
 void beyondDipolePulse_init(beyondDipolePulse_t *this, double E0, double omega, double N);
 void beoyndDipolePulse_axialPart(beyondDipolePulse_t *this, double t, cdouble_t *out);

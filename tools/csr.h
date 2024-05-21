@@ -17,10 +17,14 @@ typedef struct {
     csr_data_t  **recv_ptr, **send_ptr, *send_vec;
 #ifdef USE_MPI
     MPI_Datatype *send_type;
+#else
+    // need same size of the structure for GPUs
+    void *voidptr;
 #endif
     csr_index_t *Ap;
     csr_index_t *Ai;
     csr_data_t  *Ax;
+    csr_index_t *Ai_sub_map;
     int is_link;
 } sparse_csr_t;
 

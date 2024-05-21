@@ -203,21 +203,31 @@ slu_LU_t slu_compute_ilu(slu_matrix_t opaqueA)
     options.PivotGrowth = YES;    /* Compute reciprocal pivot growth */
     options.ConditionNumber = YES;/* Compute reciprocal condition number */
     options.ILU_DropRule = DROP_BASIC;
-    options.ILU_DropTol = 1e-2;
+    options.ILU_DropTol = 1e-6;
     options.ILU_MILU = SILU; //SMILU_1;
     options.DiagPivotThresh = 0;
     options.ILU_FillFactor = 2.0;
 
     B.ncol = 0;  /* not to perform triangular solution */
-    tic(); printf("compute ilu ");
-    zgsisx(&options, A, perm_c, perm_r, etree, equed, R, C, L, U, NULL, 0,
-           &B, &X, &rpg, &rcond, &Glu, mem_usage, stat, &info);
-    toc();
 
+    tic(); PRINTF0("compute ilu "); fflush(stdout);
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    zgsisx(&options, A, perm_c, perm_r, etree, equed, R, C, L, U, NULL, 0,
+           &B, &X, &rpg, &rcond, &Glu, mem_usage, stat, &info);    
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    toc();
+#ifdef USE_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
     Ustore = U->Store;
     Lstore = L->Store;
-    printf("SuperLU L type %d dimension %dx%d; # nonzeros %d\n", L->Stype, (int)L->nrow, (int)L->ncol, (int)Lstore->nnz);
-    printf("SuperLU U type %d dimension %dx%d; # nonzeros %d\n", U->Stype, (int)U->nrow, (int)U->ncol, (int)Ustore->nnz);
+    printf("SuperLU L dimension %dx%d; # nonzeros %d\n", (int)L->nrow, (int)L->ncol, (int)Lstore->nnz);
+    printf("SuperLU U dimension %dx%d; # nonzeros %d\n", (int)U->nrow, (int)U->ncol, (int)Ustore->nnz);
+    fflush(stdout);
 
     ret.A = A;
     ret.U = U;

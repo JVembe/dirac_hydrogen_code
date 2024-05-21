@@ -1,38 +1,13 @@
 #ifndef _GPU_BICGSTAB_H
 #define _GPU_BICGSTAB_H
 
-#ifdef USE_CUDA
-#include <cublas_v2.h>
 #include "gpu_sparse.h"
 
-#define CHECK_GPU_BLAS(func) {						\
-        cublasStatus_t status = (func);					\
-        if (status != CUBLAS_STATUS_SUCCESS) {                          \
-            printf("cublas API failed at line %d error: %s\n", __LINE__, \
-                   cublasGetStatusString(status));                      \
-            exit(1);                                                    \
-        }                                                               \
-    }
+extern gpublasHandle_t handle;
 
-#define gpucublasHandle_t  cublasHandle_t
-
-#define gpuMakeComplex make_cuDoubleComplex
-#define gpuCsub cuCsub
-#define gpuCadd cuCadd
-#define gpuCabs cuCabs
-#define gpuCdiv cuCdiv
-#define gpuCmul cuCmul
-
-#define _gpuZdotc  cublasZdotc
-#define _gpuZaxpy  cublasZaxpy
-#define _gpuZscal  cublasZscal
-#define _gpuZcopy  cublasZcopy
-
-extern gpucublasHandle_t handle;
-
-static inline cuDoubleComplex gpuZdotc(int n, const gpu_complex_t *x, int incx, const gpu_complex_t *y, int incy)
+static inline gpu_complex_t gpuZdotc(int n, const gpu_complex_t *x, int incx, const gpu_complex_t *y, int incy)
 {
-    cuDoubleComplex result = {0};
+    gpu_complex_t result = {0};
     CHECK_GPU_BLAS(_gpuZdotc(handle, n, x, incx, y, incy, &result));
     return result;
 }
@@ -64,6 +39,5 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
                   int nrow, int ncol, int local_col_beg,
                   gpu_precond_fun psolve, const void *precond, gpu_solver_workspace_t *wsp, int *iters, double *tol_error);
 
-#endif
 
 #endif

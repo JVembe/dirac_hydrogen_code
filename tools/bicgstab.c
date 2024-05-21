@@ -69,7 +69,7 @@ static const double complex zreduce(double complex val)
 
 #endif
 
-const void pvec(const char *hdr, const cdouble_t *v, int n)
+void pvec(const char *hdr, const cdouble_t *v, int n)
 {
     printf("---- %s\n", hdr);
     for(int i=0; i<n; i++)
@@ -259,9 +259,9 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
       zaxpby_(&nrow, &blasa, s, &incx, &blasb, r, &incx);
 
       tmp = dreduce(squarednorm(r, nrow));
-#ifdef DEBUG
+      //#ifdef DEBUG
       if(rank==0) printf("%e\n", sqrt(tmp));
-#endif
+      //#endif
       if(tmp < tol2) break;
       ++i;
   }

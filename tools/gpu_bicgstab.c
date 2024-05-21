@@ -1,14 +1,14 @@
 #include <string.h>
 #include <math.h>
-#include "gpu_sparse.h"
 #include "gpu_bicgstab.h"
+#include "gpu_sparse.h"
 
 #if defined USE_CUDA | defined USE_HIP
 
-gpucublasHandle_t handle;
+gpublasHandle_t handle;
 void gpu_blas_init()
 {
-    CHECK_GPU_BLAS(cublasCreate(&handle));
+    CHECK_GPU_BLAS(gpublasCreate(&handle));
 }
 
 
@@ -27,9 +27,9 @@ void gpu_blas_init()
 
 static inline double squarednorm(int n, const gpu_dense_vec_t *v, int incx)
 {
-    cuDoubleComplex result;
+    gpu_complex_t result;
     CHECK_GPU_BLAS(_gpuZdotc(handle, n, v->x, incx, v->x, incx, &result));
-    return cuCreal(result);
+    return gpuCreal(result);
 }
 
 /* static inline  */
@@ -72,9 +72,9 @@ static void rankprint(char *fname, gpu_complex_t *v, int n)
                 fd = fopen(fname, "a+");                
             for(int i=0; i<n; i++){
                 double r, j;
-                r = cuCreal(v[i]);
+                r = gpuCreal(v[i]);
                 if(r == -0.0) r = 0.0;
-                j = cuCimag(v[i]);
+                j = gpuCimag(v[i]);
                 if(j == -0.0) j = 0.0;
                 fprintf(fd, "%.10e %.10e\n", r, j);
             }
@@ -113,8 +113,6 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
                   int nrow, int ncol, int local_col_beg,
                   gpu_precond_fun psolve, const void *precond, gpu_solver_workspace_t *wsp, int *iters, double *tol_error)
 {
-
-  gpu_complex_t *xdev = malloc(sizeof(gpu_complex_t)*nrow);
 
   double tol = *tol_error;
   int maxIters = *iters;
@@ -268,9 +266,9 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
       gpuZaxpby(nrow, gpuOne, s->x, incx, blasb, r->x, incx);
 
       tmp = dreduce(squarednorm(nrow, r, incx));
-#ifdef DEBUG
+      //#ifdef DEBUG
       if(rank==0) printf("%e\n", sqrt(tmp));
-#endif
+      //#endif
       if(tmp < tol2) break;
       ++i;
   }

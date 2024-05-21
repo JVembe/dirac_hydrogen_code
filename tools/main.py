@@ -1,3 +1,4 @@
+import sys
 import glob
 import ctypes
 import numpy as npy
@@ -55,7 +56,10 @@ res = res + sparse.identity(res.shape[0],format="csr")
 res_orig = res_orig + sparse.identity(res_orig.shape[0],format="csr")
 
 part_Ap = npy.array([0, len(nzc)], dtype=idxtype)
-nparts = 4
+nparts = 1
+if len(sys.argv)>1:
+    nparts = int(sys.argv[1])
+print('number of partitions: ', nparts)
 if nparts > 1:
     # metis partitioning - for now only for demonstration
     # directly use the CSR storage from scipy sparse
@@ -70,7 +74,7 @@ if nparts > 1:
     # original nodes are renumbered into the new numbers
     #  - part contains the partition id of each node
     #  - perm is a vector that maps new node numbers to old numbers (perm[new id] = old id)
-    part = metis.part_graph(g, nparts)[1]
+    part = metis.part_graph(g, nparts, ufactor=1, objtype='vol', recursive=False)[1]
     part = npy.array(part, idxtype)
     perm = npy.argsort(part, kind='stable')
     perm = perm.astype(idxtype)
@@ -81,7 +85,9 @@ if nparts > 1:
     part = part[perm]
     part_id, part_count = npy.unique(part, return_counts=True)
     part_count = part_count.astype(idxtype)
+    print('partition count: ', part_count)
     part_Ap = npy.cumsum(npy.concatenate((0, part_count), axis=None), dtype=idxtype)
+    print('part_Ap: ', part_Ap);
 
     #pyplot.spy(res, marker='.', markersize=1)
     #pyplot.show()
@@ -90,12 +96,23 @@ else:
     # block permutation - needed for saving the result vector
     perm = npy.arange(0, res.shape[0])
 
-res = res_orig[nzc[:, None], nzc]
-
-# reorder / partition psi0, which has the full problem dimension 
 g0 = csr_read('g0a0l0.csr')
 blkdim = g0.shape[1]
+blknnz = g0.nnz
+    
+res = res_orig[nzc[:, None], nzc]
+
+# print partitioning statistics
+if nparts > 1:
+    print('nnz vector: ', res.indptr, res.indptr.size)
+    part_nnz = res.indptr[part_Ap[1:]] - res.indptr[part_Ap[:-1]]
+    print('part nnz: ', part_nnz*blknnz)
+
+# reorder / partition psi0, which has the full problem dimension 
+print('block dim: ', blkdim)
+print('block nnz: ', blknnz)
 print('full dim: ', blkdim*res_orig.shape[0])
+print('full nnz: ', blknnz*res_orig.nnz)
 psi0 = dense_read('psi0')
 print(psi0.dtype)
 
