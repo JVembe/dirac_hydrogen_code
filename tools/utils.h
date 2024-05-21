@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "types.h"
+
+#define PRINTF0(...) if(rank==0) printf(__VA_ARGS__)
+
 #define HERE fprintf(stderr, "HERE %s:%d\n", __FUNCTION__, __LINE__);
 #define MIN(a, b) ((a)<(b)?(a):(b))
 #define MAX(a, b) ((a)>(b)?(a):(b))
@@ -27,5 +31,7 @@
         }                                                       \
     }
 #endif
+
+void compare_vectors(csr_data_t *v1, csr_data_t *v2, csr_index_t dim);
 
 #endif

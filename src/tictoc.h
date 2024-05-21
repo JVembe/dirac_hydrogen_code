@@ -5,6 +5,7 @@
 #include <time.h>
 
 static struct timeval tb, te;
+extern int rank;
 
 static void tic()
 {
@@ -17,7 +18,7 @@ static void toc()
     gettimeofday(&te, NULL);
     s=te.tv_sec-tb.tv_sec;
     u=te.tv_usec-tb.tv_usec;
-    printf("time:\t\t%li.%.6lis\n", (s*1000000+u)/1000000, (s*1000000+u)%1000000);
+    PRINTF0("time:\t\t%li.%.6lis\n", (s*1000000+u)/1000000, (s*1000000+u)%1000000);
     fflush(stdout);
 }
 

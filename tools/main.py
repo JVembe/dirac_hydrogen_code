@@ -2,7 +2,7 @@ import glob
 import ctypes
 import numpy as npy
 from scipy import sparse
-from matplotlib import pyplot
+#from matplotlib import pyplot
 import metis
 
 idxtype = 'int32'
@@ -83,8 +83,12 @@ if nparts > 1:
     part_count = part_count.astype(idxtype)
     part_Ap = npy.cumsum(npy.concatenate((0, part_count), axis=None), dtype=idxtype)
 
-    pyplot.spy(res, marker='.', markersize=1)
-    pyplot.show()
+    #pyplot.spy(res, marker='.', markersize=1)
+    #pyplot.show()
+else:
+
+    # block permutation - needed for saving the result vector
+    perm = npy.arange(0, res.shape[0])
 
 res = res_orig[nzc[:, None], nzc]
 
@@ -96,19 +100,20 @@ psi0 = dense_read('psi0')
 print(psi0.dtype)
 
 # make a column permutation vector
-nzc_blk = nzc.reshape((-1,1))
-nzc_blk = npy.tile(nzc_blk, (1, blkdim))
+perm_full = perm.reshape((-1,1))
+perm_full = npy.tile(perm_full, (1, blkdim))
 dof_blk = npy.indices((1,blkdim))[1]
-psi0_perm = nzc_blk*blkdim + dof_blk
-psi0_perm = psi0_perm.reshape((1,-1))
+psi0_perm = perm_full*blkdim + dof_blk
+psi0_perm = psi0_perm.reshape((1,-1)).astype(idxtype)
 psi0 = psi0[psi0_perm]
-print('full dim without empty: ', psi0_perm.shape)
+print('full dim without empty: ', psi0_perm.shape, ' type ', psi0_perm.dtype)
 
 # save permuted psi0
 with open('psi0.vec', 'w+') as f:
     dim = npy.array(psi0_perm.shape[1], idxtype)
     dim.tofile(f)
     psi0.tofile(f)
+    psi0_perm.tofile(f)
 
 # save permuted H structure
 with open('H.csr', 'w+') as f:
@@ -126,6 +131,6 @@ with open('H.csr', 'w+') as f:
     npy.array(len(part_Ap)-1, dtype=idxtype).tofile(f)
     part_Ap.tofile(f)
 
-pyplot.spy(res, marker='.', markersize=1)
-pyplot.show()
+#pyplot.spy(res, marker='.', markersize=1)
+#pyplot.show()
     

@@ -1,7 +1,6 @@
 #include "bicgstab.h"
 #include <string.h>
 #include <math.h>
-#include <cblas-netlib.h>
 
 
 #define ALLOC_VECTOR(wsp, v, n)                                         \
@@ -9,7 +8,6 @@
         wsp->v = (cdouble_t*)calloc(n, sizeof(cdouble_t));              \
     v = wsp->v;
 
-int incx = 1;
 #define squarednorm(v, n) creal(zdotc_(&n, v, &incx, v, &incx))
 
 #ifdef USE_MPI
@@ -18,7 +16,7 @@ int incx = 1;
 #include "utils.h"
 extern int rank, nranks;
 
-double dreduce(double val)
+static double dreduce(double val)
 {
     double retval;
     if(nranks==1) return val;
@@ -26,7 +24,7 @@ double dreduce(double val)
     return retval;
 }
 
-double complex zreduce(double complex val)
+static double complex zreduce(double complex val)
 {
     double complex retval;
     if(nranks==1) return val;
@@ -34,7 +32,7 @@ double complex zreduce(double complex val)
     return retval;
 }
 
-void rankprint(char *fname, cdouble_t *v, int n)
+static void rankprint(char *fname, cdouble_t *v, int n)
 {
     FILE *fd;
     for(int r=0; r<nranks; r++){
@@ -44,7 +42,12 @@ void rankprint(char *fname, cdouble_t *v, int n)
             else
                 fd = fopen(fname, "a+");                
             for(int i=0; i<n; i++){
-                fprintf(fd, "%e %e\n", creal(v[i]), cimag(v[i]));
+                double r, j;
+                r = creal(v[i]);
+                if(r == -0.0) r = 0.0;
+                j = cimag(v[i]);
+                if(j == -0.0) j = 0.0;
+                fprintf(fd, "%.10e %.10e\n", r, j);
             }
             fclose(fd);
         }
@@ -76,7 +79,16 @@ const void pvec(const char *hdr, const cdouble_t *v, int n)
 // BLAS1
 complex double zdotc_(const int *n, const double complex *x, const int *incx, const double complex *y, const int *incy);
 void zaxpy_(const int *n, const double complex *alpha, const double complex *x, const int *incx, double complex *y, const int *incy);
+void zscal_(const int *n, const double complex *alpha, const double complex *x, const int *incx);
 void zaxpby_(const int *n, const double complex *alpha, const double complex *x, const int *incx, const double complex *beta, double complex *y, const int *incy);
+
+/* if zaxpby is not available */
+/* #define zaxpby_(n, alpha, x, incx, beta, y, incy)   \ */
+/*     {                                               \ */
+/*         zscal_(n, beta, y, incy);                   \ */
+/*         zaxpy_(n, alpha, x, incx, y, incy);         \ */
+/*     } */
+
 
 /** \internal Low-level bi conjugate gradient stabilized algorithm
   * \param mat The matrix A
@@ -93,6 +105,7 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
 {
   double tol = *tol_error;
   int maxIters = *iters;
+  int incx = 1;
   
   cdouble_t rho    = 1;
   cdouble_t alpha  = 1;
@@ -119,11 +132,14 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
 
   /* VectorType r  = rhs - mat * x; */
   /* VectorType r0 = r; */
+  for(int i=0; i<nrow; i++) r[i] = 0;
   spmv(mat, x, r);
   for(int i=0; i<nrow; i++) {
       r[i] = rhs[i] - r[i];
       r0[i] = r[i];
   }
+  /* rankprint("cpur.txt", r, nrow); */
+  /* return; */
 
   /* RealScalar r0_sqnorm = r0.squaredNorm(); */
   double r0_sqnorm = dreduce(squarednorm(r0, nrow));
@@ -232,9 +248,7 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
           w = 0;
 
       /*   x += alpha * y + w * z; */
-      blasa = alpha;
-      blasb = w;
-      zaxpby_(&nrow, &blasa, y+local_col_beg, &incx, &blasb, z+local_col_beg, &incx);
+      zaxpby_(&nrow, &alpha, y+local_col_beg, &incx, &w, z+local_col_beg, &incx);
       blasa = 1;
       zaxpy_(&nrow, &blasa, z+local_col_beg, &incx, x+local_col_beg, &incx);
 

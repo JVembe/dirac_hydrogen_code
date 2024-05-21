@@ -10,14 +10,21 @@
 #endif
 
 #include "types.h"
-void csr_print(const sparse_csr_t *sp)
+void csr_print(const char *fname, const sparse_csr_t *sp)
 {
+    printf("write file %s\n", fname);
+    FILE *fd = fopen(fname, "w+");
+    if(!fd) ERROR("cant open %s\n", fname);
+
     for(csr_index_t row = 0; row < sp->nrows; row++){
         for(csr_index_t cp = sp->Ap[row]; cp < sp->Ap[row+1]; cp++){
-            fprintf(stderr, "%d %d %le %le\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
+            fprintf(fd, "%d %d %le %le\n", row, sp->Ai[cp], creal(sp->Ax[cp]), cimag(sp->Ax[cp]));
         }
     }
+
+    fclose(fd);
 }
+
 
 void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_index_t nnz)
 {
@@ -39,6 +46,7 @@ void csr_allocate(sparse_csr_t *out, csr_index_t nrows, csr_index_t ncols, csr_i
     out->recv_ptr           = NULL;
     out->send_ptr           = NULL;
     out->send_vec           = NULL;
+    out->send_type          = NULL;
     out->npart              = 1;
     out->row_beg            = 0;
     out->row_end            = 0;
@@ -66,6 +74,7 @@ void csr_free(sparse_csr_t *sp)
     sp->recv_ptr           = NULL;
     sp->send_ptr           = NULL;
     sp->send_vec           = NULL;
+    sp->send_type          = NULL;
     sp->npart              = 1;
     sp->row_beg            = 0;
     sp->row_end            = 0;
@@ -102,6 +111,7 @@ void csr_copy(sparse_csr_t *out, const sparse_csr_t *in)
     out->recv_ptr           = in->recv_ptr;
     out->send_ptr           = in->send_ptr;
     out->send_vec           = in->send_vec;
+    out->send_type          = in->send_type;
     out->row_beg            = in->row_beg;
     out->row_end            = in->row_end;
     out->local_offset       = in->local_offset;
@@ -126,9 +136,11 @@ void csr_block_params(sparse_csr_t *sp, csr_index_t blk_dim, csr_index_t blk_nnz
 
     // update Ax storage
     if(!sp->is_link) free(sp->Ax);  sp->Ax = NULL;
-    sp->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
-    bzero(sp->Ax, sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
     sp->is_link = 0;
+
+    // do not allocate new storage - can be done when needed
+    // sp->Ax = (csr_data_t*)malloc(sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
+    // bzero(sp->Ax, sizeof(csr_data_t)*sp->nnz*sp->blk_nnz);
 
     // do NOT update Ap pointers - need them for Ai
 }
@@ -139,6 +151,34 @@ void csr_block_insert(sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_da
     cp = sp->Ap[row] + sorted_list_locate(sp->Ai+sp->Ap[row], sp->Ap[row+1]-sp->Ap[row], col);
     if(cp==sp->Ap[row+1] || sp->Ai[cp]!=col) ERROR("cant insert block: (%d,%d) not present in CSR.", row, col);
     memcpy(sp->Ax + cp*sp->blk_nnz, blk_ptr, sizeof(csr_data_t)*sp->blk_nnz);
+}
+
+void csr_full_insert(sparse_csr_t *Afull, csr_index_t row, csr_index_t col, sparse_csr_t *submatrix)
+{
+    int blkdim = submatrix->nrows;
+    csr_index_t row_blk, col_blk, colp_blk;
+    csr_index_t row_dst, col_dst;
+
+    // insert into non-blocked Hfull matrix
+    for(row_blk=0; row_blk<blkdim; row_blk++){
+
+        // submatrix row and col
+        colp_blk=submatrix->Ap[row_blk];
+        col_blk = submatrix->Ai[colp_blk];
+
+        // Afull row and col
+        col_dst = col*blkdim + col_blk;
+        row_dst = row*blkdim + row_blk;
+
+        // locate row start in Afull
+        csr_index_t cp = Afull->Ap[row_dst] +
+            sorted_list_locate(Afull->Ai + Afull->Ap[row_dst], Afull->Ap[row_dst+1] - Afull->Ap[row_dst], col_dst);
+        if(cp==Afull->Ap[row_dst+1] || Afull->Ai[cp]!=col_dst)
+            ERROR("cant set matrix value: (%d,%d) not present in CSR.", row_dst, col_dst);
+
+        csr_index_t nrowent = submatrix->Ap[row_blk+1] - colp_blk;
+        memcpy(Afull->Ax + cp, submatrix->Ax + colp_blk, nrowent*sizeof(csr_data_t));
+    }
 }
 
 void csr_block_link(sparse_csr_t *sp_blk, sparse_csr_t *sp, csr_index_t row, csr_index_t col)
@@ -287,7 +327,7 @@ void csr_ijk_write(const char *fname, const sparse_csr_t *sp)
 
     // storage format: dim, nnz, Ai, Aj, Ax
     nwrite = fwrite(&sp->nrows, sizeof(csr_index_t), 1, fd);
-    nwrite = fwrite(&sp->nnz, sizeof(csr_index_t), 1, fd);    
+    nwrite = fwrite(&sp->nnz, sizeof(csr_index_t), 1, fd);
 
     nwrite = fwrite(sp->Ai, sizeof(csr_index_t), sp->nnz, fd);
     if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
@@ -297,7 +337,7 @@ void csr_ijk_write(const char *fname, const sparse_csr_t *sp)
 
     nwrite = fwrite(sp->Ax, sizeof(csr_data_t), sp->nnz, fd);
     if(nwrite!=sp->nnz) ERROR("cant write file %s\n", fname);
-    
+
     fclose(fd);
 
     free(Aj);
@@ -582,7 +622,7 @@ void csr_unblock_matrix(sparse_csr_t *out, const sparse_csr_t *in, const sparse_
     // this is true only for 1 rank. fixed later in csr_unblock_comm_info
     out->row_beg = 0;
     out->row_end = out->nrows;
-    
+
     // for all rows
     for(row = 0; row < in->nrows; row++){
 
@@ -684,19 +724,43 @@ void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, 
             }
         }
 
-        comm_idx = rank*nranks + irank;
-        nent = out->n_comm_entries[rank*nranks + irank];
-        if(nent){
-            out->comm_pattern_size[comm_idx] = nent;
-            out->comm_pattern[comm_idx] = (csr_index_t*)calloc(nent, sizeof(csr_index_t));
-            comm_iter = 0;
-            for(csr_index_t j=0; j<in->n_comm_entries[comm_idx]; j++){
-                for(csr_index_t jj=0; jj<in->blk_dim; jj++){
-                    out->comm_pattern[comm_idx][comm_iter++] = in->comm_pattern[comm_idx][j]*in->blk_dim + jj;
-                }
-            }
+        /* this is the received part - no need to unblock it, those are contiguous vector parts */
+        /* comm_idx = rank*nranks + irank; */
+        /* nent = out->n_comm_entries[rank*nranks + irank]; */
+        /* if(nent){ */
+        /*     out->comm_pattern_size[comm_idx] = nent; */
+        /*     out->comm_pattern[comm_idx] = (csr_index_t*)calloc(nent, sizeof(csr_index_t)); */
+        /*     comm_iter = 0; */
+        /*     for(csr_index_t j=0; j<in->n_comm_entries[comm_idx]; j++){ */
+        /*         for(csr_index_t jj=0; jj<in->blk_dim; jj++){ */
+        /*             out->comm_pattern[comm_idx][comm_iter++] = in->comm_pattern[comm_idx][j]*in->blk_dim + jj; */
+        /*         } */
+        /*     } */
+        /* } */
+    }
+
+    /* create indexed datatypes for send operations */
+    out->send_type = malloc(nranks*sizeof(MPI_Datatype));
+    for(int irank=0; irank<nranks; irank++){
+        out->send_type[irank] = MPI_DATATYPE_NULL;
+        csr_index_t count = in->n_comm_entries[irank*nranks+rank];
+        if(count){
+            int *blocklengths  = malloc(sizeof(int)*count);
+            for(int i=0; i<count; i++)
+                blocklengths[i] = in->blk_dim*2;
+
+            int *displacements = malloc(sizeof(int)*count);
+            for(int i=0; i<count; i++)
+                displacements[i] = in->comm_pattern[irank*nranks+rank][i]*in->blk_dim*2;
+
+            CHECK_MPI(MPI_Type_indexed(count, blocklengths, displacements, MPI_DOUBLE, out->send_type + irank));
+            CHECK_MPI(MPI_Type_commit(out->send_type + irank));
+
+            free(blocklengths);
+            free(displacements);
         }
     }
+
 
     /* details filled in init_communication */
     out->recv_ptr           = (csr_data_t**)calloc(nranks, sizeof(csr_data_t*));
@@ -704,39 +768,6 @@ void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, 
 
     out->npart              = nranks;
     out->local_offset       = in->local_offset*in->blk_dim;
-
-    /* // DEBUG: write out the result vectors for comparison with single-rank result */
-    /* for(int r=0; r<nranks; r++){ */
-    /*     if(rank == r){ */
-    /*         // for(int i = 0; i < nranks*nranks; i++) fprintf(stdout, "%d ", out->n_comm_entries[i]); fprintf(stdout, "\n"); */
-    /*         for(int irank = 0; irank < nranks; irank++) { */
-    /*             csr_index_t nent = out->n_comm_entries[irank*nranks + rank]; */
-    /*             printf("%d: send to %d: %d\n", rank, irank, nent); */
-    /*             if(nent){ */
-    /*                 for(int i=0; i<nent; i++) printf("%d ", out->comm_pattern[irank*nranks + rank][i]); printf("\n"); */
-    /*             } */
-    /*         } */
-    /*     } */
-    /*     MPI_Barrier(MPI_COMM_WORLD); */
-    /* } */
-    /* MPI_Barrier(MPI_COMM_WORLD); */
-    /* if(rank==0) printf("-------------------------\n"); */
-
-    /* for(int r=0; r<nranks; r++){ */
-    /*     if(rank == r){ */
-    /*         // for(int i = 0; i < nranks*nranks; i++) fprintf(stdout, "%d ", out->n_comm_entries[i]); fprintf(stdout, "\n"); */
-    /*         for(int irank = 0; irank < nranks; irank++) { */
-    /*             csr_index_t nent = out->n_comm_entries[rank*nranks + irank]; */
-    /*             printf("%d: recv from %d: %d\n", rank, irank, nent); */
-    /*             if(nent){ */
-    /*                 for(int i=0; i<nent; i++) printf("%d ", out->comm_pattern[rank*nranks + irank][i]); printf("\n"); */
-    /*             } */
-    /*         } */
-    /*     } */
-    /*     MPI_Barrier(MPI_COMM_WORLD); */
-    /* } */
-    /* MPI_Barrier(MPI_COMM_WORLD); */
-
 }
 
 void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nranks)
@@ -762,10 +793,14 @@ void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nran
         }
         recv_location += sp->n_comm_entries[rank*nranks+irank]*sp->blk_dim;
 
-        /* setup the send buffer */
-        if(sp->n_comm_entries[irank*nranks+rank] && !sp->send_ptr[irank]){
-            csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
-            sp->send_ptr[irank] = (csr_data_t*)calloc(nent, sizeof(csr_data_t));
+        /* send buffers needed for explicit packing */
+        if(NULL==sp->send_type){
+
+            /* setup the send buffer */
+            if(sp->n_comm_entries[irank*nranks+rank] && !sp->send_ptr[irank]){
+                csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
+                sp->send_ptr[irank] = (csr_data_t*)calloc(nent, sizeof(csr_data_t));
+            }
         }
     }
 }
@@ -787,21 +822,29 @@ void csr_comm(const sparse_csr_t *sp, int rank, int nranks)
         }
     }
 
-    /* gather sent data into send buffers and send */
     for(int irank=0; irank<nranks; irank++){
         comm_requests[nranks+irank] = MPI_REQUEST_NULL;
-        if(sp->send_ptr[irank]){
-            csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
-            csr_index_t col_local;
-            csr_index_t col_iter = 0;
-            for(csr_index_t i=0; i<sp->n_comm_entries[irank*nranks+rank]; i++){
-                for(int j=0; j<sp->blk_dim; j++){
-                    col_local = sp->comm_pattern[irank*nranks+rank][i]*sp->blk_dim + j;
-                    sp->send_ptr[irank][col_iter++] = sp->send_vec[col_local];
-                }
+        if(sp->send_type){
+            /* use MPI_Type_indexed for sending - supports GPU */
+            if(MPI_DATATYPE_NULL != sp->send_type[irank]){
+                CHECK_MPI(MPI_Isend(sp->send_vec, 1, sp->send_type[irank], irank, 0,
+                                    MPI_COMM_WORLD, comm_requests+nranks+irank));
             }
-            CHECK_MPI(MPI_Isend(sp->send_ptr[irank], nent*2, MPI_DOUBLE, irank, 0,
-                                MPI_COMM_WORLD, comm_requests+nranks+irank));
+        } else {
+            /* gather sent data into send buffers and send */
+            if(sp->send_ptr[irank]){
+                csr_index_t nent = sp->n_comm_entries[irank*nranks+rank]*sp->blk_dim;
+                csr_index_t col_local;
+                csr_index_t col_iter = 0;
+                for(csr_index_t i=0; i<sp->n_comm_entries[irank*nranks+rank]; i++){
+                    for(int j=0; j<sp->blk_dim; j++){
+                        col_local = sp->comm_pattern[irank*nranks+rank][i]*sp->blk_dim + j;
+                        sp->send_ptr[irank][col_iter++] = sp->send_vec[col_local];
+                    }
+                }
+                CHECK_MPI(MPI_Isend(sp->send_ptr[irank], nent*2, MPI_DOUBLE, irank, 0,
+                                    MPI_COMM_WORLD, comm_requests+nranks+irank));
+            }
         }
     }
 
@@ -869,4 +912,102 @@ void csr_spmv(csr_index_t row_beg, csr_index_t row_end, const sparse_csr_t *sp, 
 
         result[i] += stemp;
     }
+}
+
+void csr_coo2csr(sparse_csr_t *sp, const csr_index_t *rowidx, const csr_index_t *colidx, const csr_data_t *val,
+                 csr_index_t matrix_dim, csr_index_t nnz)
+{
+
+    csr_index_t **lists_dynamic = 0;
+    csr_index_t *n_list_elems_dynamic = 0;
+    csr_index_t *list_size_dynamic = 0;
+    csr_index_t *Ap_out = NULL;
+    csr_index_t *Ai_out = NULL;
+    csr_data_t  *Ax_out = NULL;
+
+    /* if we run out of space, allocate dynamic lists */
+    lists_dynamic = calloc(sizeof(csr_index_t*)*matrix_dim, 1);
+    n_list_elems_dynamic = calloc(sizeof(csr_index_t)*matrix_dim, 1);
+    list_size_dynamic = calloc(sizeof(csr_index_t)*matrix_dim, 1);
+
+    /* find unique row / column pairs */
+    for(csr_index_t i=0; i<nnz; i++){
+        csr_index_t row, col, pos;
+        row = rowidx[i];
+        col = colidx[i];
+
+        /* check if a given row has a dynamic list */
+        if(!list_size_dynamic[row]){
+            sorted_list_create(lists_dynamic + row, list_size_dynamic + row);
+        }
+
+        /* add column to row, ignores existing entries */
+        sorted_list_add(lists_dynamic + row, n_list_elems_dynamic + row, list_size_dynamic + row, col);
+    }
+
+    /* allocate CSR data structures: Ap */
+    Ap_out = calloc(sizeof(csr_index_t)*(matrix_dim+1), 1);
+
+    /* Count a cumulative sum of the number of non-zeros in every matrix row. */
+    for(csr_index_t i=0; i<matrix_dim; i++) {
+        Ap_out[i+1] = Ap_out[i] + n_list_elems_dynamic[i];
+    }
+    printf("number of non-zeros %d / %d\n", Ap_out[matrix_dim], nnz);
+
+    /* allocate CSR data structures: Ai and Ax */
+    csr_index_t csr_nnz = Ap_out[matrix_dim];
+    Ai_out = malloc(sizeof(csr_index_t)*csr_nnz);
+    Ax_out = calloc(sizeof(csr_data_t)*csr_nnz, 1);
+
+    /* copy rows into Ai */
+    for(csr_index_t i=0; i<matrix_dim; i++){
+        csr_index_t rowp = Ap_out[i];
+        csr_index_t nent = Ap_out[i+1] - Ap_out[i];
+        if(n_list_elems_dynamic[i] != nent) ERROR("wrong number of row entries in coo2csr");
+        memcpy(Ai_out+rowp, lists_dynamic[i], sizeof(csr_index_t)*nent);
+    }
+
+    /* accumulate values into Ax */
+    for(csr_index_t i=0; i<nnz; i++){
+        csr_index_t row, col;
+        row = rowidx[i];
+        col = colidx[i];
+
+        csr_index_t nent = Ap_out[row+1] - Ap_out[row];
+        csr_index_t cp = Ap_out[row] + sorted_list_locate(Ai_out + Ap_out[row], nent, col);
+        if(cp==Ap_out[row+1] || Ai_out[cp]!=col) ERROR("cant set matrix value: (%d,%d) not present in CSR.", row, col);
+        Ax_out[cp] += val[i];
+    }
+
+    /* cleanup */
+    for(csr_index_t i=0; i<matrix_dim; i++){
+        free(lists_dynamic[i]);
+    }
+    free(lists_dynamic);
+    free(n_list_elems_dynamic);
+    free(list_size_dynamic);
+
+    /* output */
+    sp->nnz = csr_nnz;
+    sp->nrows = matrix_dim;
+    sp->ncols = matrix_dim;
+    sp->blk_nnz = 1;
+    sp->blk_dim = 1;
+    sp->is_link = 0;
+    sp->perm = NULL;
+    sp->Ap = Ap_out;
+    sp->Ai = Ai_out;
+    sp->Ax = Ax_out;
+
+    sp->row_cpu_dist       = NULL;
+    sp->comm_pattern       = NULL;
+    sp->comm_pattern_size  = NULL;
+    sp->n_comm_entries     = NULL;
+    sp->recv_ptr           = NULL;
+    sp->send_ptr           = NULL;
+    sp->send_vec           = NULL;
+    sp->npart              = 1;
+    sp->row_beg            = 0;
+    sp->row_end            = 0;
+    sp->local_offset       = 0;
 }
