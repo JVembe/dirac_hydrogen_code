@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
         int Nl = json_params["Nl"]; // Optimal value depends on radius of the box, typically 10 is sufficient
         double rBox = json_params["rBox"]; // Radius of the system in atomic units; 30 is usually sufficient
         int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
-        int omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
+        double omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
         int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
         
         
@@ -234,28 +234,41 @@ int main(int argc, char* argv[]) {
                         // add base nnz pattern
                         csmat gmat = dkbb.getbdpmat(n,l,alpha) + base_nnz_pattern;
                         csr_write(fname, gmat);
+
+			printf("Writing g matrix g%da%dl%d out of %d,%d,%d\n", n, alpha, l,4,6,spnrb.bdplmax());
+		        cout << endl;	
                     }
                 }
             }
-            
+            cout << "All g matrices written, moving on" << endl;
             // Bear with me here, the scheme for assembling the h-matrices is a bit silly
             dirbs rthphb(dkbb,spnrb);
-            vec angInit = vec::Zero(rthphb.angqN());
-            angInit[0] = 1.0;
-            rthphb.pruneUncoupled(angInit,true);
+            //pruneUncoupled is slow and unnecessary for this
+	    //vec angInit = vec::Zero(rthphb.angqN());
+            //angInit[0] = 1.0;
+            //rthphb.pruneUncoupled(angInit,true);
+	    cout << "Constructing Hamiltonian" << endl;
             using Htype = DiracBDP<dirbs>;
             Htype H(rthphb,bdpp);
             H.Vfunc = &coloumb<Z>;
-            H.prepeigsLowMem(Nsplines,Nsplines/2, true);
-            H.H0radprep();
+            //cout << "Diagonalizing Hamiltonian" << endl;
+	    dkbb.p1m();
+	    dkbb.Sm();
+	    dkbb.ulcm();
+	    dkbb.km();
+	    dkbb.Em(&coloumb<Z>);
+	    H.H0radprep();
+	    
+            
                         
-            //Verify that the ground state is correct
+            //Dump time-independent part
                         
             for(int n = 0; n < 4; n++) {
                 char fname[256];
                 snprintf(fname,255,"h0%d.csr",n);
                 csmat hmat = dkbb.getH0mat(n) + base_nnz_pattern;
                 csr_write(fname,hmat);
+		printf("Writing h matrix %d\n",n);
             }
         
             //And finally the overlap matrix blocks as well, s0...s2
@@ -265,7 +278,8 @@ int main(int argc, char* argv[]) {
             csr_write("s0.csr",s0m);
             csr_write("s1.csr",s1m);
             csr_write("s2.csr",s2m);
-        
+            cout << "Diagonalizing Hamiltonian" << endl;
+	    H.prepeigsLowMem(Nsplines,Nsplines/2, true,-1);
                 
             vec evls0 = H.getevals(-1);;
             //To find the ground state we identify the index of the eigenvalue closest to the ground state energy, -0.500007

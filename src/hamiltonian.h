@@ -810,9 +810,10 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 	std::vector<vec> kappaevals;
 	std::vector<int> kappas;
 	
-	void prepeigsLowMem(int nev, int ncv, bool localOnly = false) {
-		this->H0();
-		this->S();
+	void prepeigsLowMem(int nev, int ncv, bool localOnly = false,int kchoice = 0) {
+		cout << "Preparing eigenvalues" << endl;
+		//this->H0();
+		//this->S();
 		
 		this->angSep = true;
 		
@@ -825,9 +826,33 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		this->eigvecs = vector<dsmat>(Nang);
 		this->eigvals = vector<vec>(Nang);
 		
-		
+		cout << "Preparing eigenvalues and eigenvectors for ";
+		if(kchoice == 0) cout << "all values of kappa" << endl;
+		else cout << "kappa = " << kchoice << endl;
 		
 		int kappamax = this->angMax();
+		if(kchoice != 0) {
+		     int iL = ki(kchoice);
+
+                                cout << "(" << kchoice << "," << iL << ","<< ik(iL) << ")" << std::endl;
+
+                                kappas.push_back(kchoice);
+
+                                this->bs->getRadial().setState(iL);
+
+                                dsmat H0rL = this->template H0<axis::radial>().real();
+                                dsmat SrL = this->template S<axis::radial>().real();
+
+                                this->gseigs.compute(H0rL,SrL);
+
+                                vec evalsL = gseigs.eigenvalues().real();
+
+                                kappaevals.push_back(evalsL);
+                                int eigNL = evalsL.size();
+
+                                kappaevecs.push_back(this->gseigs.eigenvectors().real());
+		} 
+		else {
 		if(!localOnly) {
 			for(int kappa = 1; kappa <= kappamax; kappa++) {
 				int iL = ki(-kappa);
@@ -988,7 +1013,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				}
 			}
 		}
-		
+		}
 
 	}
 	
