@@ -1029,15 +1029,15 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
 		
 		//Need to get evecs corresponding to current kappa
-		// cout << "Nr = " << Nr << endl;
-		// cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
+		cout << "Nr = " << Nr << endl;
+		cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
 		
 		std::vector<cmat> psievs(lNth - lth0);
 		
 		for(int th = lth0; th < lNth; th++) {
-			// cout << "Index: " << th 
-				 // << "\nTransformed index: " << this->bs->indexTransform(th) 
-				 // << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
+			cout << "Index: " << th 
+				 << "\nTransformed index: " << this->bs->indexTransform(th) 
+				 << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
 			int i = -1;
 			
 			
@@ -1081,10 +1081,14 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
 		Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 			
+		cout << "Projecting onto eigenstates and saving...";
+		
 		std::vector<cmat> psievs = eigProj(psi);
 		
 		int lth0, lNth, ll0,lNl;
 		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		
 		for(int i = 0; i < wsize; i++) {
 			ofstream psievf(filename,ofstream::app);
 			if(wrank==i) {

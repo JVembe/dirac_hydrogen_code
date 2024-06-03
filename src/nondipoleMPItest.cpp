@@ -277,8 +277,8 @@ int main(int argc, char* argv[]) {
 
 	cvec psi2 = solver.solve(b);
 	
-	// dense_write("presolve",b);
-	// dense_write("postsolve",psi2);
+	dense_write("presolve",b);
+	dense_write("postsolve",psi2);
 	
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 
@@ -308,8 +308,8 @@ int main(int argc, char* argv[]) {
 
 	if(wrank==0)
 	// cout << "wft" << wft.coefs.format(outformat);
-
-	H.savePsievs(wft,"psiev");
+	wft.save(filenamePrefix + "_psit",0)
+	H.savePsievs(wft,filenamePrefix + "_psiev");
 	
 	MPI_Finalize();
 	return 0;
