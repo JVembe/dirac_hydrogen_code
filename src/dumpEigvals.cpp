@@ -83,7 +83,7 @@ void dense_write(const char* fname, MatrixType& mat) {
         //Storage format: rows, cols, data
         fwrite(&rows, sizeof(typename MatrixType::Index), 1, fd);
         fwrite(&cols, sizeof(typename MatrixType::Index), 1, fd);
-    fwrite(Ax, sizeof(csmat::Scalar), rows*cols, fd);
+		fwrite(Ax, sizeof(typename MatrixType::Scalar), rows*cols, fd);
         
     fclose(fd);
 }
@@ -185,15 +185,7 @@ int main(int argc, char* argv[]) {
         spnrb.bdplOverride(Nl);
 
         {
-            for(int l = 0; l < spnrb.bdplmax(); l++) {
-                char fname[256];
-                snprintf(fname, 255, "H0l%d.csr", l);
-                csr_write(fname, spnrb.bdpam(1,l));
-                snprintf(fname, 255, "H1l%d.csr", l);
-                csr_write(fname, spnrb.bdpam(-1,l));
-            }
-
-            //dkbbasis: 2-compoent basis P,Q-doublet of r-dependent Bspline fucntions
+            
             dkbbasis dkbb(t,7);
             dkbb.setState(-1);
             lvec x = dkbb.glpts();
@@ -206,47 +198,10 @@ int main(int argc, char* argv[]) {
             //Construct laser pulse with desired parameters
             beyondDipolePulse bdpp(Intensity,omega,cycles);
 
-            //Compute bdp-alpha matrices, this stores g0...g3 in memory
-            for(int l = 0; l < spnrb.bdplmax(); l++) {
-                if (wrank == 0) cout << l << endl;
-                dkbb.bdpam(1,1,1,l,bdpp);
-                dkbb.bdpam(1,1,-1,l,bdpp);
-            }
-                        
-            // for efficiency of assembly we want the g matrices to have the same non-zero pattern,
-            // even at the expense of storing some zero entries
-            int init = 0;
-            csmat base_nnz_pattern;
-            for(int n = 0; n < 4; n++) {
-                
-                for(int alpha = 0; alpha < 6; alpha++) {
-                    for(int l = 0; l < spnrb.bdplmax(); l++) {
-                        char fname[256];
-                        snprintf(fname, 255, "g%da%dl%d.csr", n, alpha, l);
-
-                        // we assume that the first g matrix has the non-zero pattern
-                        // that includes all subsequent matrices. It seems g0* have such property
-                        if(!init) {
-                            init = 1;
-                            base_nnz_pattern = 0*dkbb.getbdpmat(n,l,alpha);
-                        }
-                        
-                        // add base nnz pattern
-                        csmat gmat = dkbb.getbdpmat(n,l,alpha) + base_nnz_pattern;
-                        csr_write(fname, gmat);
-
-			printf("Writing g matrix g%da%dl%d out of %d,%d,%d\n", n, alpha, l,4,6,spnrb.bdplmax());
-		        cout << endl;	
-                    }
-                }
-            }
-            cout << "All g matrices written, moving on" << endl;
+            
             // Bear with me here, the scheme for assembling the h-matrices is a bit silly
             dirbs rthphb(dkbb,spnrb);
             //pruneUncoupled is slow and unnecessary for this
-	    //vec angInit = vec::Zero(rthphb.angqN());
-            //angInit[0] = 1.0;
-            //rthphb.pruneUncoupled(angInit,true);
 			cout << "Constructing Hamiltonian" << endl;
             using Htype = DiracBDP<dirbs>;
             Htype H(rthphb,bdpp);
@@ -259,41 +214,35 @@ int main(int argc, char* argv[]) {
 			dkbb.Em(&coloumb<Z>);
 			H.H0radprep();
 	    
+			H.prepeigsLowMem(Nsplines,Nsplines/2, true,0);
             
+			//Write all eigenvalues and eigenvectors to files
+			for(int i = 1; i < Nkappa+1; i++) {
+				for(int j = 0; j < 2; j++) {
+					int kappa = i * int(pow(-1,j));
+					char fevl[256];
+					snprintf(fevl, 255,"evl%i.mat", kappa);
+					char fevc[256];
+					snprintf(fevc,255,"evc%i.mat",kappa);
+					vec evls = H.getevals(kappa);
+					cmat evcs = H.getevecs(kappa,-0.5);
+					dense_write(fevl,evls);
+					dense_write(fevc,evcs);
+				}
+			}
+            // vec evls0 = H.getevals(-1);
+            // //To find the ground state we identify the index of the eigenvalue closest to the ground state energy, -0.500007
                         
-            //Dump time-independent part
+            // vec::Index e0idx;
                         
-            for(int n = 0; n < 4; n++) {
-                char fname[256];
-                snprintf(fname,255,"h0%d.csr",n);
-                csmat hmat = dkbb.getH0mat(n) + base_nnz_pattern;
-                csr_write(fname,hmat);
-				printf("Writing h matrix %d\n",n);
-            }
-        
-            //And finally the overlap matrix blocks as well, s0...s2
-            csmat s0m = dkbb.get0mat<S>()  + base_nnz_pattern;
-            csmat s1m = dkbb.getkmat<S>()  + base_nnz_pattern;
-            csmat s2m = dkbb.getkkmat<S>() + base_nnz_pattern;
-            csr_write("s0.csr",s0m);
-            csr_write("s1.csr",s1m);
-            csr_write("s2.csr",s2m);
-            cout << "Diagonalizing Hamiltonian" << endl;
-			H.prepeigsLowMem(Nsplines,Nsplines/2, true,-1);
-                
-            vec evls0 = H.getevals(-1);;
-            //To find the ground state we identify the index of the eigenvalue closest to the ground state energy, -0.500007
+            // double e0 = vec(evls0+vec::Constant(evls0.rows(),0.500007)).array().abs().minCoeff(&e0idx);
                         
-            vec::Index e0idx;
+            // // cout << evls0;
+            // cout << "e0: " << evls0[e0idx] << ", idx: " << e0idx << endl;
                         
-            double e0 = vec(evls0+vec::Constant(evls0.rows(),0.500007)).array().abs().minCoeff(&e0idx);
+            // cvec evc0 = H.getevec(e0idx,-1,-0.5);
                         
-            // cout << evls0;
-            cout << "e0: " << evls0[e0idx] << ", idx: " << e0idx << endl;
-                        
-            cvec evc0 = H.getevec(e0idx,-1,-0.5);
-                        
-            dense_write("psi0",evc0);
+            // dense_write("psi0",evc0);
         }
         MPI_Finalize();
         return 0;

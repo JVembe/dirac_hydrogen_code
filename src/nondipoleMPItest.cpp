@@ -308,7 +308,7 @@ int main(int argc, char* argv[]) {
 
 	if(wrank==0)
 	// cout << "wft" << wft.coefs.format(outformat);
-	wft.save(filenamePrefix + "_psit",0)
+	wft.save(filenamePrefix + "_psit",0);
 	H.savePsievs(wft,filenamePrefix + "_psiev");
 	
 	MPI_Finalize();

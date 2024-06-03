@@ -23,9 +23,17 @@ set(SOURCES_DUMPLINGS
   splinehandler.cpp
   spnrbasis.cpp)
 
+set(SOURCES_DUMPEVCS
+  dumpEigvals.cpp
+  dkbbasis.cpp
+  splinehandler.cpp
+  spnrbasis.cpp)
 
-# Add the executable for dipoleMPItest
+# Add the executable for dumpCouplings
 add_executable(dumpCouplings ${SOURCES_DUMPLINGS})
+
+# Add the executable for dumpEvecs
+add_executable(dumpEvecs ${SOURCES_DUMPEVCS})
 
 # Add the executable for nondipoleMPItest
 add_executable(nondipoleMPItest ${SOURCES_NONDIPOLE})
@@ -51,6 +59,15 @@ endif()
 # MPI::MPI_CXX, wignerSymbols, and OpenMP::OpenMP_CXX are linked publicly
 # nlohmann_json::nlohmann_json is linked privately
 target_link_libraries(dumpCouplings
+  PUBLIC
+    MPI::MPI_CXX
+    wignerSymbols
+    OpenMP::OpenMP_CXX
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+target_link_libraries(dumpEvecs
   PUBLIC
     MPI::MPI_CXX
     wignerSymbols

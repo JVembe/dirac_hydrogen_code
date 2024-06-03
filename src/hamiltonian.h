@@ -1137,6 +1137,21 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		return evecpd.reshaped(this->bs->radqN() * (lNth - lth0),1);
 	}
 	
+	cmat getevecs(int kappa, double mu) {
+		int i = -1;
+		for(int j = 0; j < kappas.size(); j++) {
+			if(kappas[j] == kappa) i = j;
+		}
+		
+		int lth0, lNth, ll0,lNl;
+		
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		cmat evecs;
+		
+		return kappaevecs[i];
+	}
+	
 	vec getevals(int kappa) {
 		int i = -1;
 		for(int j = 0; j < kappas.size(); j++) {
