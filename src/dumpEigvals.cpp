@@ -214,21 +214,19 @@ int main(int argc, char* argv[]) {
 			dkbb.Em(&coloumb<Z>);
 			H.H0radprep();
 	    
-			H.prepeigsLowMem(Nsplines,Nsplines/2, true,0);
-            
+			H.prepeigsLowMem(Nsplines,Nsplines/2, true,0,true);
+            // return 0;
 			//Write all eigenvalues and eigenvectors to files
-			for(int i = 1; i < Nkappa+1; i++) {
-				for(int j = 0; j < 2; j++) {
-					int kappa = i * int(pow(-1,j));
-					char fevl[256];
-					snprintf(fevl, 255,"evl%i.mat", kappa);
-					char fevc[256];
-					snprintf(fevc,255,"evc%i.mat",kappa);
-					vec evls = H.getevals(kappa);
-					cmat evcs = H.getevecs(kappa,-0.5);
-					dense_write(fevl,evls);
-					dense_write(fevc,evcs);
-				}
+			for(int i = 0; i < H.kappas.size(); i++) {
+				int kappa = H.kappas[i];
+				char fevl[256];
+				snprintf(fevl, 255,"evl%i.mat", kappa);
+				char fevc[256];
+				snprintf(fevc,255,"evc%i.mat",kappa);
+				vec evls = H.getevals(kappa);
+				cmat evcs = H.getevecs(kappa,-0.5);
+				dense_write(fevl,evls);
+				dense_write(fevc,evcs);
 			}
             // vec evls0 = H.getevals(-1);
             // //To find the ground state we identify the index of the eigenvalue closest to the ground state energy, -0.500007

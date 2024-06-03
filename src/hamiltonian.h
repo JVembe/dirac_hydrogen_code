@@ -810,7 +810,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 	std::vector<vec> kappaevals;
 	std::vector<int> kappas;
 	
-	void prepeigsLowMem(int nev, int ncv, bool localOnly = false,int kchoice = 0) {
+	void prepeigsLowMem(int nev, int ncv, bool localOnly = false,int kchoice = 0,bool naiveMPI = false) {
 		cout << "Preparing eigenvalues" << endl;
 		//this->H0();
 		//this->S();
@@ -924,6 +924,104 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				}
 			}
 			
+		}
+		else if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			int lth0, lNth;
+			int wrank, wsize;
+			
+			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+			
+			if(kappamax%wsize == 0) {
+				int ln = kappamax/wsize;
+				lth0 = ln * wrank;
+				lNth = lth0 + ln;
+			}
+			else {
+				int ln = kappamax/wsize + 1;
+				int excess = ln * wsize - kappamax;
+				if(wsize - wrank <= excess) ln = kappamax/wsize;
+				
+				lth0 = (kappamax/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
+				lNth = lth0 + ln;
+			}
+			
+			
+			cout << "lNth at wrank " << wrank << ": " << lNth << endl;
+			cout << "lth0 at wrank " << wrank << ": " << lth0 << endl;
+			
+			for(int kappa = 1; kappa <= kappamax; kappa++) {
+				int iL = 2*abs(kappa) - 1;
+				
+				
+				if((iL >= lth0) && (iL < lNth)) {
+					cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+					
+					kappas.push_back(-kappa);
+					
+					this->bs->getRadial().setState(iL);
+					
+					dsmat H0rL = this->template H0<axis::radial>().real();
+					dsmat SrL = this->template S<axis::radial>().real();
+					
+					this->gseigs.compute(H0rL,SrL);
+					
+					vec evalsL = gseigs.eigenvalues().real();
+					
+					kappaevals.push_back(evalsL);
+					int eigNL = evalsL.size();
+					
+					kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				}
+				int iU = 2*abs(kappa) - 1;
+				
+				if((iU >= lth0) && (iU < lNth)) {
+					cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+					
+					kappas.push_back(kappa);
+					
+					this->bs->getRadial().setState(iU);
+					
+					dsmat H0rU = this->template H0<axis::radial>().real();
+					dsmat SrU = this->template S<axis::radial>().real();
+					
+					this->gseigs.compute(H0rU,SrU);
+					
+					vec evalsU = gseigs.eigenvalues().real();
+					
+					kappaevals.push_back(evalsU);
+					int eigNU = evalsU.size();
+					
+					kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				}
+				
+			}
+			
+			for(int k = 0; k < kappaevecs.size(); k++) {
+				cout << "Applying sign convention to eigenvectors for kappa " << kappas[k] << "..." << endl; 
+				for(int i = 0; i < kappaevecs[k].cols(); i++) {
+					// cout << i << " ";
+					
+					//Determine if nonzero 
+					double vmax = abs(kappaevecs[k].col(i).maxCoeff());
+					double vmin = abs(kappaevecs[k].col(i).minCoeff());
+					
+					double vv;
+					
+					if(vmin>vmax) vv = vmin;
+					else vv = vmax;
+					
+					int j = 0;
+					while(true) {
+						if(abs(kappaevecs[k](j,i)*100) > vv) {
+							break;
+						}
+						j++;
+					}
+					
+					if(kappaevecs[k](j,i) < 0) kappaevecs[k].col(i) = -kappaevecs[k].col(i);
+				}
+			}
 		}
 		else {
 			int lth0, lNth, ll0, lNl;
