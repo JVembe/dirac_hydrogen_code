@@ -1056,7 +1056,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
 		Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 			
-		cout << "Projecting onto eigenstates and saving..."
+		cout << "Projecting onto eigenstates and saving...";
 		
 		std::vector<cmat> psievs = eigProj(psi);
 		
