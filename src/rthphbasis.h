@@ -3256,8 +3256,8 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				
 				cvec angslect = expmvec(angcp,angStates,20);
 				
-				// cout << angStates << "\n";
-				// cout << angslect << "\n";
+				cout << angStates << "\n";
+				cout << angslect << "\n";
 				vector<int> slids(0);
 				for(int i = 0; i < angslect.size(); i++) {
 					if(angslect[i]!=cdouble(0.0,0.0)) slids.push_back(i);

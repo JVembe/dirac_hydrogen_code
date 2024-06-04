@@ -586,7 +586,7 @@ class spnrbasis: public basis<spnrbasis> {
 		}
 		
 		int amax() {
-			//cout << "We made it! spnrbasis::amax() was called and returns " << kmax << "!\n";
+			// cout << "We made it! spnrbasis::amax() was called and returns " << kmax << "!\n";
 			return kmax;
 		}
 		csmat& angcp(bool bdp) { 

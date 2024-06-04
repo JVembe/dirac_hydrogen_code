@@ -44,6 +44,43 @@ vec linInterpolate(const vec& x,const vec& y, const vec& pts) {
 	return out;
 }
 
+template <typename MatrixType>
+MatrixType loadMatrix(std::string filename) {
+	using idx_t = typename MatrixType::Index;
+	using scalar_t = typename MatrixType::Scalar;
+
+	ifstream psiFile(filename,ios::binary|ios::in|ios::ate);
+	idx_t Nrow;
+	idx_t Ncol;
+	
+	streampos size = psiFile.tellg();
+	
+	psiFile.seekg(0,ios::beg);
+	
+	psiFile.read(reinterpret_cast<char*>(&Nrow),sizeof(Nrow));
+	psiFile.read(reinterpret_cast<char*>(&Ncol),sizeof(Ncol));
+	
+	cout << "opening " << filename << endl;
+	cout << "rows: " << Nrow << ", cols: " << Ncol << endl;
+	
+	int dataSize = ((long int)(size)-2*(long int)(sizeof(idx_t)))/sizeof(scalar_t);
+	
+	cout << "size(char): " << size << ", size(scalar): " << dataSize << endl;
+	
+	
+	scalar_t* rawData = new scalar_t[dataSize];
+	psiFile.read(reinterpret_cast<char*>(rawData),dataSize*sizeof(scalar_t));
+	
+	// for(int i = 0; i < 10; i++) {
+		// cout << rawData[i] << endl;
+	// }
+	
+	psiFile.close();
+	
+	MatrixType outmat = Eigen::Map<MatrixType>(rawData,Nrow,Ncol);
+	
+	return outmat;
+}
 
 
 template <typename Derived, typename basistype>
@@ -817,7 +854,6 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		this->angSep = true;
 		
-		//Separate H0 and S by angular quantum number
 		int Nr = this->bs->radqN();
 		int Nang = this->bs->angqN();
 		
@@ -933,16 +969,16 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
 			
 			if(kappamax%wsize == 0) {
-				int ln = kappamax/wsize;
+				int ln = 2*kappamax/wsize;
 				lth0 = ln * wrank;
 				lNth = lth0 + ln;
 			}
 			else {
-				int ln = kappamax/wsize + 1;
+				int ln = 2*kappamax/wsize + 1;
 				int excess = ln * wsize - kappamax;
 				if(wsize - wrank <= excess) ln = kappamax/wsize;
 				
-				lth0 = (kappamax/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
+				lth0 = (2*kappamax/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
 				lNth = lth0 + ln;
 			}
 			
@@ -1112,7 +1148,59 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			}
 		}
 		}
-
+	}
+	
+	void loadEigs() {
+		int kappamax = this->angMax();
+		for(int kappa = 1; kappa <= kappamax; kappa++) {
+				int iL = ki(-kappa);
+				
+				cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+				
+				std::stringstream fevlLs;
+				fevlLs << "evl" << -kappa << ".mat";
+				string fevlL = fevlLs.str();
+				
+				std::stringstream fevcLs;
+				fevcLs << "evc" << -kappa << ".mat";
+				string fevcL = fevcLs.str();
+				
+				vec evlL = loadMatrix<vec>(fevlL);
+				cmat evcL = loadMatrix<cmat>(fevcL);
+				
+				kappas.push_back(-kappa);
+				
+				
+				kappaevals.push_back(evlL.real());
+				int eigNL = evlL.size();
+				
+				kappaevecs.push_back(evcL.real());
+				
+				int iU = ki(kappa);
+				
+				cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+				
+				std::stringstream fevlUs;
+				fevlUs << "evl" << -kappa << ".mat";
+				string fevlU = fevlUs.str();
+				
+				std::stringstream fevcUs;
+				fevcUs << "evc" << -kappa << ".mat";
+				string fevcU = fevcUs.str();
+				
+				vec evlU = loadMatrix<vec>(fevlU);
+				cmat evcU = loadMatrix<cmat>(fevcU);
+				
+				kappas.push_back(kappa);
+				
+				
+				kappaevals.push_back(evlU);
+				int eigNU = evlU.size();
+				
+				kappaevecs.push_back(evcU.real());
+				
+				
+			}
 	}
 	
 	std::vector<cmat> eigProj(const wavefunc<basistype>& psi) {
@@ -1126,10 +1214,11 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
 		
+		if((lNth == 0) || (lNth > this->bs->angqN())) lNth = this->bs->angqN();
 		//Need to get evecs corresponding to current kappa
 		cout << "Nr = " << Nr << endl;
 		cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
-		
+		cout << "Actual Nth = " << this->bs->angqN();
 		std::vector<cmat> psievs(lNth - lth0);
 		
 		for(int th = lth0; th < lNth; th++) {
@@ -1146,7 +1235,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			
 			// cout << "kappa index: " << i << endl;
 			
-			// cout << psi.coefs.size() << endl;
+			cout << psi.coefs.size() << endl;
 			
 			this->bs->getRadial().setState(this->bs->indexTransform(th));
 			// cvec psiseg = this->bs->getRadial().template matfree<S>(psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0));
