@@ -3253,9 +3253,9 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				// cout << eangc << "\n";
 				
 				// cvec angslect = eangc * angStates;
+				int nExpm = sqrt(an/2);
 				
-				cvec angslect = expmvec(angcp,angStates,20);
-				
+				cvec angslect = expmvec(angcp,angStates,nExpm);						   
 				cout << angStates << "\n";
 				cout << angslect << "\n";
 				vector<int> slids(0);
