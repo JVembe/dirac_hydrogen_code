@@ -957,13 +957,35 @@ void csr_spmv(csr_index_t row_beg, csr_index_t row_end, const sparse_csr_t *sp, 
 
         for(j=Ap[i]; j<Ap[i+1]; j++){
 #ifdef USE_PREFETCHING
-            _mm_prefetch((char*)&tempAx[128], _MM_HINT_NTA);
-            _mm_prefetch((char*)&tempAi[128], _MM_HINT_NTA);
+            _mm_prefetch((char*)&tempAx[128], _MM_HINT_T0);
+            _mm_prefetch((char*)&tempAi[128], _MM_HINT_T0);
 #endif
             stemp             += x[*tempAi++]*(*tempAx++);
         }
 
         result[i] += stemp;
+    }
+}
+
+void csr_bspmv(csr_index_t row_beg, csr_index_t row_end, const sparse_csr_t *sp, const csr_data_t *x, csr_data_t *result, csr_index_t blk_size, csr_index_t nblk)
+{
+    csr_data_t  *Ax = sp->Ax;
+    csr_index_t *Ap = sp->Ap;
+    csr_index_t *Ai = sp->Ai;
+
+    csr_index_t i, j, b;
+
+    csr_index_t col;
+    csr_data_t  val;
+    
+    for(b=0; b<nblk; b++){
+        for(i=row_beg; i<row_end; i++){
+            for(j=Ap[i]; j<Ap[i+1]; j++){
+                col = Ai[row_beg+j];
+                val = Ax[row_beg+j];
+                result[b*blk_size + i] += x[b*blk_size + col]*val;
+            }
+        }
     }
 }
 

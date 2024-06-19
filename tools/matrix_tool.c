@@ -420,7 +420,7 @@ int main(int argc, char *argv[])
         // all non-local entries are received from peers, hence set to non-nan during communication
         for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
         for(int i=0; i<csr_nrows(&Hfull); i++)
-            x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 0); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
+            x[csr_local_rowoffset(&Hfull) + i] = CMPLX(1, 1); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
 
         // perform spmv for the non-blocked Hfull matrix (native csr storage)
         tic(); PRINTF0("non-blocked spmv ");
@@ -429,10 +429,25 @@ int main(int argc, char *argv[])
         csr_spmv(0, csr_nrows(&Hfull), &Hfull, x, yfull);
         toc();
 
+        // perform spmv for the non-blocked Hfull matrix (native csr storage)
+        tic(); PRINTF0("matrix-free spmv (warmup)");
+        csr_init_communication(&Hfull, x, rank, nranks);
+        csr_comm(&Hfull, rank, nranks);
+        matfree_spmv_H(0, csr_nrows(&Hfull), &Hfull_blk, x, yblk,
+                       h, dt, &submatrix, ft, lmax, h0, H, g, gt);
+        toc();
+
+        for(int i=0; i<csr_nrows(&Hfull_blk); i++)
+            yblk[i] = CMPLX(0,0);
+        tic(); PRINTF0("matrix-free spmv ");
+        csr_init_communication(&Hfull, x, rank, nranks);
+        csr_comm(&Hfull, rank, nranks);
+        matfree_spmv_H(0, csr_nrows(&Hfull), &Hfull_blk, x, yblk,
+                       h, dt, &submatrix, ft, lmax, h0, H, g, gt);
+        toc();
+        
         // validate - compare yblk and yfull results
-        if(Hfull_blk.Ax){
-            compare_vectors(yfull, yblk, csr_nrows(&Hfull));
-        }
+        compare_vectors(yfull, yblk, csr_nrows(&Hfull));            
 
 #if defined USE_CUDA | defined USE_HIP
         {
@@ -492,6 +507,29 @@ int main(int argc, char *argv[])
             gpu_free_vec(&xgpu);
             gpu_free_vec(&ygpu);
             gpu_free_csr(&gpuS);
+        }
+#else
+        {
+            for(int i=0; i<csr_ncols(&Hfull); i++) x[i] = CMPLX(NAN,NAN);
+            for(int i=0; i<csr_nrows(&Hfull); i++)
+                x[csr_local_rowoffset(&Hfull) + i] = CMPLX(i, 2*i); // CMPLX(Hfull_blk.row_beg*blkdim + i, Hfull_blk.row_beg*blkdim + i);
+
+            // perform spmv for the non-blocked S matrix (native csr storage)
+            for(int i=0; i<csr_nrows(&Hfull); i++) yfull[i] = 0;
+            tic(); PRINTF0("S spmv ");
+            csr_spmv(0, csr_nrows(&S), &S, x + csr_local_rowoffset(&Hfull), yfull);
+            toc();            
+
+            csr_data_t *ymatfree = (csr_data_t *)calloc(csr_nrows(&Hfull_blk), sizeof(csr_data_t));
+            tic(); PRINTF0("S matfree spmv ");
+            matfree_spmv_S(0, csr_nrows(&S), &S_blk, x + csr_local_rowoffset(&Hfull), ymatfree,
+                           h, dt, s0, &submatrix);
+            toc();            
+            
+            // compare with CPU results
+            compare_vectors(ymatfree, yfull, csr_nrows(&Hfull));
+
+            free(ymatfree);
         }
 #endif
 
