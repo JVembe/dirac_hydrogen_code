@@ -26,7 +26,8 @@ CFLAGS_DEVICE = -DGPU_THREADS_PER_BLOCK=512
 endif
 
 CFLAGS_ACCEL = $(CFLAGS_HIP) $(CFLAGS_CUDA)
-CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp -ffast-math -fopt-info-vec-optimized
+CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp -ffast-math
+#-fopt-info-vec-optimized
 
 LDFLAGS_ACCEL = $(LDFLAGS_HIP) $(LDFLAGS_CUDA)
 LDFLAGS = $(LDFLAGS_ACCEL) -L$(SLU_HOME)/lib64 -lsuperlu -lopenblas -fopenmp
