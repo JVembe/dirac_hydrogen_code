@@ -546,6 +546,10 @@ class spnrbasis: public basis<spnrbasis> {
 	csmat dpamats[2];
 	vector<csmat> bdplmats;
 	
+	//These are necessary when the problem gets really big.
+	vector<int> kapparr;
+	vector<int> muarr;	
+	
 	private:
 		cdouble bdpK(int i, int j, int l);
 		cdouble bdpL(int i, int j, int l);
