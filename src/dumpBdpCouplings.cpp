@@ -187,9 +187,9 @@ int main(int argc, char* argv[]) {
         {
             for(int l = 0; l < spnrb.bdplmax(); l++) {
                 char fname[256];
-                snprintf(fname, 255, "H0l%d.csr", l);
+                printf(fname, 255, "H0l%d.csr", l);
                 csr_write(fname, spnrb.bdpam(1,l));
-                snprintf(fname, 255, "H1l%d.csr", l);
+                printf(fname, 255, "H1l%d.csr", l);
                 csr_write(fname, spnrb.bdpam(-1,l));
             }
 

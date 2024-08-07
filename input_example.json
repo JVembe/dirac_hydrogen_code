@@ -1,10 +1,10 @@
 {
-  "Nsplines": 1000,
+  "Nsplines": 250,
   "Ntime": 10,
-  "Nkappa": 40,
-  "Nmu": 10,
+  "Nkappa": 160,
+  "Nmu": 160,
   "Nl": 10,
-  "rBox": 300.0,
+  "rBox": 100.0,
   "Intensity": 15,
   "Omega": 3.5,
   "Cycles": 15
