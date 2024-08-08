@@ -460,8 +460,9 @@ int main(int argc, char *argv[])
         time = time + dt;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
 
-        PRINTF0("iteration %d simulation time %lf\n", iter, time);
-
+        if(iter%10==0) {
+		PRINTF0("iteration %d simulation time %lf\n", iter, time);
+	}
         /* if(rank==0) { */
         /*     printf("f(t)\n"); */
         /*     for(int i=0; i<6; i++) printf("(%lf,%lf)\n", creal(ft[i]), cimag(ft[i])); */
@@ -495,7 +496,7 @@ int main(int argc, char *argv[])
         PRINTF0("GPU BICGSTAB\n"); tic();
         gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                      gpu_LU_precond_fun, &gpuLU, &wsp, &iters, &tol_error);
-        MPI_Barrier(MPI_COMM_WORLD); toc();
+        MPI_Barrier(MPI_COMM_WORLD);toc();
 #else
         // time-dependent part of the Hamiltonian
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
@@ -515,7 +516,7 @@ int main(int argc, char *argv[])
         PRINTF0("GPU BICGSTAB\n"); tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
-        MPI_Barrier(MPI_COMM_WORLD); toc();
+        MPI_Barrier(MPI_COMM_WORLD);toc();
 #endif
 
         // collect the results on rank 0 for un-permuting and printing

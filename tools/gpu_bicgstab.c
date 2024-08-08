@@ -267,7 +267,7 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
 
       tmp = dreduce(squarednorm(nrow, r, incx));
       //#ifdef DEBUG
-      if(rank==0) printf("%e\n", sqrt(tmp));
+      //if(rank==0) printf("%e\n", sqrt(tmp));
       //#endif
       if(tmp < tol2) break;
       ++i;
