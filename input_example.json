@@ -1,9 +1,8 @@
 {
   "Nsplines": 250,
   "Ntime": 10,
-<<<<<<< HEAD
-  "Nkappa": 160,
-  "Nmu": 160,
+  "Nkappa": 33,
+  "Nmu": 33,
   "Nl": 10,
   "rBox": 100.0,
   "Intensity": 15,
