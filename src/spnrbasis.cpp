@@ -54,7 +54,7 @@ spnrbasis::spnrbasis(int kmax, int mumax) {
 	
 	//Setup index-kappa array and index-mu array
 	kapparr = vector<int>(Nth);
-	muarr = vector<int>(Nth);
+	muarr = vector<double>(Nth);
 	
 	for(int i = 0; i < Nth; i++) {
 		kapparr[i] = ik(i);
@@ -386,8 +386,8 @@ csmat& spnrbasis::bdpalphsigmaXmat(int ul, int l) {
 				
 				// int ki = (int)ik(i);
 				// int kj = (int)ik(j);
-				int ki = kapparr[i];
-				int kj = kapparr[j];
+				int& ki = kapparr[i];
+				int& kj = kapparr[j];
 				
 				
 				double ji = abs(ki) - 0.5;
@@ -396,8 +396,8 @@ csmat& spnrbasis::bdpalphsigmaXmat(int ul, int l) {
 				// double mui = imu(i);
 				// double muj = imu(j);
 				
-				int mui = muarr[i];
-				int muj = muarr[j];
+				double& mui = muarr[i];
+				double& muj = muarr[j];
 				
 				if(((abs(mui)>mumax) || abs(muj) > mumax) && (mumax!=0)) continue;
 				

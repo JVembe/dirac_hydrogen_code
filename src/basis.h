@@ -548,7 +548,7 @@ class spnrbasis: public basis<spnrbasis> {
 	
 	//These are necessary when the problem gets really big.
 	vector<int> kapparr;
-	vector<int> muarr;	
+	vector<double> muarr;	
 	
 	private:
 		cdouble bdpK(int i, int j, int l);
