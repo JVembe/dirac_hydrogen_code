@@ -3261,8 +3261,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				vector<int> slids(0);
 				for(int i = 0; i < angslect.size(); i++) {
 					if(angslect[i]!=cdouble(0.0,0.0)) slids.push_back(i);
-				}
-				
+				}	
 				
 				int nslect = slids.size();
 				
@@ -3270,9 +3269,15 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 					cout << slids[i] << ",";
 				}
 				*/
-				
-				this->angovr(nslect);
-				angids = slids;
+				if((an - nslect) > 10) {
+					this->angovr(nslect);
+					angids = slids;
+				}
+				else {
+				        for(int i = 0; i < an; i++) {
+						angids[i] = i;
+					}
+				}
 				angidsReverse = vector<int>(an);
 				for(int i = 0; i < an; i++) {
 					angidsReverse[i] = -1;

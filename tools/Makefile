@@ -26,7 +26,12 @@ CFLAGS_DEVICE = -DGPU_THREADS_PER_BLOCK=32 --offload-arch=gfx90a
 endif
 
 CFLAGS_ACCEL = $(CFLAGS_HIP) $(CFLAGS_CUDA)
+ifndef SCALING_MODE
 CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp
+else
+$(info Compiling in scaling analysis mod)
+CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp -DSCALING_MODE
+endif
 
 LDFLAGS_ACCEL = $(LDFLAGS_HIP) $(LDFLAGS_CUDA)
 LDFLAGS = $(LDFLAGS_ACCEL) -L$(SLU_HOME)/lib64 -lsuperlu  -fopenmp -L$(HOME)/software/OpenBLAS/lib -lopenblas
