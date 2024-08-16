@@ -403,6 +403,20 @@ void csr_analyze_comm(sparse_csr_t *sp, int rank, int nranks)
     }
 }
 
+void csr_print_comm_info(sparse_csr_t *sp, int rank, int nranks, int blkdim)
+{
+#ifdef USE_MPI
+    /* print the total per-rank communication volume */
+    csr_index_t comm_vol = 0;
+    for(int irank=0; irank < nranks; irank++){
+        comm_vol += sp->n_comm_entries[rank*nranks + irank];
+    }
+    printf("rank %d: communication volume: %d [blocks] %d [doubles]\n", rank, comm_vol, comm_vol*blkdim);
+#else
+    printf("no communication with 1 rank");
+#endif
+}
+
 void csr_exchange_comm_info(sparse_csr_t *sp, int rank, int nranks)
 {
 #ifdef USE_MPI
