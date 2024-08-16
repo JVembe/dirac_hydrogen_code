@@ -258,6 +258,9 @@ int main(int argc, char** argv) {
 	angInit[0] = 1.0;
 	
 	rthphb.pruneUncoupled(angInit,true);
+	for(int i = 0; i < rthphb.angids.size(); i++) {
+		cout << "(" << i << ", " << rthphb.angids[i] << ", " << ik(rthphb.angids[i])<< ", " << imu(rthphb.angids[i]) << ")," << std::endl;
+	}
 	
 	
 	dirwf psi1 = dirwf(rthphb,psi);

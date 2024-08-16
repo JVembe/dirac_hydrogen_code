@@ -1181,11 +1181,11 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
 				
 				std::stringstream fevlUs;
-				fevlUs << "evl" << -kappa << ".mat";
+				fevlUs << "evl" << kappa << ".mat";
 				string fevlU = fevlUs.str();
 				
 				std::stringstream fevcUs;
-				fevcUs << "evc" << -kappa << ".mat";
+				fevcUs << "evc" << kappa << ".mat";
 				string fevcU = fevcUs.str();
 				
 				vec evlU = loadMatrix<vec>(fevlU);

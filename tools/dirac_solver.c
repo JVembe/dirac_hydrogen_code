@@ -160,13 +160,14 @@ int main(int argc, char *argv[])
     double intensity, omega, cycles, maxtime = 0, time = 0, iterations = 0;
     double dt, h;
     int cnt;
+    int comm_info = 0;
 
     if(argc<5){
         fprintf(stderr, "Usage: %s -l time -l lmax -i intensity -o omega -c cycles\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:v")) != -1) {
         switch (opt) {
         case 't': maxtime = atof(optarg); break;
         case 'l': lmax = atoi(optarg); break;
@@ -174,6 +175,7 @@ int main(int argc, char *argv[])
         case 'o': omega = atof(optarg); break;
         case 'c': cycles = atof(optarg); break;
         case 'n': iterations = atof(optarg); break;
+        case 'v': comm_info = 1; break;
         default:
             fprintf(stderr, "Usage: %s [-lioc]\n", argv[0]);
             exit(EXIT_FAILURE);
@@ -235,6 +237,18 @@ int main(int argc, char *argv[])
         Hfull_blk = Hall;
         S_blk = Sdiag;
     }
+
+    if(comm_info){
+        sparse_csr_t gtmp;
+        csr_read("g0a0l0.csr", &gtmp);
+        int blkdim = csr_nrows(&gtmp);
+        MPI_Barrier(MPI_COMM_WORLD);
+        csr_print_comm_info(&Hfull_blk, rank, Hall.npart, blkdim);
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Finalize();
+        exit(0);
+    }
+
     /* MPI_Barrier(MPI_COMM_WORLD); */
     /* MPI_Finalize(); */
     /* exit(0); */
@@ -462,6 +476,7 @@ int main(int argc, char *argv[])
 
         if(iter%10==0) {
 		PRINTF0("iteration %d simulation time %lf\n", iter, time);
+		fflush(stdout);
 	}
         /* if(rank==0) { */
         /*     printf("f(t)\n"); */
@@ -474,17 +489,17 @@ int main(int argc, char *argv[])
         /* toc(); */
 
         // time-dependent part of the Hamiltonian
-        PRINTF0("GPU matrix assembly "); tic();
+        //PRINTF0("GPU matrix assembly "); tic();
         gpu_compute_timedep_matrices(h, dt, ft, lmax, &Hfull_blk, &Hfull, &gpuHfull);
-        toc();
+        //toc();
 
-        PRINTF0("rhs vector "); tic();
+        //PRINTF0("rhs vector "); tic();
         // rhs = (S-H)*psi(n-1)
         csr_init_communication(&Hfull, (csr_data_t*)xgpu.x, rank, nranks);
         csr_comm(&Hfull, rank, nranks);
         gpu_spmv(&gpuHfull, &xgpu, &rhsgpu, CMPLX(-1,0), CMPLX(0,0));
         gpu_spmv_local(&gpuS, &xgpu, &rhsgpu, CMPLX(1,0), CMPLX(1,0));
-        toc();
+        //toc();
 
         gpu_HS_matrices gpumat;
         gpumat.H = &Hfull;
@@ -493,10 +508,10 @@ int main(int argc, char *argv[])
         gpumat.gpuS = &gpuS;
 
         MPI_Barrier(MPI_COMM_WORLD);
-        PRINTF0("GPU BICGSTAB\n"); tic();
+        //PRINTF0("GPU BICGSTAB\n"); tic();
         gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                      gpu_LU_precond_fun, &gpuLU, &wsp, &iters, &tol_error);
-        MPI_Barrier(MPI_COMM_WORLD);toc();
+        MPI_Barrier(MPI_COMM_WORLD);//toc();
 #else
         // time-dependent part of the Hamiltonian
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
@@ -513,14 +528,14 @@ int main(int argc, char *argv[])
         mat.H = &Hfull;
         mat.S = &S;
         MPI_Barrier(MPI_COMM_WORLD);
-        PRINTF0("GPU BICGSTAB\n"); tic();
+        //PRINTF0("GPU BICGSTAB\n"); tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
-        MPI_Barrier(MPI_COMM_WORLD);toc();
+        MPI_Barrier(MPI_COMM_WORLD);//toc();
 #endif
 
         // collect the results on rank 0 for un-permuting and printing
-        if(iter%100==0){
+        if(iter%2000==0){
 
 #if defined USE_CUDA | defined USE_HIP
             // get result from the GPU

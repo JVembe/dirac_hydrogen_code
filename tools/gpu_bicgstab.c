@@ -187,7 +187,8 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
 
   /* while ( r.squaredNorm() > tol2 && i<maxIters ) */
   #ifdef SCALING_MODE
-  while ( i<20 ){
+  if(rank==0) printf("BiCGSTAB in scaling test mode.\n");
+  while ( i < 20){
   #else
   while ( i<maxIters ){
   #endif
