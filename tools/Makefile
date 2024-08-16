@@ -28,6 +28,10 @@ endif
 CFLAGS_ACCEL = $(CFLAGS_HIP) $(CFLAGS_CUDA)
 CFLAGS = -DDEBUG0 -g -lm -DUSE_MPI -I$(SLU_HOME)/include $(CFLAGS_ACCEL) -fopenmp
 
+ifdef SCALING_MODE
+CFLAGS = $(CFLAGS) -DSCALING_MODE
+endif
+
 LDFLAGS_ACCEL = $(LDFLAGS_HIP) $(LDFLAGS_CUDA)
 LDFLAGS = $(LDFLAGS_ACCEL) -L$(SLU_HOME)/lib64 -lsuperlu  -fopenmp -L$(HOME)/software/OpenBLAS/lib -lopenblas
 #LDFLAGS = $(LDFLAGS_ACCEL) -L$(SLU_HOME)/lib64 -lsuperlu  -fopenmp /usr/lib64/libblas.so.3

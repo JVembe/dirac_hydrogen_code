@@ -186,8 +186,11 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
   int restarts = 0;
 
   /* while ( r.squaredNorm() > tol2 && i<maxIters ) */
+  #ifdef SCALING_MODE
+  while ( i<20 ){
+  #else
   while ( i<maxIters ){
-
+  #endif
       gpu_complex_t blasa, blasb;
       gpu_complex_t rho_old = rho;
 
@@ -269,7 +272,9 @@ void gpu_bicgstab(gpu_spmv_fun spmv, const void *mat, const gpu_dense_vec_t *rhs
       //#ifdef DEBUG
       //if(rank==0) printf("%e\n", sqrt(tmp));
       //#endif
-      if(tmp < tol2) break;
+      #ifndef SCALING_MODE
+	  if(tmp < tol2) break;
+	  #endif
       ++i;
   }
 

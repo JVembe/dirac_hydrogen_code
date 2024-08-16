@@ -995,7 +995,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 					
 					kappas.push_back(-kappa);
 					
-					this->bs->getRadial().setState(iL);
+					this->bs->getRadial().setState(ki(-kappa));
 					
 					dsmat H0rL = this->template H0<axis::radial>().real();
 					dsmat SrL = this->template S<axis::radial>().real();
@@ -1016,7 +1016,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 					
 					kappas.push_back(kappa);
 					
-					this->bs->getRadial().setState(iU);
+					this->bs->getRadial().setState(ki(kappa));
 					
 					dsmat H0rU = this->template H0<axis::radial>().real();
 					dsmat SrU = this->template S<axis::radial>().real();
@@ -1329,6 +1329,8 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		for(int j = 0; j < kappas.size(); j++) {
 			if(kappas[j] == kappa) i = j;
 		}
+		
+		cout << "kappa: " << kappa << "i: " << i << endl; 
 		
 		int lth0, lNth, ll0,lNl;
 		
