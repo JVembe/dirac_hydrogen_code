@@ -57,6 +57,7 @@ void csr_blocked_to_full(sparse_csr_t *Afull, sparse_csr_t *Ablk, sparse_csr_t *
 void csr_unblock_comm_info(sparse_csr_t *out, const sparse_csr_t *in, int rank, int nranks);
 void csr_init_communication(sparse_csr_t *sp, csr_data_t *px, int rank, int nranks);
 void csr_comm(const sparse_csr_t *sp, int rank, int nranks);
+void csr_print_comm_info(sparse_csr_t *sp, int rank, int nranks, int blkdim);
 
 csr_data_t csr_get_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col);
 void csr_set_value(const sparse_csr_t *sp, csr_index_t row, csr_index_t col, csr_data_t val);

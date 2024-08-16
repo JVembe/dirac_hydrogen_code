@@ -160,13 +160,14 @@ int main(int argc, char *argv[])
     double intensity, omega, cycles, maxtime = 0, time = 0, iterations = 0;
     double dt, h;
     int cnt;
+    int comm_info = 0;
 
     if(argc<5){
         fprintf(stderr, "Usage: %s -l time -l lmax -i intensity -o omega -c cycles\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:v")) != -1) {
         switch (opt) {
         case 't': maxtime = atof(optarg); break;
         case 'l': lmax = atoi(optarg); break;
@@ -174,6 +175,7 @@ int main(int argc, char *argv[])
         case 'o': omega = atof(optarg); break;
         case 'c': cycles = atof(optarg); break;
         case 'n': iterations = atof(optarg); break;
+        case 'v': comm_info = 1; break;
         default:
             fprintf(stderr, "Usage: %s [-lioc]\n", argv[0]);
             exit(EXIT_FAILURE);
@@ -235,6 +237,18 @@ int main(int argc, char *argv[])
         Hfull_blk = Hall;
         S_blk = Sdiag;
     }
+
+    if(comm_info){
+        sparse_csr_t gtmp;
+        csr_read("g0a0l0.csr", &gtmp);
+        int blkdim = csr_nrows(&gtmp);
+        MPI_Barrier(MPI_COMM_WORLD);
+        csr_print_comm_info(&Hfull_blk, rank, Hall.npart, blkdim);
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Finalize();
+        exit(0);
+    }
+
     /* MPI_Barrier(MPI_COMM_WORLD); */
     /* MPI_Finalize(); */
     /* exit(0); */
