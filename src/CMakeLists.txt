@@ -47,6 +47,9 @@ add_executable(processOutput ${SOURCES_PROCESSOUTPUT})
 # Add the executable for nondipoleMPItest
 add_executable(nondipoleMPItest ${SOURCES_NONDIPOLE})
 
+# Add the executable for dipoleMPItest
+add_executable(dipoleMPItest ${SOURCES_DIPOLE})
+
 # Additional compile options based on build type
 target_compile_options(dumpCouplings PRIVATE
   $<$<CONFIG:Debug>:-g>
@@ -54,6 +57,11 @@ target_compile_options(dumpCouplings PRIVATE
 )
 
 target_compile_options(nondipoleMPItest PRIVATE
+  $<$<CONFIG:Debug>:-g -O3>
+  $<$<CONFIG:Release>:-O3>
+)
+
+target_compile_options(dipoleMPItest PRIVATE
   $<$<CONFIG:Debug>:-g -O3>
   $<$<CONFIG:Release>:-O3>
 )
@@ -102,3 +110,10 @@ target_link_libraries(nondipoleMPItest
   PRIVATE
     nlohmann_json::nlohmann_json)
 	
+target_link_libraries(dipoleMPItest
+  PUBLIC
+    MPI::MPI_CXX
+    wignerSymbols
+    OpenMP::OpenMP_CXX
+  PRIVATE
+    nlohmann_json::nlohmann_json)
