@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
 	//Get eigenvalues and eigenvectors
 	H.prepeigsLowMem(Nsplines,Nsplines/2, true);
 	
-    H.H0radprep();
+        H.H0radprep();
 	
 	//psi1 set from ground state and normalized
 	cvec coefsE0 = H.getevec(Nsplines+5,-1,-0.5); 
@@ -245,7 +245,7 @@ int main(int argc, char* argv[]) {
 
 	// cnp.setDumpfile((filenamePrefix + "_dump"));
 
-	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
+	cnp.propagate(psi1,(0.6*PI)/Ntime,Ntime,1);
 
 	dirwf wft = cnp.wft;
 

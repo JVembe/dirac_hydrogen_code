@@ -57,7 +57,17 @@ target_compile_options(dumpCouplings PRIVATE
 )
 
 target_compile_options(nondipoleMPItest PRIVATE
-  $<$<CONFIG:Debug>:-g -O3>
+  $<$<CONFIG:Debug>:-g>
+  $<$<CONFIG:Release>:-O3>
+)
+
+target_compile_options(dumpEvecs PRIVATE
+  $<$<CONFIG:Debug>:-g>
+  $<$<CONFIG:Release>:-O3>
+)
+
+target_compile_options(processOutput PRIVATE
+  $<$<CONFIG:Debug>:-g>
   $<$<CONFIG:Release>:-O3>
 )
 

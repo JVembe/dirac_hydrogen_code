@@ -260,7 +260,7 @@ void bicgstab(spmv_fun spmv, const void *mat, const cdouble_t *rhs, cdouble_t *x
 
       tmp = dreduce(squarednorm(r, nrow));
       //#ifdef DEBUG
-      if(rank==0) printf("%e\n", sqrt(tmp));
+      //if(rank==0) printf("%e\n", sqrt(tmp));
       //#endif
       if(tmp < tol2) break;
       ++i;

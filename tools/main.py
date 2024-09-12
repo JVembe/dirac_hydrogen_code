@@ -22,6 +22,7 @@ def dense_read(fname):
     with open(fname, 'r') as f:
         rows = npy.fromfile(f, dtype='int64', count=1)[0]
         cols = npy.fromfile(f, dtype='int64', count=1)[0]
+        print(rows,cols)
         data = npy.fromfile(f, dtype='complex', count=rows*cols)
         return data
     

@@ -194,7 +194,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
     if(NULL == envar) envar = getenv("OMP_NUM_THREADS");
     if(NULL != envar) nthr = atoi(envar);
     if(0 == nthr) nthr = 1;
-    tic(); PRINTF0("compute Ht on %d threads ", nthr);
+    //tic(); PRINTF0("compute Ht on %d threads ", nthr);
 
 #pragma omp parallel num_threads(nthr)
     {
@@ -381,7 +381,7 @@ void compute_timedep_matrices(double h, double dt, sparse_csr_t *_submatrix, csr
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
     if(rank==0){
-        toc();
+        //toc();
     }
 }
 

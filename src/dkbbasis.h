@@ -221,7 +221,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 		dkbbasis(vec& t, int splinedeg);
 		void setst(int i) {
 			this->kappa = ik(i);
-			// cout << "State set with index " << i <<", kappa equals " << this->kappa << std::endl;
+			cout << "State set with index " << i <<", kappa equals " << this->kappa << std::endl;
 		}
 
 		void setst(int kappa1, int kappa2, int ul) {

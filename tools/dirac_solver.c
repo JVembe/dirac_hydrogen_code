@@ -161,13 +161,16 @@ int main(int argc, char *argv[])
     double dt, h;
     int cnt;
     int comm_info = 0;
+    //time iteration count
+    int iter = 1;
+
 
     if(argc<5){
         fprintf(stderr, "Usage: %s -l time -l lmax -i intensity -o omega -c cycles\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:v")) != -1) {
+    while ((opt = getopt(argc, argv, "t:l:i:o:c:n:v:s:")) != -1) {
         switch (opt) {
         case 't': maxtime = atof(optarg); break;
         case 'l': lmax = atoi(optarg); break;
@@ -176,12 +179,18 @@ int main(int argc, char *argv[])
         case 'c': cycles = atof(optarg); break;
         case 'n': iterations = atof(optarg); break;
         case 'v': comm_info = 1; break;
-        default:
+        case 's': 
+		printf(optarg);
+		fflush(stdout);
+                printf("%d\n",atoi(optarg));
+                fflush(stdout);
+		iter = atoi(optarg);
+		break; //for setting time to a later step s.t. simulation may resume from an earlier point
+	default:
             fprintf(stderr, "Usage: %s [-lioc]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
-
     dt = maxtime/iterations;
     // dt = 0.000117750000000; //0.125;
     h  = 1;
@@ -458,14 +467,13 @@ int main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
-    // time iterations
-    int iter = 1;
 #if defined USE_CUDA | defined USE_HIP
     gpu_solver_workspace_t wsp = {0};
 #else
     solver_workspace_t wsp = {0};
 #endif
-    time = 0;
+    time = dt * (iter-1);
+    bigtic();
     while(time <= maxtime){
         csr_data_t ft[6] = {0};
         complex ihdt = I*h*dt/2;
@@ -585,7 +593,7 @@ int main(int argc, char *argv[])
         }
         iter++;
     }
-
+    PRINTF0("Total runtime: "); bigtoc();
 #ifdef USE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
