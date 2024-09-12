@@ -320,8 +320,18 @@ int main(int argc, char** argv) {
 	dkbb.Em(&coloumb<Z>);
 	H.H0radprep();
 	
-	H.loadEigs();
-	H.savePsievs(psi1,"psiev_processtest");
+	int Nr = rthphb.radqN();
+	int Nth = rthphb.angqN();
+	
+	int lth0, lNth;
+	
+	H.naiveDistribute(lth0,lNth);
+	
+	H.loadEigs(true);
+	
+	dirwf psiL = dirwf(rthphb,psi.segment(lth0*Nr,(lNth-lth0)*Nr));
+	
+	H.savePsievs(psiL,"psiev_processtest",true);
 	
 	// H.prepeigsLowMem(Nsplines,Nsplines/2, true);
 	

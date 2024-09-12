@@ -1150,60 +1150,76 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		}
 	}
 	
-	void loadEigs() {
+	void loadEigs(bool naiveMPI=false) {
 		int kappamax = this->angMax();
+		
+		int lth0, lNth, ll0,lNl;
+		
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}
+		
+		int firstkappa = ik(this->bs->indexTransform(lth0));
+		int lastkappa = ik(this->bs->indexTransform(lNth-1));
+		
+		int id0 = ki(firstkappa);
+		int id1 = ki(lastkappa);
+		cout << "first kappa: " << firstkappa << ", last kappa: " << lastkappa << endl;
+		
+		cout << "id0: " << id0 << ", id1: " << id1 << endl;
+		
 		for(int kappa = 1; kappa <= kappamax; kappa++) {
 				int iL = ki(-kappa);
-				
-				cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
-				
-				std::stringstream fevlLs;
-				fevlLs << "evl" << -kappa << ".mat";
-				string fevlL = fevlLs.str();
-				
-				std::stringstream fevcLs;
-				fevcLs << "evc" << -kappa << ".mat";
-				string fevcL = fevcLs.str();
-				
-				vec evlL = loadMatrix<vec>(fevlL);
-				cmat evcL = loadMatrix<cmat>(fevcL);
-				
-				kappas.push_back(-kappa);
-				
-				
-				kappaevals.push_back(evlL.real());
-				int eigNL = evlL.size();
-				
-				kappaevecs.push_back(evcL.real());
-				
+				if(((iL >= id0) && (iL <= id1)) || (ik(iL) == ik(id1)) ) {
+					cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+					
+					std::stringstream fevlLs;
+					fevlLs << "evl" << -kappa << ".mat";
+					string fevlL = fevlLs.str();
+					
+					std::stringstream fevcLs;
+					fevcLs << "evc" << -kappa << ".mat";
+					string fevcL = fevcLs.str();
+					
+					vec evlL = loadMatrix<vec>(fevlL);
+					cmat evcL = loadMatrix<cmat>(fevcL);
+					
+					kappas.push_back(-kappa);
+					
+					
+					kappaevals.push_back(evlL.real());
+					int eigNL = evlL.size();
+					
+					kappaevecs.push_back(evcL.real());
+				}
 				int iU = ki(kappa);
 				
-				cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
-				
-				std::stringstream fevlUs;
-				fevlUs << "evl" << kappa << ".mat";
-				string fevlU = fevlUs.str();
-				
-				std::stringstream fevcUs;
-				fevcUs << "evc" << kappa << ".mat";
-				string fevcU = fevcUs.str();
-				
-				vec evlU = loadMatrix<vec>(fevlU);
-				cmat evcU = loadMatrix<cmat>(fevcU);
-				
-				kappas.push_back(kappa);
-				
-				
-				kappaevals.push_back(evlU);
-				int eigNU = evlU.size();
-				
-				kappaevecs.push_back(evcU.real());
-				
-				
+				if(((iU >= id0) && (iU <= id1)) || (ik(iU) == ik(id1)) ) {
+					cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+					
+					std::stringstream fevlUs;
+					fevlUs << "evl" << kappa << ".mat";
+					string fevlU = fevlUs.str();
+					
+					std::stringstream fevcUs;
+					fevcUs << "evc" << kappa << ".mat";
+					string fevcU = fevcUs.str();
+					
+					vec evlU = loadMatrix<vec>(fevlU);
+					cmat evcU = loadMatrix<cmat>(fevcU);
+					
+					kappas.push_back(kappa);
+					
+					
+					kappaevals.push_back(evlU);
+					int eigNU = evlU.size();
+					
+					kappaevecs.push_back(evcU.real());
+				}
 			}
 	}
 	
-	std::vector<cmat> eigProj(const wavefunc<basistype>& psi) {
+	std::vector<cmat> eigProj(const wavefunc<basistype>& psi,bool naiveMPI=false) {
 		// cout << psi.coefs << endl;
 		// cout << "kappaevecs size = " << kappaevecs.size() << endl;
 		int kappasize = kappaevecs.size();
@@ -1212,9 +1228,15 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		int Nr = this->bs->radqN();
 		
-		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}	
+		else {
+			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+			
+			if((lNth == 0) || (lNth > this->bs->angqN())) lNth = this->bs->angqN();
+		}
 		
-		if((lNth == 0) || (lNth > this->bs->angqN())) lNth = this->bs->angqN();
 		//Need to get evecs corresponding to current kappa
 		cout << "Nr = " << Nr << endl;
 		cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
@@ -1224,7 +1246,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		for(int th = lth0; th < lNth; th++) {
 			cout << "Index: " << th 
 				 << "\nTransformed index: " << this->bs->indexTransform(th) 
-				 << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
+				 << "\nKappa: " << ik(this->bs->indexTransform(th)) << " Mu: " << imu(this->bs->indexTransform(th)) << endl;
 			int i = -1;
 			
 			
@@ -1233,7 +1255,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				if(kappas[j] == ik(this->bs->indexTransform(th))) i = j;
 			}
 			
-			// cout << "kappa index: " << i << endl;
+			cout << "kappa index: " << i << endl;
 			
 			cout << psi.coefs.size() << endl;
 			
@@ -1261,7 +1283,30 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		return psievs;
 	}
 	
-	void savePsievs(const wavefunc<basistype>& psi, std::string filename) {
+	void naiveDistribute(int& lth0, int& lNth) {
+		int Nth = this->bs->angqN();
+		int kappamax = this->angMax();
+		int wrank, wsize;
+			
+		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+		MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+		
+		if(kappamax%wsize == 0) {
+			int ln = Nth/wsize;
+			lth0 = ln * wrank;
+			lNth = lth0 + ln;
+		}
+		else {
+			int ln = Nth/wsize + 1;
+			int excess = ln * wsize - Nth;
+			if(wsize - wrank <= excess) ln = Nth/wsize;
+			
+			lth0 = (Nth/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
+			lNth = lth0 + ln;
+		}
+	}
+	
+	void savePsievs(const wavefunc<basistype>& psi, std::string filename,bool naiveMPI=false) {
 		int wsize, wrank;
 		
 		MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
@@ -1270,11 +1315,15 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			
 		cout << "Projecting onto eigenstates and saving...";
 		
-		std::vector<cmat> psievs = eigProj(psi);
+		std::vector<cmat> psievs = eigProj(psi,naiveMPI);
 		
 		int lth0, lNth, ll0,lNl;
-		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
-		
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}
+		else {
+			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		}
 		
 		for(int i = 0; i < wsize; i++) {
 			ofstream psievf(filename,ofstream::app);
