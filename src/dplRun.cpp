@@ -159,7 +159,7 @@ int main() {
 	
 	using Htype = Dirac<dirbs>;
 	Htype H(rthphb,&dplA<15,50,INTENSITY>);
-	H.Vfunc = &coloumb<1>;
+	H.Vfunc = &coulomb<1>;
 	H.H0radprep();
 	
 	H.prepeigs(Nsplines,Nsplines/2);

@@ -7,5 +7,6 @@
   "rBox": 100.0,
   "Intensity": 100,
   "Omega": 50,
-  "Cycles": 15
+  "Cycles": 15,
+  "Z": 1
 }

@@ -27,7 +27,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 	//clsmat dKappaCache = clsmat(0,0);
 	
 	//Not actually used for anything
-	long double (*lastV)(long double);
+	coulomb *lastV;
 	
 	//Stores dual kinetic balance basis vectors P_0, P_kappa, Q_0, Q_kappa
 	clsmat dkbU0 = clsmat(0,0);
@@ -259,7 +259,7 @@ class dkbbasis: public basis<dkbbasis>, public splineHandler {
 		
 		csmat& olmat();
 		csmat& ddmat(int dn);
-		csmat& Emat(long double (*V)(long double));
+		csmat& Emat(coulomb *V);
 		csmat& p1mat();
 		// csmat& H0mat();
 		
