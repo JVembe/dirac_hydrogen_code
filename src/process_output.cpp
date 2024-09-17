@@ -326,11 +326,11 @@ int main(int argc, char** argv) {
 	int lth0, lNth;
 	
 	H.naiveDistribute(lth0,lNth);
-	
+	MPI_Barrier(MPI_COMM_WORLD);
 	H.loadEigs(true);
-	
+	MPI_Barrier(MPI_COMM_WORLD);
 	dirwf psiL = dirwf(rthphb,psi.segment(lth0*Nr,(lNth-lth0)*Nr));
-	
+	MPI_Barrier(MPI_COMM_WORLD);
 	H.savePsievs(psiL,"psiev_processtest",true);
 	
 	// H.prepeigsLowMem(Nsplines,Nsplines/2, true);

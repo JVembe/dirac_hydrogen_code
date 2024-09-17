@@ -972,14 +972,16 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				int ln = 2*kappamax/wsize;
 				lth0 = ln * wrank;
 				lNth = lth0 + ln;
+				cout << "ln at wrank " << wrank << ": " << ln << endl;
 			}
 			else {
 				int ln = 2*kappamax/wsize + 1;
-				int excess = ln * wsize - kappamax;
-				if(wsize - wrank <= excess) ln = kappamax/wsize;
+				int excess = ln * wsize - 2*kappamax;
+				if(wsize - wrank < excess) ln = kappamax/wsize;
 				
 				lth0 = (2*kappamax/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
 				lNth = lth0 + ln;
+			        cout << "ln at wrank " << wrank << ": " << ln << ", kappamax: "<< kappamax << ", wsize: " << wsize << ", excess: " << excess << endl;
 			}
 			
 			
