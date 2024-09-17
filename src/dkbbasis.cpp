@@ -466,7 +466,7 @@ csmat& dkbbasis::ddmat(int dn) {
 	return ddm;
 }
 
-csmat& dkbbasis::Emat(long double (*V)(long double)) {
+csmat& dkbbasis::Emat(coulomb *V) {
 	csmat& Em = getmat<E>();
 	csmat& E0 = get0mat<E>();
 	csmat& Ek = getk0mat<E>();
@@ -499,7 +499,7 @@ csmat& dkbbasis::Emat(long double (*V)(long double)) {
 		clsmat vdiag(P0.rows(),P0.rows());
 		
 		for(int i = 0; i < P0.rows(); i++) {
-			vdiag.insert(i,i) = V(x[i]);
+			vdiag.insert(i,i) = V->axialPart<axis::radial>(x[i]);
 		}
 		
 		clsmat wt = wtmat() * vdiag;

@@ -145,7 +145,8 @@ class Hamiltonian {
 			return this->bs->angMax();
 		}
 	public:
-		long double (*Vfunc)(long double);
+		coulomb (*Vfunc);
+		//long double (*Vfunc)(long double);
 		
 		
 		basis<basistype>& getBasis() const { return *bs; };

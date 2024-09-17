@@ -153,7 +153,7 @@ int main() {
 	Htype H(rthphb,bdpp);
 	//Initialize Hamiltonian and set Coulomb potential
 	// Htype H(rthphb,&dplA<15,50,INTENSITY>);
-	H.Vfunc = &coloumb<Z>;
+	H.Vfunc = &coulomb<Z>;
 	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);
 	cvec testsegs = rthphb.blockDistribute3(testvec);

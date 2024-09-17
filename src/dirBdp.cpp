@@ -143,7 +143,7 @@ int main() {
 	//using Htype = Dirac<dirbs>;
 	Htype H(rthphb,bdpp);
 	//Htype H(rthphb,&dplA<15,50,INTENSITY>);
-	H.Vfunc = &coloumb<Z>;
+	H.Vfunc = &coulomb<Z>;
 	
 	
 	cvec testvec = cvec::Constant(rthphb.radqN()*rthphb.angqN(),1.0);

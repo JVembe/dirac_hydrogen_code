@@ -164,38 +164,43 @@ class Potential	{
 		
 };
 
-template<int Z>
-class Coloumb;
+class coulomb;
 
-template<int Z>
-struct traits<Coloumb<Z> > {
+template<>
+struct traits<coulomb> {
 	bool isTimeDependent = false;
 	bool isSpaceDependent = true;
 	bool isRadSeparable = true;
-	typedef double PotentialType;
+	typedef long double PotentialType;
 	typedef mat MatrixReturnType;
-	typedef double PotentialSqType;
+	typedef long double PotentialSqType;
 	typedef mat MatrixSqReturnType;
 };
 
-template <int Z>
-class Coloumb: public Potential<Coloumb<Z> > {
-	Coloumb() : Potential<Coloumb<Z > >() {};
+class coulomb: public Potential<coulomb> {
+	int Z;
+	
+	
+	public:
+		coulomb() : Potential<coulomb >() {};
+		coulomb(int Z) : Potential<coulomb >() {
+			this->Z = Z;
+	}
 	template <typename coordType>
-	double evalAt_impl(const coordType& x) {
+	typename traits<coulomb>::PotentialType evalAt_impl(const coordType& x) {
 		return this->axialPart<radial>(x.template axisProj<radial>(x));
 	}
 	
 	template <typename Scalar>
-	double axialPart_impl(std::integral_constant<axis,radial> c, const Scalar x) const {
+	typename traits<coulomb>::PotentialType axialPart_impl(std::integral_constant<axis,radial> c, const Scalar x) const {
 		if(x==0.0d) return 0.0d;
-		else return Z/x;
+		else return -Z/x;
 	}
 	
 	template <typename MatrixType>
-	typename traits<Coloumb<Z> >::MatrixReturnType axialPart_impl(std::integral_constant<axis,radial> c, const Eigen::MatrixBase<MatrixType>& x) const {
+	typename traits<coulomb>::MatrixReturnType axialPart_impl(std::integral_constant<axis,radial> c, const Eigen::MatrixBase<MatrixType>& x) const {
 		
-		typename traits<Coloumb<Z> >::MatrixReturnType out = Z * x.cwiseInvert();
+		typename traits<coulomb>::MatrixReturnType out = -Z * x.cwiseInvert();
 		return out;
 	}
 };

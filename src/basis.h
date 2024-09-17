@@ -70,9 +70,9 @@ class basis {
 		}
 		csmat& ddmat(int dn) 
 			{ return getmat<dd>(); }
-		csmat& Emat(long double (*V)(long double)) 
+		csmat& Emat(coulomb *V) 
 			{ return getmat<E>(); }
-		csmat& Emat(long double (*V)(long double),bool recache) 
+		csmat& Emat(coulomb *V,bool recache) 
 			{ getmat<E>() = csmat(0,0); return Emat(V); }
 		csmat& Lsqmat() 
 			{ return getmat<Lsq>(); }
@@ -198,9 +198,9 @@ class basis {
 			{ return static_cast<Derived*>(this)->componentOlmat(k1, k2, comp);}
 		csmat& ddm(int dn) 
 			{ return static_cast<Derived*>(this)->ddmat(dn); }
-		csmat& Em(long double (*V)(long double)) 
+		csmat& Em(coulomb *V) 
 			{ return static_cast<Derived*>(this)->Emat(V); }
-		csmat& Em(long double (*V)(long double),bool recache)
+		csmat& Em(coulomb *V,bool recache)
 			{ return static_cast<Derived*>(this)->Emat(V,recache); }
 		csmat& Lsqm() 
 			{ return static_cast<Derived*>(this)->Lsqmat(); }

@@ -22,7 +22,6 @@
 // Headers for MPI and Parallel Computing
 #include "mpiFuncs.h"    // Functions for MPI and Eigen matrix operations
 
-#define Z 1
 
 //These global variables are the consequence of unfortunate silliness in how Bessel functions are applied during the construction of the interaction Hamiltonian. They stop being relevant once matrix elements are constructed
 int beyondDipolePulse::l = 1;
@@ -143,7 +142,7 @@ int main(int argc, char* argv[]) {
         int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
         double omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
         int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
-        
+        int Z = json_params["Z"]; //Nuclear charge
         
         //Formats for outputting matrices
         Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
@@ -205,13 +204,14 @@ int main(int argc, char* argv[]) {
 			cout << "Constructing Hamiltonian" << endl;
             using Htype = DiracBDP<dirbs>;
             Htype H(rthphb,bdpp);
-            H.Vfunc = &coloumb<Z>;
+			coulomb clp(Z);
+            H.Vfunc = &clp;
             //cout << "Diagonalizing Hamiltonian" << endl;
 			dkbb.p1m();
 			dkbb.Sm();
 			dkbb.ulcm();
 			dkbb.km();
-			dkbb.Em(&coloumb<Z>);
+			dkbb.Em(&clp);
 			H.H0radprep();
 	    
 			H.prepeigsLowMem(Nsplines,Nsplines/2, true,0,true);

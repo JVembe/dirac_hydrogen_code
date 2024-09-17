@@ -136,11 +136,11 @@ std::complex<D> cast(const std::complex<S> s)
 
 //Simple potentials are implemented through function pointers. This does not work that well for the nondipole potential, which has its own handling.
 
-template <int Z>
-long double coloumb(long double r) {
-	if(r == 0.0) return 0;
-	else return -(long double)Z/r;
-}
+// template <int Z>
+// long double coulomb(long double r) {
+	// if(r == 0.0) return 0;
+	// else return -(long double)Z/r;
+// }
 
 template <int N, int omega, int E0>
 long double dplA(long double t) {
