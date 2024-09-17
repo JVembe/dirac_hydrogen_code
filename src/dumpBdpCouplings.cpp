@@ -289,8 +289,11 @@ int main(int argc, char* argv[]) {
             //To find the ground state we identify the index of the eigenvalue closest to the ground state energy, -0.500007
                         
             vec::Index e0idx;
-                        
-            double e0 = vec(evls0+vec::Constant(evls0.rows(),0.500007)).array().abs().minCoeff(&e0idx);
+            //Approximate ground state energy
+			double en = - pow(Z,2)/2;
+			
+			
+            double e0 = vec(evls0+vec::Constant(evls0.rows(),-en)).array().abs().minCoeff(&e0idx);
                         
             // cout << evls0;
             cout << "e0: " << evls0[e0idx] << ", idx: " << e0idx << endl;
