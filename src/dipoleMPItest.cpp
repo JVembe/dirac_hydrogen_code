@@ -167,7 +167,8 @@ int main(int argc, char* argv[]) {
 	using Htype = Dirac<dirbs>;
 	//Initialize Hamiltonian and set Coulomb potential
 	Htype H(rthphb,dpp);
-	H.Vfunc = &coulomb<Z>;
+	coulomb clp(Z);
+	H.Vfunc = &clp;
 
 	//Assemble H0 for propagation
 
