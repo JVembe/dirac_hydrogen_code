@@ -224,9 +224,6 @@ void gpu_lu_solve(const gpu_sparse_csr_t *L, const gpu_sparse_csr_t *U, const gp
                                  GPU_C_64F,
                                  GPUSPARSE_SPSV_ALG_DEFAULT,
                                  L->spsvDescr
-#ifdef USE_HIP
-			         ,L->cuBuffer
-#endif
 			 ));
 
     gpusparseDnVecDescr_t outdesc = y->desc;
@@ -241,9 +238,6 @@ void gpu_lu_solve(const gpu_sparse_csr_t *L, const gpu_sparse_csr_t *U, const gp
 				 GPU_C_64F,
 				 GPUSPARSE_SPSV_ALG_DEFAULT,
 				 U->spsvDescr
-#ifdef USE_HIP
-			         ,U->cuBuffer
-#endif
 			 ));
 }
 
