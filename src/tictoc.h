@@ -30,6 +30,15 @@ static void toc()
     fflush(stdout);
 }
 
+static void toc_output(long *out)
+{
+    long s,u;
+    gettimeofday(&te, NULL);
+    s=te.tv_sec-tb.tv_sec;
+    u=te.tv_usec-tb.tv_usec;
+    *out = (s*1000000+u);
+}
+
 static void bigtoc()
 {
     long s,u;

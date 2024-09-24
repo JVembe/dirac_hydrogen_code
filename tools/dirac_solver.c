@@ -473,12 +473,18 @@ int main(int argc, char *argv[])
     solver_workspace_t wsp = {0};
 #endif
     time = dt * (iter-1);
+	
+	int *itersarr = calloc(iterations,sizeof(int));
+	double *tolsarr = calloc(iterations,sizeof(double));
+	long *timearr = calloc(iterations,sizeof(long));
+	
     bigtic();
     while(time <= maxtime){
         csr_data_t ft[6] = {0};
         complex ihdt = I*h*dt/2;
         int iters = 500;
         double tol_error = 1e-16;
+		long bicgtime = 0;
         time = time + dt;
         beoyndDipolePulse_axialPart(&bdpp, time, ft);
 
@@ -536,10 +542,16 @@ int main(int argc, char *argv[])
         mat.H = &Hfull;
         mat.S = &S;
         MPI_Barrier(MPI_COMM_WORLD);
-        //PRINTF0("GPU BICGSTAB\n"); tic();
+        //PRINTF0("GPU BICGSTAB\n"); 
+		tic();
         bicgstab(HS_spmv_fun, &mat, rhs, x, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
-        MPI_Barrier(MPI_COMM_WORLD);//toc();
+        MPI_Barrier(MPI_COMM_WORLD);
+		toc_output(&bicgtime);
+		
+		itersarr[iter] = iters;
+		tolsarr[iter] = tol_error;
+		timearr[iter] = bicgtime;
 #endif
 
         // collect the results on rank 0 for un-permuting and printing
@@ -586,6 +598,12 @@ int main(int argc, char *argv[])
                 fwrite(&ncols, sizeof(int), 1, fd);
                 fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd);
                 fclose(fd);
+				
+				FILE *fstats;
+				fstats = fopen("runstats.txt","w+");
+				for(int i = 0; i < iterations; i++) {
+					fprintf(fstats, "%d, %e, %ld\n", itersarr[i],tolsarr[i],timearr[i]);
+				}
 
             } else {
                 CHECK_MPI(MPI_Send(x + csr_local_rowoffset(&Hfull), 2*csr_nrows(&Hfull), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD));
