@@ -522,10 +522,12 @@ int main(int argc, char *argv[])
         gpumat.gpuS = &gpuS;
 
         MPI_Barrier(MPI_COMM_WORLD);
-        //PRINTF0("GPU BICGSTAB\n"); tic();
+        //PRINTF0("GPU BICGSTAB\n"); 
+	tic();
         gpu_bicgstab(gpu_HS_spmv_fun, &gpumat, &rhsgpu, &xgpu, csr_nrows(&Hfull), csr_ncols(&Hfull), csr_local_rowoffset(&Hfull),
                      gpu_LU_precond_fun, &gpuLU, &wsp, &iters, &tol_error);
-        MPI_Barrier(MPI_COMM_WORLD);//toc();
+        MPI_Barrier(MPI_COMM_WORLD);
+	toc_output(&bicgtime);
 #else
         // time-dependent part of the Hamiltonian
         compute_timedep_matrices(h, dt, &submatrix, ft, lmax, &Hfull_blk, &Hfull, h0, H, g, gt);
@@ -548,12 +550,10 @@ int main(int argc, char *argv[])
                  LU_precond_fun, &sluLU, &wsp, &iters, &tol_error);
         MPI_Barrier(MPI_COMM_WORLD);
 		toc_output(&bicgtime);
-		
-		itersarr[iter] = iters;
-		tolsarr[iter] = tol_error;
-		timearr[iter] = bicgtime;
 #endif
-
+        itersarr[iter] = iters;
+        tolsarr[iter] = tol_error;
+        timearr[iter] = bicgtime;
         // collect the results on rank 0 for un-permuting and printing
         if(iter%2000==0){
 
@@ -599,11 +599,13 @@ int main(int argc, char *argv[])
                 fwrite(xorig, sizeof(csr_data_t), csr_nrows(&Hall)*blkdim, fd);
                 fclose(fd);
 				
-				FILE *fstats;
-				fstats = fopen("runstats.txt","w+");
-				for(int i = 0; i < iterations; i++) {
-					fprintf(fstats, "%d, %e, %ld\n", itersarr[i],tolsarr[i],timearr[i]);
-				}
+                FILE *fstats;
+		fstats = fopen("runstats.txt","w+");
+		for(int i = 0; i < iterations; i++) {
+		    //PRINTF0("%d, %e, %ld\n", itersarr[i],tolsarr[i],timearr[i]);
+		    fprintf(fstats, "%d, %e, %ld\n", itersarr[i],tolsarr[i],timearr[i]);
+		}
+		fclose(fstats);
 
             } else {
                 CHECK_MPI(MPI_Send(x + csr_local_rowoffset(&Hfull), 2*csr_nrows(&Hfull), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD));
