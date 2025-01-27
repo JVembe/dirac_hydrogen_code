@@ -1,5 +1,5 @@
 # dirac_hydrogen_code
-LICENSING AND FINAL README NOT YET IMPLEMENTED
+FULL LICENSE RECOMMENDATIONS AND UPDATED README NOT YET IMPLEMENTED
 
 Parallelized simulation code to model the interaction between a hydrogen atom and a high intensity laser pulse at relativistic energies.
 
