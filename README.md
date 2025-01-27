@@ -103,11 +103,11 @@ where `n` is the number of GPUs you intend to run the simulation with. Sample jo
 
 ### Cite this code
 This software may be cited as
-@software{GaDE,
+`@software{GaDE,
   title = {GaDE: GPU-acceleration of time-dependent Dirac Equation for exascale},
   author = {....},
   url = {https://github.....},
   license = {GPL-v3},
   month = Jan,
   year = {2025}
-} 
+}` 
