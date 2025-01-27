@@ -53,3 +53,16 @@ It can be as low as 4, but for serious simulations it needs to be at least 8 and
 NMu limits the values of the magnetic quantum number, acting as the second angular resolution parameter. MUST be less than NKappa, if 0 then the magnetic quantum number will range from -|κ| to |κ|. Typically never needs to be larger than 10. This parameter is irrelevant in the dipole code, as the dipole approximation used here does not allow changes in magnetic quantum number.
 
 Nl determines the number of expansion terms in the nondipole potential. If 0, the maximum permissible value for the given NKappa is used instead. With a simulation domain (rBox) of 30 atomic units, Nl never needs to be greater than 10. Note also that for the dipole approximation this must be set to 1 for the load balancing algorithm to operate properly.
+
+### CITE AS
+This code may be cited with BiBTex as
+```
+@software{GaDE,
+  title = {GaDE: GPU-acceleration of time-dependent Dirac Equation for exascale},
+  author = {Johanne Elise Vembe, Marcin Krotkiewski, Magnar Bjørgve, Hicham Agueny},
+  url = {https://github.com/JVembe/dirac_hydrogen_code.},
+  license = {GPL-v3},
+  month = Jan,
+  year = {2025}
+}
+```
