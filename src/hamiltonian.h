@@ -44,6 +44,43 @@ vec linInterpolate(const vec& x,const vec& y, const vec& pts) {
 	return out;
 }
 
+template <typename MatrixType>
+MatrixType loadMatrix(std::string filename) {
+	using idx_t = typename MatrixType::Index;
+	using scalar_t = typename MatrixType::Scalar;
+
+	ifstream psiFile(filename,ios::binary|ios::in|ios::ate);
+	idx_t Nrow;
+	idx_t Ncol;
+	
+	streampos size = psiFile.tellg();
+	
+	psiFile.seekg(0,ios::beg);
+	
+	psiFile.read(reinterpret_cast<char*>(&Nrow),sizeof(Nrow));
+	psiFile.read(reinterpret_cast<char*>(&Ncol),sizeof(Ncol));
+	
+	cout << "opening " << filename << endl;
+	cout << "rows: " << Nrow << ", cols: " << Ncol << endl;
+	
+	int dataSize = ((long int)(size)-2*(long int)(sizeof(idx_t)))/sizeof(scalar_t);
+	
+	cout << "size(char): " << size << ", size(scalar): " << dataSize << endl;
+	
+	
+	scalar_t* rawData = new scalar_t[dataSize];
+	psiFile.read(reinterpret_cast<char*>(rawData),dataSize*sizeof(scalar_t));
+	
+	// for(int i = 0; i < 10; i++) {
+		// cout << rawData[i] << endl;
+	// }
+	
+	psiFile.close();
+	
+	MatrixType outmat = Eigen::Map<MatrixType>(rawData,Nrow,Ncol);
+	
+	return outmat;
+}
 
 
 template <typename Derived, typename basistype>
@@ -108,7 +145,8 @@ class Hamiltonian {
 			return this->bs->angMax();
 		}
 	public:
-		long double (*Vfunc)(long double);
+		coulomb (*Vfunc);
+		//long double (*Vfunc)(long double);
 		
 		
 		basis<basistype>& getBasis() const { return *bs; };
@@ -810,13 +848,13 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 	std::vector<vec> kappaevals;
 	std::vector<int> kappas;
 	
-	void prepeigsLowMem(int nev, int ncv, bool localOnly = false) {
-		this->H0();
-		this->S();
+	void prepeigsLowMem(int nev, int ncv, bool localOnly = false,int kchoice = 0,bool naiveMPI = false) {
+		cout << "Preparing eigenvalues" << endl;
+		//this->H0();
+		//this->S();
 		
 		this->angSep = true;
 		
-		//Separate H0 and S by angular quantum number
 		int Nr = this->bs->radqN();
 		int Nang = this->bs->angqN();
 		
@@ -825,9 +863,33 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		this->eigvecs = vector<dsmat>(Nang);
 		this->eigvals = vector<vec>(Nang);
 		
-		
+		cout << "Preparing eigenvalues and eigenvectors for ";
+		if(kchoice == 0) cout << "all values of kappa" << endl;
+		else cout << "kappa = " << kchoice << endl;
 		
 		int kappamax = this->angMax();
+		if(kchoice != 0) {
+		     int iL = ki(kchoice);
+
+                                cout << "(" << kchoice << "," << iL << ","<< ik(iL) << ")" << std::endl;
+
+                                kappas.push_back(kchoice);
+
+                                this->bs->getRadial().setState(iL);
+
+                                dsmat H0rL = this->template H0<axis::radial>().real();
+                                dsmat SrL = this->template S<axis::radial>().real();
+
+                                this->gseigs.compute(H0rL,SrL);
+
+                                vec evalsL = gseigs.eigenvalues().real();
+
+                                kappaevals.push_back(evalsL);
+                                int eigNL = evalsL.size();
+
+                                kappaevecs.push_back(this->gseigs.eigenvectors().real());
+		} 
+		else {
 		if(!localOnly) {
 			for(int kappa = 1; kappa <= kappamax; kappa++) {
 				int iL = ki(-kappa);
@@ -899,6 +961,106 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				}
 			}
 			
+		}
+		else if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			int lth0, lNth;
+			int wrank, wsize;
+			
+			MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+			MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+			
+			if(kappamax%wsize == 0) {
+				int ln = 2*kappamax/wsize;
+				lth0 = ln * wrank;
+				lNth = lth0 + ln;
+				cout << "ln at wrank " << wrank << ": " << ln << endl;
+			}
+			else {
+				int ln = 2*kappamax/wsize + 1;
+				int excess = ln * wsize - 2*kappamax;
+				if(wsize - wrank < excess) ln = kappamax/wsize;
+				
+				lth0 = (2*kappamax/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
+				lNth = lth0 + ln;
+			        cout << "ln at wrank " << wrank << ": " << ln << ", kappamax: "<< kappamax << ", wsize: " << wsize << ", excess: " << excess << endl;
+			}
+			
+			
+			cout << "lNth at wrank " << wrank << ": " << lNth << endl;
+			cout << "lth0 at wrank " << wrank << ": " << lth0 << endl;
+			
+			for(int kappa = 1; kappa <= kappamax; kappa++) {
+				int iL = 2*abs(kappa) - 1;
+				
+				
+				if((iL >= lth0) && (iL < lNth)) {
+					cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+					
+					kappas.push_back(-kappa);
+					
+					this->bs->getRadial().setState(ki(-kappa));
+					
+					dsmat H0rL = this->template H0<axis::radial>().real();
+					dsmat SrL = this->template S<axis::radial>().real();
+					
+					this->gseigs.compute(H0rL,SrL);
+					
+					vec evalsL = gseigs.eigenvalues().real();
+					
+					kappaevals.push_back(evalsL);
+					int eigNL = evalsL.size();
+					
+					kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				}
+				int iU = 2*abs(kappa) - 1;
+				
+				if((iU >= lth0) && (iU < lNth)) {
+					cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+					
+					kappas.push_back(kappa);
+					
+					this->bs->getRadial().setState(ki(kappa));
+					
+					dsmat H0rU = this->template H0<axis::radial>().real();
+					dsmat SrU = this->template S<axis::radial>().real();
+					
+					this->gseigs.compute(H0rU,SrU);
+					
+					vec evalsU = gseigs.eigenvalues().real();
+					
+					kappaevals.push_back(evalsU);
+					int eigNU = evalsU.size();
+					
+					kappaevecs.push_back(this->gseigs.eigenvectors().real());
+				}
+				
+			}
+			
+			for(int k = 0; k < kappaevecs.size(); k++) {
+				cout << "Applying sign convention to eigenvectors for kappa " << kappas[k] << "..." << endl; 
+				for(int i = 0; i < kappaevecs[k].cols(); i++) {
+					// cout << i << " ";
+					
+					//Determine if nonzero 
+					double vmax = abs(kappaevecs[k].col(i).maxCoeff());
+					double vmin = abs(kappaevecs[k].col(i).minCoeff());
+					
+					double vv;
+					
+					if(vmin>vmax) vv = vmin;
+					else vv = vmax;
+					
+					int j = 0;
+					while(true) {
+						if(abs(kappaevecs[k](j,i)*100) > vv) {
+							break;
+						}
+						j++;
+					}
+					
+					if(kappaevecs[k](j,i) < 0) kappaevecs[k].col(i) = -kappaevecs[k].col(i);
+				}
+			}
 		}
 		else {
 			int lth0, lNth, ll0, lNl;
@@ -988,11 +1150,79 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				}
 			}
 		}
-		
-
+		}
 	}
 	
-	std::vector<cmat> eigProj(const wavefunc<basistype>& psi) {
+	void loadEigs(bool naiveMPI=false) {
+		int kappamax = this->angMax();
+		
+		int lth0, lNth, ll0,lNl;
+		
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}
+		
+		int firstkappa = ik(this->bs->indexTransform(lth0));
+		int lastkappa = ik(this->bs->indexTransform(lNth-1));
+		
+		int id0 = ki(firstkappa);
+		int id1 = ki(lastkappa);
+		cout << "first kappa: " << firstkappa << ", last kappa: " << lastkappa << endl;
+		
+		cout << "id0: " << id0 << ", id1: " << id1 << endl;
+		
+		for(int kappa = 1; kappa <= kappamax; kappa++) {
+				int iL = ki(-kappa);
+				if(((iL >= id0) && (iL <= id1)) || (ik(iL) == ik(id1)) ) {
+					cout << "(" << -kappa << "," << iL << ","<< ik(iL) << ")" << std::endl;
+					
+					std::stringstream fevlLs;
+					fevlLs << "evl" << -kappa << ".mat";
+					string fevlL = fevlLs.str();
+					
+					std::stringstream fevcLs;
+					fevcLs << "evc" << -kappa << ".mat";
+					string fevcL = fevcLs.str();
+					
+					vec evlL = loadMatrix<vec>(fevlL);
+					cmat evcL = loadMatrix<cmat>(fevcL);
+					
+					kappas.push_back(-kappa);
+					
+					
+					kappaevals.push_back(evlL.real());
+					int eigNL = evlL.size();
+					
+					kappaevecs.push_back(evcL.real());
+				}
+				int iU = ki(kappa);
+				
+				if(((iU >= id0) && (iU <= id1)) || (ik(iU) == ik(id1)) ) {
+					cout << "(" << kappa << ", " << iU << "," << ik(iU) << ")" << std::endl;
+					
+					std::stringstream fevlUs;
+					fevlUs << "evl" << kappa << ".mat";
+					string fevlU = fevlUs.str();
+					
+					std::stringstream fevcUs;
+					fevcUs << "evc" << kappa << ".mat";
+					string fevcU = fevcUs.str();
+					
+					vec evlU = loadMatrix<vec>(fevlU);
+					cmat evcU = loadMatrix<cmat>(fevcU);
+					
+					kappas.push_back(kappa);
+					
+					
+					kappaevals.push_back(evlU);
+					int eigNU = evlU.size();
+					
+					kappaevecs.push_back(evcU.real());
+				}
+			}
+	}
+	
+	std::vector<cmat> eigProj(const wavefunc<basistype>& psi,bool naiveMPI=false) {
 		// cout << psi.coefs << endl;
 		// cout << "kappaevecs size = " << kappaevecs.size() << endl;
 		int kappasize = kappaevecs.size();
@@ -1001,18 +1231,25 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		int Nr = this->bs->radqN();
 		
-		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}	
+		else {
+			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+			
+			if((lNth == 0) || (lNth > this->bs->angqN())) lNth = this->bs->angqN();
+		}
 		
 		//Need to get evecs corresponding to current kappa
-		// cout << "Nr = " << Nr << endl;
+		cout << "Nr = " << Nr << endl;
 		cout << "local th0, Nth = " << lth0 << ", " << lNth << endl;
-		
+		cout << "Actual Nth = " << this->bs->angqN();
 		std::vector<cmat> psievs(lNth - lth0);
 		
 		for(int th = lth0; th < lNth; th++) {
 			cout << "Index: " << th 
 				 << "\nTransformed index: " << this->bs->indexTransform(th) 
-				 << "\nKappa: " << ik(this->bs->indexTransform(th)) << endl;
+				 << "\nKappa: " << ik(this->bs->indexTransform(th)) << " Mu: " << imu(this->bs->indexTransform(th)) << endl;
 			int i = -1;
 			
 			
@@ -1028,7 +1265,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			this->bs->getRadial().setState(this->bs->indexTransform(th));
 			// cvec psiseg = this->bs->getRadial().template matfree<S>(psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0));
 			cvec psiseg = psi.coefs.reshaped(Nr,(lNth - lth0)).col(th-lth0);
-			cout << psiseg.rows() << ", " << psiseg.cols() << endl;
+			// cout << psiseg.rows() << ", " << psiseg.cols() << endl;
 			
 			cmat skev(Nr,Nr);
 			
@@ -1037,7 +1274,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 				skev.col(j) = this->bs->getRadial().template matfree<S>(kappaevecs[i].col(j));
 			}
 			
-			cout << skev.rows() << ", " << skev.cols() << endl;
+			// cout << skev.rows() << ", " << skev.cols() << endl;
 			Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 			
 			cmat psiev = (psiseg.adjoint() * skev);
@@ -1049,17 +1286,48 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		return psievs;
 	}
 	
-	void savePsievs(const wavefunc<basistype>& psi, std::string filename) {
+	void naiveDistribute(int& lth0, int& lNth) {
+		int Nth = this->bs->angqN();
+		int kappamax = this->angMax();
+		int wrank, wsize;
+			
+		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+		MPI_Comm_rank(MPI_COMM_WORLD,&wrank);
+		
+		if(kappamax%wsize == 0) {
+			int ln = Nth/wsize;
+			lth0 = ln * wrank;
+			lNth = lth0 + ln;
+		}
+		else {
+			int ln = Nth/wsize + 1;
+			int excess = ln * wsize - Nth;
+			if(wsize - wrank <= excess) ln = Nth/wsize;
+			
+			lth0 = (Nth/wsize + 1) * wrank - (excess - (wsize - wrank)) * (excess > (wsize - wrank));
+			lNth = lth0 + ln;
+		}
+	}
+	
+	void savePsievs(const wavefunc<basistype>& psi, std::string filename,bool naiveMPI=false) {
 		int wsize, wrank;
 		
 		MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
 		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
 		Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
 			
-		std::vector<cmat> psievs = eigProj(psi);
+		cout << "Projecting onto eigenstates and saving...";
+		
+		std::vector<cmat> psievs = eigProj(psi,naiveMPI);
 		
 		int lth0, lNth, ll0,lNl;
-		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}
+		else {
+			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		}
+		
 		for(int i = 0; i < wsize; i++) {
 			ofstream psievf(filename,ofstream::app);
 			if(wrank==i) {
@@ -1107,6 +1375,41 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		
 		return evecpd.reshaped(this->bs->radqN() * (lNth - lth0),1);
 	}
+	
+	cmat getevecs(int kappa, double mu) {
+		int i = -1;
+		for(int j = 0; j < kappas.size(); j++) {
+			if(kappas[j] == kappa) i = j;
+		}
+		
+		cout << "kappa: " << kappa << "i: " << i << endl; 
+		
+		int lth0, lNth, ll0,lNl;
+		
+		this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		cmat evecs;
+		
+		return kappaevecs[i];
+	}
+	
+	vec getevals(int kappa) {
+		int i = -1;
+		for(int j = 0; j < kappas.size(); j++) {
+			if(kappas[j] == kappa) i = j;
+		}
+		
+		// int lth0, lNth, ll0,lNl;
+		
+		// this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		
+		vec evl;
+		
+		if(i != -1) evl = kappaevals[i];
+		
+		
+		return evl;
+	}
 };
 
 template <typename basistype>
@@ -1117,8 +1420,9 @@ class Dirac: public DiracBase<Dirac<basistype>,basistype> {
 	
 	protected:
 		
-		Potential<dipolePulse>* vExt = NULL;
 	public:
+		Potential<dipolePulse>* vExt = NULL;
+		
 		Dirac(basis<basistype>& bs, Potential<dipolePulse>& vExt):DiracBase<Dirac<basistype>, basistype> (bs) {
 			this->vExt = &vExt;
 		}
@@ -1149,9 +1453,9 @@ class DiracBDP: public DiracBase<DiracBDP<basistype>, basistype> {
 	
 	protected:
 		//bdpft (*extPotT) (long double);
-		Potential<beyondDipolePulse>* vExt = NULL;
-	public:
 		
+	public:
+		Potential<beyondDipolePulse>* vExt = NULL;
 	
 		DiracBDP(basis<basistype>& bs, Potential<beyondDipolePulse>& vExt):DiracBase<DiracBDP<basistype>,basistype>(bs) {
 			this->vExt = &vExt;
@@ -1159,7 +1463,8 @@ class DiracBDP: public DiracBase<DiracBDP<basistype>, basistype> {
 		cvec HtVec(double t, const cvec& v) const {
 			vExt->setTime(t);
 			
-			//bdpft vt = vExt->template axialPart<axis::t>(t);
+			// bdpft vt = vExt->template axialPart<axis::t>(t);
+			// cout << "f("<<t<<"):\n" << vt;
 			
 			cvec out = cvec::Zero(v.size());
 			

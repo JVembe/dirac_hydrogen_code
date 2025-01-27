@@ -51,6 +51,15 @@ spnrbasis::spnrbasis(int kmax, int mumax) {
 	for(int i = 0; i < bdplmax(); i++) {
 		bdplmats[i] = csmat(0,0);
 	}
+	
+	//Setup index-kappa array and index-mu array
+	kapparr = vector<int>(Nth);
+	muarr = vector<double>(Nth);
+	
+	for(int i = 0; i < Nth; i++) {
+		kapparr[i] = ik(i);
+		muarr[i] = imu(i);
+	}
 }
 
 int spnrbasis::aqn() {
@@ -375,14 +384,20 @@ csmat& spnrbasis::bdpalphsigmaXmat(int ul, int l) {
 				//int mui = imu(i);
 				//int muj = imu(j);
 				
-				int ki = (int)ik(i);
-				int kj = (int)ik(j);
+				// int ki = (int)ik(i);
+				// int kj = (int)ik(j);
+				int& ki = kapparr[i];
+				int& kj = kapparr[j];
+				
 				
 				double ji = abs(ki) - 0.5;
 				double jj = abs(kj) - 0.5;
 				
-				double mui = imu(i);
-				double muj = imu(j);
+				// double mui = imu(i);
+				// double muj = imu(j);
+				
+				double& mui = muarr[i];
+				double& muj = muarr[j];
 				
 				if(((abs(mui)>mumax) || abs(muj) > mumax) && (mumax!=0)) continue;
 				
@@ -472,11 +487,17 @@ cint ipow(int n) {
 }
 
 cdouble spnrbasis::bdpK(int i, int j, int l) {
-	double ki = ik(i);
-	double kj = ik(j);
+	// double ki = ik(i);
+	// double kj = ik(j);
 	
-	double mui = imu(i);
-	double muj = imu(j);
+	// double mui = imu(i);
+	// double muj = imu(j);
+	
+	double ki = kapparr[i];
+	double kj = kapparr[j]; 
+	
+	double mui = muarr[i];
+	double muj = muarr[j];
 	
 	//return cdouble(mui,muj);
 	
@@ -491,11 +512,17 @@ cdouble spnrbasis::bdpK(int i, int j, int l) {
 }
 
 cdouble spnrbasis::bdpL(int i, int j, int l) {
-	double ki = ik(i);
-	double kj = ik(j);
+	// double ki = ik(i);
+	// double kj = ik(j);
 	
-	double mui = imu(i);
-	double muj = imu(j);
+	// double mui = imu(i);
+	// double muj = imu(j);
+	
+	double ki = kapparr[i];
+	double kj = kapparr[j]; 
+	
+	double mui = muarr[i];
+	double muj = muarr[j];
 	
 	//return cdouble(mui,muj);
 	
@@ -510,12 +537,17 @@ cdouble spnrbasis::bdpL(int i, int j, int l) {
 }
 
 cdouble spnrbasis::bdpM(int i, int j, int l) {
-	double ki = ik(i);
-	double kj = ik(j);
+	// double ki = ik(i);
+	// double kj = ik(j);
 	
-	double mui = imu(i);
-	double muj = imu(j);
+	// double mui = imu(i);
+	// double muj = imu(j);
 	
+	double ki = kapparr[i];
+	double kj = kapparr[j]; 
+	
+	double mui = muarr[i];
+	double muj = muarr[j];
 	//return cdouble(mui,muj);
 	
 	if(((int)(2*muj) == (int)(2*mui) - 2) && (abs(abs(ki - 0.5) - abs(kj + 0.5)) <= l) && (l <= (abs(ki - 0.5) + abs(kj + 0.5) - 1))) {
@@ -529,11 +561,17 @@ cdouble spnrbasis::bdpM(int i, int j, int l) {
 }
 
 cdouble spnrbasis::bdpN(int i, int j, int l) {
-	double ki = ik(i);
-	double kj = ik(j);
+	// double ki = ik(i);
+	// double kj = ik(j);
 	
-	double mui = imu(i);
-	double muj = imu(j);
+	// double mui = imu(i);
+	// double muj = imu(j);
+	
+	double ki = kapparr[i];
+	double kj = kapparr[j]; 
+	
+	double mui = muarr[i];
+	double muj = muarr[j];
 	
 	//return cdouble(mui,muj);
 	

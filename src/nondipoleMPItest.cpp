@@ -22,11 +22,36 @@
 // Headers for MPI and Parallel Computing
 #include "mpiFuncs.h"    // Functions for MPI and Eigen matrix operations
 
-#define Z 1
 
 //These global variables are the consequence of unfortunate silliness in how Bessel functions are applied during the construction of the interaction Hamiltonian. They stop being relevant once matrix elements are constructed
 int beyondDipolePulse::l = 1;
 int beyondDipoleCarrierPulse::l = 1;
+
+template <typename MatrixType>
+void dense_write(const char* fname, MatrixType& mat) {
+	const typename MatrixType::Scalar *Ax;
+	
+	typename MatrixType::Index rows = mat.rows();
+	typename MatrixType::Index cols = mat.cols();
+	
+	FILE *fd;
+	fd = fopen(fname, "w+");
+	
+	Ax = mat.data();
+	
+    if(!fd) {
+        fprintf(stderr, "cant open %s\n", fname);
+        exit(0);
+    }
+	
+	size_t fsize, nread;
+	//Storage format: rows, cols, data
+	fwrite(&rows, sizeof(typename MatrixType::Index), 1, fd);
+	fwrite(&cols, sizeof(typename MatrixType::Index), 1, fd);
+    fwrite(Ax, sizeof(csmat::Scalar), rows*cols, fd);
+	
+    fclose(fd);
+}
 
 void printSparseNonZeros(const csmat& mat) {
 	cout << " = npy.array((\n";
@@ -81,6 +106,7 @@ int main(int argc, char* argv[]) {
 	int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
 	int omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
 	int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
+	int Z = json_params["Z"]; //Nuclear charge
 	
 	
 	//Formats for outputting matrices
@@ -128,10 +154,9 @@ int main(int argc, char* argv[]) {
 
 	//spnrbasis, spinor basis of X_{kappa,mu},X_{-kappa,mu}-doublets
 	spnrbasis spnrb(Nkappa,Nmu);
-
 	//bdplOverride limits the number of l terms in the Bessel expansion of the interaction Hamiltonian
 	spnrb.bdplOverride(Nl);
-
+	
 	int Nth = spnrb.angqN();
 
 
@@ -141,8 +166,8 @@ int main(int argc, char* argv[]) {
 	beyondDipolePulse bdpp(Intensity,omega,cycles);
 
 	//This is for verifying that things work before starting the simulation
-	double dt = (0.6*PI)/Ntime;
-	double T = 1.75;
+	double dt = 0.125;
+	double T = 1.00;
 	bdpp.setTime(T);
 
 	//Construct basis for Hamiltonian
@@ -177,9 +202,9 @@ int main(int argc, char* argv[]) {
 	using Htype = DiracBDP<dirbs>;
 	//Initialize Hamiltonian and set Coulomb potential
 	Htype H(rthphb,bdpp);
-	H.Vfunc = &coloumb<Z>;
+	coulomb clp(Z);
+	H.Vfunc = &clp;
 
-	
 	//Assemble H0 for propagation
 
 
@@ -211,8 +236,16 @@ int main(int argc, char* argv[]) {
 
 	int Nr = rthphb.radqN();
 
-	b = H.S(psi1.coefs) - dt * cdouble(0,0.5) * H.H(T,psi1.coefs);
+	b = H.S(testvec) - dt * cdouble(0,0.5) * H.H(T,testvec);
 
+	// cvec Htv = rthphb.bdpamatvecMPIblock(testvec);
+	// cvec H0v = H.H0(testvec);
+	// cvec Sv  = H.S(testvec);
+	
+	// cout << "Htvtst " << Htv.format(outformat);
+	// cout << "H0vtst " << H0v.format(outformat);
+	// cout << "Svtst "  << Sv.format(outformat);
+	// return 0;
 
 	//Due to a quirk in Eigen I haven't been able to figure out, if I don't initializze the solver here and attach it to the propagator myself, it takes more iterations
 	Eigen::ParBiCGSTAB<RtsMat<Htype >,SubmatPreconditioner<cdouble> > solver;
@@ -240,16 +273,20 @@ int main(int argc, char* argv[]) {
 	//Eigen solvers need a compute step to be performed before solving
 	solver.compute(proptest);
 
-	solver.setMaxIterations(1000);
+	// solver.setMaxIterations(1000);
 
 	cvec psi2 = solver.solve(b);
+	
+	dense_write("presolve",b);
+	dense_write("postsolve",psi2);
+	
 	// cvec psi2_mpi = solver.preconditioner().MPIsolve(b);
 
 	// cout << "psi2" << psi2.format(outformat) << endl;
 	// cout << "psi2_mpi" << psi2_mpi.format(outformat) << endl;
 
 
-	cout << "iterations: "  << solver.iterations();
+	// cout << "iterations: "  << solver.iterations();
 
 	// cout << "Rtsv" << (proptest * testvec).format(outformat) << endl;
 
@@ -263,16 +300,16 @@ int main(int argc, char* argv[]) {
 	cnp.proptest = &proptest;
 	cnp.solver = &solver;
 
-	// cnp.setDumpfile((filenamePrefix + "_dump"));
+	cnp.setDumpfile((filenamePrefix + "_dump"));
 
-	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
+	cnp.propagate(psi1,dt,Ntime,1);
 
 	dirwf wft = cnp.wft;
 
 	if(wrank==0)
-	cout << "wft" << wft.coefs.format(outformat);
-
-	H.savePsievs(wft,"psiev");
+	// cout << "wft" << wft.coefs.format(outformat);
+	wft.save(filenamePrefix + "_psit",0);
+	H.savePsievs(wft,filenamePrefix + "_psiev");
 	
 	MPI_Finalize();
 	return 0;

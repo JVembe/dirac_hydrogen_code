@@ -17,6 +17,8 @@ class splineHandler {
 		vec t;
 		lvec lastx;
 		
+		int l;
+		
 		int dropfirst = 1;
 		int droplast = 1;
 		
@@ -38,7 +40,7 @@ class splineHandler {
 			splinedeg = 0;
 		}
 		
-		lvec& glpts();
+		lvec& glpts(int ll = -1);
 		clsmat& splineCache(const lvec& x);
 		clsmat& splineCache();
 		clsmat& dSplineCache(const lvec& x, int dn);

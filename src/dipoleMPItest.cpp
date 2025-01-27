@@ -24,8 +24,6 @@
 #include "mpiFuncs.h"     // Functions for MPI and Eigen matrix operations
 
 
-#define Z 1
-
 //These global variables are the consequence of unfortunate silliness in how Bessel functions are applied during the construction of the interaction Hamiltonian. They stop being relevant once matrix elements are constructed
 int beyondDipolePulse::l = 1;
 int beyondDipoleCarrierPulse::l = 1;
@@ -81,6 +79,7 @@ int main(int argc, char* argv[]) {
 	int Intensity = json_params["Intensity"]; //Intensity of the laser pulse in atomic units: 10-500
 	int omega = json_params["Omega"]; //Frequency of the laser pulse in atomic units: 50
 	int cycles = json_params["Cycles"]; //Number of cycles for the laser pulse: 15
+	int Z = json_params["Z"]; //Nuclear charge
 	
 	//Formats for outputting matrices
 	Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
@@ -168,7 +167,8 @@ int main(int argc, char* argv[]) {
 	using Htype = Dirac<dirbs>;
 	//Initialize Hamiltonian and set Coulomb potential
 	Htype H(rthphb,dpp);
-	H.Vfunc = &coloumb<Z>;
+	coulomb clp(Z);
+	H.Vfunc = &clp;
 
 	//Assemble H0 for propagation
 
@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
 	//Get eigenvalues and eigenvectors
 	H.prepeigsLowMem(Nsplines,Nsplines/2, true);
 	
-    H.H0radprep();
+        H.H0radprep();
 	
 	//psi1 set from ground state and normalized
 	cvec coefsE0 = H.getevec(Nsplines+5,-1,-0.5); 
@@ -245,7 +245,7 @@ int main(int argc, char* argv[]) {
 
 	// cnp.setDumpfile((filenamePrefix + "_dump"));
 
-	cnp.propagate(psi1,(0.6*PI)/8000,Ntime,1);
+	cnp.propagate(psi1,(0.6*PI)/Ntime,Ntime,1);
 
 	dirwf wft = cnp.wft;
 

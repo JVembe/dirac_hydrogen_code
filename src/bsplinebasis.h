@@ -19,7 +19,7 @@ class bsbasis: public basis<bsbasis>, public splineHandler {
 		csmat& ddmat(int dn);
 		csmat& Lmat();
 		csmat& Lsqmat();
-		csmat& Emat(long double (*V)(long double));
+		csmat& Emat(coulomb *V);
 		csmat& bdppzmat(int l, const Potential<beyondDipolePulse>& vExt);
 		csmat& bdpApzmat(int l, int ll, int ul, const Potential<beyondDipolePulse>& vExt);
 		csmat& bdpAsqmat(int l, const Potential<beyondDipolePulse>& vExt);

@@ -82,7 +82,7 @@ class Propagator {
 			auto starttime = std::chrono::system_clock::now();
 			
 			for(int i = 1; i < Nt; i++) {
-				t = i*dt;
+				
 				if (i%10 == 0) {
 					cdouble iprod = (psi*wft)(0,0);
 					
@@ -112,6 +112,7 @@ class Propagator {
 					
 					break;
 				}
+				t = i*dt;
 			}
 			
 			//wf = wavefunc<basistype>(H->getBasis(),wfcoefs);
@@ -225,6 +226,8 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			
 			proptest->setTime(t);
 			
+			//bdpft vt = H->vExt->template axialPart<axis::t>(t);
+			//cout << "f("<<t<<"):\n" << vt << endl;
 			// cvec Hpsi = H->H(this->t,this->wft.coefs);
 			
 			// b = H->S(this->wft.coefs) - dt * cdouble(0,0.5) * Hpsi;
@@ -328,7 +331,7 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 			// cout << "Eigen OpenMP max threads at rank " << wrank << ": " << Eigen::nbThreads() << endl;
 			for(int i = 1; i < Nt; i++) {
 				t = i*dt;
-				if (i%10 == 0) {
+				if (i%nSave == 0) {
 					cdouble iprod = (psi*wft)(0,0);
 					
 					auto currentTime = std::chrono::system_clock::now();
@@ -348,19 +351,19 @@ class Cranknich<Htype,basistype,true>/*: public Propagator<Cranknich<Htype, basi
 				this->timeStep();
 				
 				
-				//if(i%nSave == 0 && i < Nt && wrank == 0) {
-					// int saveId = i/nSave;
+				if(i%nSave == 0 && i < Nt && wrank == 0) {
+					int saveId = i/nSave;
 					
 					// cout << "Step " << i << " complete, Saving wft to wf col " << saveId << ", wf size" << wf.coefs.cols() << std::endl;
 					
 					// wf.coefs.col(saveId) = wft.coefs;
 					
-					// if(!dumpfilename.empty())
-						// wft.save(dumpfilename,saveId);
-					// else {
-						// cout << "Warning: No dumpfile name!" << std::endl;
-					// }
-				// }
+					if(!dumpfilename.empty())
+						wft.save(dumpfilename,saveId);
+					else {
+						cout << "Warning: No dumpfile name!" << std::endl;
+					}
+				}
 				
 				
 			}

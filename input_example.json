@@ -1,11 +1,12 @@
 {
-  "Nsplines": 50,
-  "Ntime": 10,
-  "Nkappa": 4,
-  "Nmu": 4,
-  "Nl": 2,
-  "rBox": 30.0,
+  "Nsplines": 1200,
+  "Ntime": 48000,
+  "Nkappa": 66,
+  "Nmu": 66,
+  "Nl": 10,
+  "rBox": 66.0,
   "Intensity": 10,
   "Omega": 50,
-  "Cycles": 1
+  "Cycles": 15,
+  "Z": 1
 }

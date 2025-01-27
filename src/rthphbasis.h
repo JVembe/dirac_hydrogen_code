@@ -217,7 +217,7 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 			return psqm;
 		}
 		
-		csmat& Emat(long double (*V)(long double)) {
+		csmat& Emat(coulomb *V) {
 			csmat& Em = this->template getmat<E>();
 			// cout << "Emat called\n";
 			csmat E0 = rbasis->Em(V);
@@ -3253,16 +3253,15 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 				// cout << eangc << "\n";
 				
 				// cvec angslect = eangc * angStates;
+				int nExpm = sqrt(an/2);
 				
-				cvec angslect = expmvec(angcp,angStates,20);
-				
-				// cout << angStates << "\n";
-				// cout << angslect << "\n";
+				cvec angslect = expmvec(angcp,angStates,nExpm);						   
+				cout << angStates << "\n";
+				cout << angslect << "\n";
 				vector<int> slids(0);
 				for(int i = 0; i < angslect.size(); i++) {
 					if(angslect[i]!=cdouble(0.0,0.0)) slids.push_back(i);
-				}
-				
+				}	
 				
 				int nslect = slids.size();
 				
@@ -3270,9 +3269,15 @@ class rthphbasis: public basis<rthphbasis<rbtype, thphbtype> > {
 					cout << slids[i] << ",";
 				}
 				*/
-				
-				this->angovr(nslect);
-				angids = slids;
+				if((an - nslect) > 10) {
+					this->angovr(nslect);
+					angids = slids;
+				}
+				else {
+				        for(int i = 0; i < an; i++) {
+						angids[i] = i;
+					}
+				}
 				angidsReverse = vector<int>(an);
 				for(int i = 0; i < an; i++) {
 					angidsReverse[i] = -1;
@@ -3346,8 +3351,8 @@ void evilprod(csmat& out,const csmat& a,const csmat& b) {
 def pzmat(self,lmax = 0):
         pzm = sprs.lil_matrix(((lmax+1)*self.N,(lmax+1)*self.N),dtype=complex)
         for l in range(0,lmax+1):
-            lpot1=nltc.coloumb(-(l+1))
-            lpot2=nltc.coloumb(-l)
+            lpot1=nltc.coulomb(-(l+1))
+            lpot2=nltc.coulomb(-l)
             dd = sprs.lil_matrix(self.ddmat(1),dtype = complex)
             E1 = sprs.lil_matrix(self.Emat(lpot1),dtype = complex)
             E2 = sprs.lil_matrix(self.Emat(lpot2),dtype = complex)

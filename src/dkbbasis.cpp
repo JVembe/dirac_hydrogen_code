@@ -79,6 +79,7 @@ csmat cachedglintmat(const csmat& M0, const csmat& Mk, const csmat& Mkk, int kap
 dkbbasis::dkbbasis(vec &t, int splinedeg): splineHandler(t,splinedeg) {
 	dropfirst = 1; //More than 1 makes for very inaccurate energy levels
 	droplast = 1; //Less than 2 causes boundary issues with derivatives
+  
 	//dkbCache(glpts(),1);
 	//cout << radqN() << "\n";
 }
@@ -451,10 +452,10 @@ csmat& dkbbasis::ddmat(int dn) {
 	ddm = factorisedglintmat(dd0, ddk, ddkk,
 							P0, Q0, dP0, dQ0, Pk, Qk, dPk, dQk,
 							splinedeg+1, wts, kappa, &dkbcrossglintmat, 0, -1);
-    /*
+  /*
 	Constructing these matrices properly results in an
 	undesirable asymmetry caused by the boundary B-splines.
-	To work aroun this we simply cheat a little and take the 
+	To work around this we simply cheat a little and take the 
 	average of each matrix with its adjoint
 	*/
 	
@@ -465,7 +466,7 @@ csmat& dkbbasis::ddmat(int dn) {
 	return ddm;
 }
 
-csmat& dkbbasis::Emat(long double (*V)(long double)) {
+csmat& dkbbasis::Emat(coulomb *V) {
 	csmat& Em = getmat<E>();
 	csmat& E0 = get0mat<E>();
 	csmat& Ek = getk0mat<E>();
@@ -498,7 +499,7 @@ csmat& dkbbasis::Emat(long double (*V)(long double)) {
 		clsmat vdiag(P0.rows(),P0.rows());
 		
 		for(int i = 0; i < P0.rows(); i++) {
-			vdiag.insert(i,i) = V(x[i]);
+			vdiag.insert(i,i) = V->axialPart<axis::radial>(x[i]);
 		}
 		
 		clsmat wt = wtmat() * vdiag;
@@ -652,6 +653,7 @@ csmat& dkbbasis::dpalphmat(int k1,int k2, int ul) {
 		// dpalph0 = alph0.selfadjointView<Eigen::Upper>();
 		
 		switch(ul) {
+			
 			case -1:
 				dpalph0  = Q0.adjoint() * wt * P0;
 				dpalphk0 = Qk.adjoint() * wt * P0;
