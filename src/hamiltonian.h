@@ -1412,7 +1412,7 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		for(int i = 0; i < wsize; i++) {
 			if(wrank==i) {
 				ofstream psievf(psievFilename,ofstream::app | ofstream::binary);	
-				ofstream evlf(psievFilename,ofstream::app | ofstream::binary);
+				ofstream evlf(evlFilename,ofstream::app | ofstream::binary);
 
 				int j = -1;
 				for(int k = 0; k < kappas.size(); k++) {
