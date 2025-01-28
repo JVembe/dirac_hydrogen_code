@@ -1,4 +1,25 @@
 /*
+	GaDE - Gpu-accelerated solver for the time dependent Dirac Equation
+	
+    Copyright (C) 2025  Johanne Elise Vembe <johannevembe@gmail.com>
+    Copyright (C) 2025  Marcin Krotkiewski <marcink@uio.no>
+	Copyright (C) 2025  Hicham Agueny <hicham.agueny@uib.no>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+/*
 	This header file contains the class RtsMat, a wrapper class whose only purpose is to pass the action of an arbitrary Hamiltonian matrix H on a coefficient vector to Eigen's linear solvers
 	
 	It also contains the class SubmatPreconditioner, a specialization of the IncompleteLUT preconditioner which exploits the block structure of the Hamiltonian matrix to save memory and precondition the system in parallel.

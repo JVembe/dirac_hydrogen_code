@@ -1,6 +1,7 @@
 #ifndef PARALLEL_BICGSTAB_H
 #define PARALLEL_BICGSTAB_H
 
+
 //This file is modified from Eigen source code distributed under the Mozilla Public License v 2.0
 //I'm not sure what the licensing implications of this are.
 
