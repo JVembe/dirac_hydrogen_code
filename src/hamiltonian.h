@@ -1420,10 +1420,12 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 					for(int k = 0; k < kappas.size(); k++) {
 						if(kappas[k] == ik(this->bs->indexTransform(lth0 + i))) j = k;
 					}
-					psievf.write(reinterpret_cast<char*>(psievs[j].data()),Nevl*sizeof(csmat::Scalar));
-					evlf.write(reinterpret_cast<char*>(kappaevals[i].data()),Nevl*sizeof(csmat::Scalar));
-				}
+					cout << "Writing from rank " << l << "psiev index " << i << "kappa index " << j << endl;
 					
+					psievf.write(reinterpret_cast<char*>(psievs[i].data()),Nevl*sizeof(cmat::Scalar));
+					evlf.write(reinterpret_cast<char*>(kappaevals[j].data()),Nevl*sizeof(mat::Scalar));
+				}
+				
 				psievf.close();
 				evlf.close();
 			}
