@@ -1349,9 +1349,9 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
 		}
 		
-		for(int i = 0; i < wsize; i++) {
+		for(int l = 0; l < wsize; l++) {
 			ofstream psievf(filename,ofstream::app);
-			if(wrank==i) {
+			if(wrank==l) {
 				
 				for(int i = 0; i < psievs.size(); i++) {
 					int j = -1;
@@ -1409,18 +1409,18 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			evlf.close();
 		}
 		
-		for(int i = 0; i < wsize; i++) {
-			if(wrank==i) {
+		for(int l = 0; l < wsize; l++) {
+			if(wrank==l) {
 				ofstream psievf(psievFilename,ofstream::app | ofstream::binary);	
 				ofstream evlf(psievFilename,ofstream::app | ofstream::binary);
 
-				int j = -1;
-				for(int k = 0; k < kappas.size(); k++) {
-					if(kappas[k] == ik(this->bs->indexTransform(lth0 + i))) j = k;
-				}
 				
-				for(int i = 0; i < psievs.size(); i++) {
-					psievf.write(reinterpret_cast<char*>(psievs[i].data()),Nevl*sizeof(csmat::Scalar));
+				for(int i = 0; i < psievs.size(); i++) {					
+					int j = -1;
+					for(int k = 0; k < kappas.size(); k++) {
+						if(kappas[k] == ik(this->bs->indexTransform(lth0 + i))) j = k;
+					}
+					psievf.write(reinterpret_cast<char*>(psievs[j].data()),Nevl*sizeof(csmat::Scalar));
 					evlf.write(reinterpret_cast<char*>(kappaevals[i].data()),Nevl*sizeof(csmat::Scalar));
 				}
 					
