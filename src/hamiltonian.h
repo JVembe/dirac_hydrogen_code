@@ -1370,6 +1370,96 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 		}
 	}
 	
+	void savePsievs_bin(const wavefunc<basistype>& psi, std::string filename,bool naiveMPI=false) {
+		int wsize, wrank;
+		
+		MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
+		MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+		Eigen::IOFormat outformat(Eigen::FullPrecision,Eigen::DontAlignCols,", ","\n","(","),"," = npy.array((\n","\n))\n",' ');
+			
+		cout << "Projecting onto eigenstates and saving...";
+		
+		std::vector<cmat> psievs = eigProj(psi,naiveMPI);
+		
+		int lth0, lNth, ll0,lNl;
+		if(naiveMPI) { //For when no block distribution has been performed, and we just want to distribute an equal number of kappa values to each rank
+			naiveDistribute(lth0,lNth);
+		}
+		else {
+			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
+		}
+		
+		int Nth = this->bs->angqN();
+		int Nevl = kappaevals[0].size();
+		
+		string psievFilename = filename + "_psiev";
+		string evlFilename = filename + "_evl";
+		
+		if(wrank == 0) {
+			ofstream psievf(psievFilename,ofstream::app | ofstream::binary);	
+			ofstream evlf(evlFilename,ofstream::app | ofstream::binary);	
+			
+			psievf.write(reinterpret_cast<char*>(&Nevl),sizeof(cmat::Index));
+			psievf.write(reinterpret_cast<char*>(&Nth),sizeof(cmat::Index));
+			
+			evlf.write(reinterpret_cast<char*>(&Nevl),sizeof(cmat::Index));
+			evlf.write(reinterpret_cast<char*>(&Nth),sizeof(cmat::Index));
+			
+			psievf.close();
+			evlf.close();
+		}
+		
+		for(int i = 0; i < wsize; i++) {
+			if(wrank==i) {
+				ofstream psievf(psievFilename,ofstream::app | ofstream::binary);	
+				ofstream evlf(psievFilename,ofstream::app | ofstream::binary);
+
+				int j = -1;
+				for(int k = 0; k < kappas.size(); k++) {
+					if(kappas[k] == ik(this->bs->indexTransform(lth0 + i))) j = k;
+				}
+				
+				for(int i = 0; i < psievs.size(); i++) {
+					psievf.write(reinterpret_cast<char*>(psievs[i].data()),Nevl*sizeof(csmat::Scalar));
+					evlf.write(reinterpret_cast<char*>(kappaevals[i].data()),Nevl*sizeof(csmat::Scalar));
+				}
+					
+				psievf.close();
+				evlf.close();
+			}
+			
+			MPI_Barrier(MPI_COMM_WORLD);
+		}
+	}
+	
+	/*
+	template <typename MatrixType>
+	void dense_write(const char* fname, MatrixType& mat) {
+        const typename MatrixType::Scalar *Ax;
+        
+        typename MatrixType::Index rows = mat.rows();
+        typename MatrixType::Index cols = mat.cols();
+        
+        FILE *fd;
+        fd = fopen(fname, "w+");
+        
+        Ax = mat.data();
+        
+		if(!fd) {
+			fprintf(stderr, "cant open %s\n", fname);
+			exit(0);
+		}
+			
+		size_t fsize, nread;
+		//Storage format: rows, cols, data
+		fwrite(&rows, sizeof(typename MatrixType::Index), 1, fd);
+		fwrite(&cols, sizeof(typename MatrixType::Index), 1, fd);
+		fwrite(Ax, sizeof(csmat::Scalar), rows*cols, fd);
+			
+		fclose(fd);
+	}
+	*/
+	
 	cvec getevec(int N, int kappa, double mu) {
 		int i = -1;
 		for(int j = 0; j < kappas.size(); j++) {
