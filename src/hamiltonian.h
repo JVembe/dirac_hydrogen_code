@@ -1389,8 +1389,8 @@ class DiracBase: public Hamiltonian<DiracType,basistype> {
 			this->bs->getLocalParams(lth0,lNth,ll0,lNl);
 		}
 		
-		int Nth = this->bs->angqN();
-		int Nevl = kappaevals[0].size();
+		cmat::Index Nth = this->bs->angqN();
+		cmat::Index Nevl = kappaevals[0].size();
 		
 		string psievFilename = filename + "_psiev";
 		string evlFilename = filename + "_evl";
