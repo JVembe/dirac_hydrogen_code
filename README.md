@@ -1,4 +1,6 @@
 # dirac_hydrogen_code
+FULL LICENSE RECOMMENDATIONS AND UPDATED README NOT YET IMPLEMENTED
+
 Parallelized simulation code to model the interaction between a hydrogen atom and a high intensity laser pulse at relativistic energies.
 
 ## Overview
@@ -100,14 +102,15 @@ where `n` is the number of GPUs you intend to run the simulation with. Sample jo
 
 ### When to generate new matrices
 
-
-### Cite this code
-This software may be cited as
-`@software{GaDE,
+### CITE AS
+This code may be cited with BiBTex as
+```
+@software{GaDE,
   title = {GaDE: GPU-acceleration of time-dependent Dirac Equation for exascale},
-  author = {....},
-  url = {https://github.....},
+  author = {Johanne Elise Vembe, Marcin Krotkiewski, Magnar Bjørgve, Hicham Agueny},
+  url = {https://github.com/JVembe/dirac_hydrogen_code.},
   license = {GPL-v3},
   month = Jan,
   year = {2025}
-}` 
+}
+```
